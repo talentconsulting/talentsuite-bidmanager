@@ -41,7 +41,7 @@ jobs:
           test -n "${{ secrets.AZURE_CLIENT_ID }}" || (echo "AZURE_CLIENT_ID missing" && exit 1)
           test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
           test -n "${{ vars.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
-          test -n "${{ secrets.AZD_INITIAL_ENVIRONMENT_CONFIG }}" || (echo "AZD_INITIAL_ENVIRONMENT_CONFIG missing" && exit 1)
+          test -n "$AZD_INITIAL_ENVIRONMENT_CONFIG" || (echo "AZD_INITIAL_ENVIRONMENT_CONFIG missing" && exit 1)
 
       - name: Login to azd (GitHub OIDC)
         run: >
