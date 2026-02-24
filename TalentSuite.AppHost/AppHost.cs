@@ -65,6 +65,10 @@ var keycloak = builder.AddKeycloak(
             port: 8080)
     .WithEnvironment("KC_DB", "mssql")
     .WithRealmImport("./keycloak/realms");
+if (!useLocalInfrastructure)
+{
+    keycloak.WithExternalHttpEndpoints();
+}
 var messaging = builder.AddAzureServiceBus("messaging");
 if (useLocalInfrastructure)
 {
@@ -170,5 +174,9 @@ var frontend = builder.AddProject<TalentSuite_FrontEnd>("talentfrontend")
     .WithReference(server)
     .WaitFor(keycloak)
     .WaitFor(server);
+if (!useLocalInfrastructure)
+{
+    frontend.WithExternalHttpEndpoints();
+}
 
 builder.Build().Run();

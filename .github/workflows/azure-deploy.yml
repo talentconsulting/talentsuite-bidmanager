@@ -82,9 +82,17 @@ jobs:
             echo "$vals" | grep -Eq "^${k}=.+" && echo "$k: set" || (echo "$k: MISSING" && exit 1)
           done
 
+      - name: Sanitize Azure environment identifiers
+        run: |
+          {
+            echo "AZURE_SUBSCRIPTION_ID=$(echo "$AZURE_SUBSCRIPTION_ID" | tr -d '\r\n[:space:]')"
+            echo "AZURE_ENV_NAME=$(echo "$AZURE_ENV_NAME" | tr -d '\r\n[:space:]')"
+            echo "AZURE_LOCATION=$(echo "$AZURE_LOCATION" | tr -d '\r\n[:space:]')"
+          } >> "$GITHUB_ENV"
+
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
-        run: azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
+        run: azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt --debug
 
       - name: Deploy
         working-directory: ${{ env.AZD_WORKING_DIR }}
