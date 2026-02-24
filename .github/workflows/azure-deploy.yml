@@ -72,23 +72,28 @@ jobs:
         run: |
           azd env new "${{ env.AZURE_ENV_NAME }}" --no-prompt || true
           azd env select "${{ env.AZURE_ENV_NAME }}"
+          azd env list
 
       - name: Seed azd environment parameters
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt AuthenticationEnabled "${{ env.Parameters__AuthenticationEnabled }}"
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt UseInMemoryData "${{ env.Parameters__UseInMemoryData }}"
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt SqlPassword "${{ env.Parameters__SqlPassword }}"
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt KeycloakPassword "${{ env.Parameters__KeycloakPassword }}"
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt KeycloakDbUsername "${{ env.Parameters__KeycloakDbUsername }}"
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt KeycloakDbPassword "${{ env.Parameters__KeycloakDbPassword }}"
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt InviteEmailEnabled "${{ env.Parameters__InviteEmailEnabled }}"
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt InviteFromEmail "${{ env.Parameters__InviteFromEmail }}"
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt InviteSmtpHost "${{ env.Parameters__InviteSmtpHost }}"
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt InviteSmtpPort "${{ env.Parameters__InviteSmtpPort }}"
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt InviteSmtpEnableSsl "${{ env.Parameters__InviteSmtpEnableSsl }}"
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt InviteSmtpUsername "${{ env.Parameters__InviteSmtpUsername }}"
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt InviteSmtpPassword "${{ env.Parameters__InviteSmtpPassword }}"
+          cat > /tmp/azd-params.env <<EOF
+          AuthenticationEnabled=${{ env.Parameters__AuthenticationEnabled }}
+          UseInMemoryData=${{ env.Parameters__UseInMemoryData }}
+          SqlPassword=${{ env.Parameters__SqlPassword }}
+          KeycloakPassword=${{ env.Parameters__KeycloakPassword }}
+          KeycloakDbUsername=${{ env.Parameters__KeycloakDbUsername }}
+          KeycloakDbPassword=${{ env.Parameters__KeycloakDbPassword }}
+          InviteEmailEnabled=${{ env.Parameters__InviteEmailEnabled }}
+          InviteFromEmail=${{ env.Parameters__InviteFromEmail }}
+          InviteSmtpHost=${{ env.Parameters__InviteSmtpHost }}
+          InviteSmtpPort=${{ env.Parameters__InviteSmtpPort }}
+          InviteSmtpEnableSsl=${{ env.Parameters__InviteSmtpEnableSsl }}
+          InviteSmtpUsername=${{ env.Parameters__InviteSmtpUsername }}
+          InviteSmtpPassword=${{ env.Parameters__InviteSmtpPassword }}
+          EOF
+
+          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --file /tmp/azd-params.env --no-prompt
 
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
