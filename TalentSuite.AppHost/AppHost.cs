@@ -14,9 +14,6 @@ var sqlPassword = builder.AddParameter(
                                 "SqlPassword",
                                 secret: true,
                                 value: "Your_strong_password123!");
-var keycloakDbJdbcUrl = builder.AddParameter(
-                                "KeycloakDbJdbcUrl",
-                                value: "");
 var keycloakDbUsername = builder.AddParameter(
                                 "KeycloakDbUsername",
                                 value: "");
@@ -116,7 +113,7 @@ else
     var keycloakDb = sql.AddDatabase("keycloakdb");
 
     keycloak
-        .WithEnvironment("KC_DB_URL", keycloakDbJdbcUrl)
+        .WithEnvironment("KC_DB_URL", keycloakDb.Resource.JdbcConnectionString)
         .WithEnvironment("KC_DB_USERNAME", keycloakDbUsername)
         .WithEnvironment("KC_DB_PASSWORD", keycloakDbPassword)
         .WaitFor(keycloakDb);

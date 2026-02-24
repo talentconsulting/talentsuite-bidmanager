@@ -10,6 +10,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: dev
     env:
       # ---- azd / Azure context ----
       AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
@@ -25,7 +26,6 @@ jobs:
       Parameters__UseInMemoryData: "false"
       Parameters__SqlPassword: ${{ secrets.SQL_PASSWORD }}
       Parameters__KeycloakPassword: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
-      Parameters__KeycloakDbJdbcUrl: ${{ secrets.KEYCLOAK_DB_JDBC_URL }}
       Parameters__KeycloakDbUsername: ${{ secrets.KEYCLOAK_DB_USERNAME }}
       Parameters__KeycloakDbPassword: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
       Parameters__InviteEmailEnabled: "false"
@@ -49,6 +49,12 @@ jobs:
 
       - name: Setup azd
         uses: Azure/setup-azd@v2
+
+      - name: Validate Azure login inputs
+        run: |
+          test -n "${{ secrets.AZURE_CLIENT_ID }}" || (echo "AZURE_CLIENT_ID missing" && exit 1)
+          test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
+          test -n "${{ vars.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
 
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}

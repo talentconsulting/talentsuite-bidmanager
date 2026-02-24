@@ -33,7 +33,7 @@ Infrastructure mode is controlled by one variable in `TalentSuite.AppHost`:
 - `TALENTSUITE_INFRA_MODE=local` (default): local SQL container + Service Bus emulator + Azurite emulator
 - `TALENTSUITE_INFRA_MODE=azure`: Azure SQL + Azure Service Bus + Azure Storage resources
 
-When `TALENTSUITE_INFRA_MODE=azure`, set AppHost parameter `KeycloakDbJdbcUrl` to your Azure SQL JDBC URL for the Keycloak database.
+When `TALENTSUITE_INFRA_MODE=azure`, Aspire derives the Keycloak JDBC URL from the provisioned Azure SQL `keycloakdb` resource automatically.
 
 Notes:
 - The app uses HTTPS locally.
