@@ -67,6 +67,12 @@ jobs:
           --federated-credential-provider "github"
           --no-prompt
 
+      - name: Ensure azd environment exists
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          azd env new "${{ env.AZURE_ENV_NAME }}" --no-prompt
+          azd env select "${{ env.AZURE_ENV_NAME }}"
+
       - name: Seed azd environment parameters
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
