@@ -51,26 +51,6 @@ jobs:
           --federated-credential-provider "github"
           --no-prompt
 
-      - name: Seed azd environment values
-        working-directory: ${{ env.AZD_WORKING_DIR }}
-        run: |
-          azd env new "${{ env.AZURE_ENV_NAME }}" --no-prompt || true
-          printf '%s' "$AZD_INITIAL_ENVIRONMENT_CONFIG" > /tmp/azd-initial.json
-          jq -e . /tmp/azd-initial.json >/dev/null
-
-          jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' /tmp/azd-initial.json > /tmp/azd-params.env
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --file /tmp/azd-params.env --no-prompt
-
-      - name: Export azd initial config to process environment
-        run: |
-          printf '%s' "$AZD_INITIAL_ENVIRONMENT_CONFIG" > /tmp/azd-initial.json
-          jq -e . /tmp/azd-initial.json >/dev/null
-
-          while IFS='=' read -r key value; do
-            echo "${key}=${value}" >> "$GITHUB_ENV"
-            echo "Parameters__${key}=${value}" >> "$GITHUB_ENV"
-          done < <(jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' /tmp/azd-initial.json)
-
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
