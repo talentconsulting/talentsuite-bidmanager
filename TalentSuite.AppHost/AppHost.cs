@@ -53,7 +53,8 @@ var inviteSmtpUsername = builder.AddParameter(
                                 publishValueAsDefault: true);
 var inviteSmtpPassword = builder.AddParameter(
                                 "InviteSmtpPassword",
-                                value: "");
+                                value: "unused",
+                                publishValueAsDefault: true);
 
 var keycloak = builder.AddKeycloak(
             "keycloak",
