@@ -16,35 +16,44 @@ var sqlPassword = builder.AddParameter(
                                 value: "Your_strong_password123!");
 var keycloakDbUsername = builder.AddParameter(
                                 "KeycloakDbUsername",
-                                value: "");
+                                value: "",
+                                publishValueAsDefault: true);
 var keycloakDbPassword = builder.AddParameter(
                                 "KeycloakDbPassword",
                                 secret: true,
                                 value: "");
 var authenticationEnabled = builder.AddParameter(
                                 "AuthenticationEnabled",
-                                value: "true");
+                                value: "true",
+                                publishValueAsDefault: true);
 var useInMemoryData = builder.AddParameter(
                                 "UseInMemoryData",
-                                value: "false");
+                                value: "false",
+                                publishValueAsDefault: true);
 var inviteEmailEnabled = builder.AddParameter(
                                 "InviteEmailEnabled",
-                                value: "false");
+                                value: "false",
+                                publishValueAsDefault: true);
 var inviteFromEmail = builder.AddParameter(
                                 "InviteFromEmail",
-                                value: "");
+                                value: "",
+                                publishValueAsDefault: true);
 var inviteSmtpHost = builder.AddParameter(
                                 "InviteSmtpHost",
-                                value: "");
+                                value: "",
+                                publishValueAsDefault: true);
 var inviteSmtpPort = builder.AddParameter(
                                 "InviteSmtpPort",
-                                value: "587");
+                                value: "587",
+                                publishValueAsDefault: true);
 var inviteSmtpEnableSsl = builder.AddParameter(
                                 "InviteSmtpEnableSsl",
-                                value: "true");
+                                value: "true",
+                                publishValueAsDefault: true);
 var inviteSmtpUsername = builder.AddParameter(
                                 "InviteSmtpUsername",
-                                value: "");
+                                value: "",
+                                publishValueAsDefault: true);
 var inviteSmtpPassword = builder.AddParameter(
                                 "InviteSmtpPassword",
                                 secret: true,
