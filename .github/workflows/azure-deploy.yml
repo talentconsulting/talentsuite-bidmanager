@@ -51,6 +51,17 @@ jobs:
           --federated-credential-provider "github"
           --no-prompt
 
+      - name: Seed azd environment from initial config
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          printf '%s' "$AZD_INITIAL_ENVIRONMENT_CONFIG" > /tmp/azd-initial.json
+          jq -e . /tmp/azd-initial.json >/dev/null
+
+          azd env new "${{ env.AZURE_ENV_NAME }}" --no-prompt || true
+
+          jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' /tmp/azd-initial.json > /tmp/azd-initial.env
+          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --file /tmp/azd-initial.env --no-prompt
+
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
