@@ -22,36 +22,6 @@ jobs:
       # ---- AppHost mode switch ----
       TALENTSUITE_INFRA_MODE: "azure"
 
-      # ---- AppHost Parameters__ placeholders ----
-      Parameters__AuthenticationEnabled: "true"
-      Parameters__UseInMemoryData: "false"
-      Parameters__SqlPassword: ${{ secrets.SQL_PASSWORD }}
-      Parameters__KeycloakPassword: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
-      Parameters__KeycloakDbUsername: ${{ secrets.KEYCLOAK_DB_USERNAME }}
-      Parameters__KeycloakDbPassword: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
-      Parameters__InviteEmailEnabled: "false"
-      Parameters__InviteFromEmail: ${{ secrets.INVITE_FROM_EMAIL }}
-      Parameters__InviteSmtpHost: ${{ secrets.INVITE_SMTP_HOST }}
-      Parameters__InviteSmtpPort: "587"
-      Parameters__InviteSmtpEnableSsl: "true"
-      Parameters__InviteSmtpUsername: ${{ secrets.INVITE_SMTP_USERNAME }}
-      Parameters__InviteSmtpPassword: ${{ secrets.INVITE_SMTP_PASSWORD }}
-
-      # ---- Aspire infra parameter names (used by azd provision prompts) ----
-      AuthenticationEnabled: "true"
-      UseInMemoryData: "false"
-      SqlPassword: ${{ secrets.SQL_PASSWORD }}
-      KeycloakPassword: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
-      KeycloakDbUsername: ${{ secrets.KEYCLOAK_DB_USERNAME }}
-      KeycloakDbPassword: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
-      InviteEmailEnabled: "false"
-      InviteFromEmail: ${{ secrets.INVITE_FROM_EMAIL }}
-      InviteSmtpHost: ${{ secrets.INVITE_SMTP_HOST }}
-      InviteSmtpPort: "587"
-      InviteSmtpEnableSsl: "true"
-      InviteSmtpUsername: ${{ secrets.INVITE_SMTP_USERNAME }}
-      InviteSmtpPassword: ${{ secrets.INVITE_SMTP_PASSWORD }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,9 +43,6 @@ jobs:
           test -n "${{ vars.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
           test -n "${{ secrets.AZD_INITIAL_ENVIRONMENT_CONFIG }}" || (echo "AZD_INITIAL_ENVIRONMENT_CONFIG missing" && exit 1)
 
-      - name: Verify Azure CLI session
-        run: az account show --output none
-
       - name: Login to azd (GitHub OIDC)
         run: >
           azd auth login
@@ -84,38 +51,10 @@ jobs:
           --federated-credential-provider "github"
           --no-prompt
 
-      - name: Ensure azd environment exists
-        working-directory: ${{ env.AZD_WORKING_DIR }}
-        run: |
-          azd env new "${{ env.AZURE_ENV_NAME }}" --no-prompt || true
-          azd env select "${{ env.AZURE_ENV_NAME }}"
-          azd env list
-
-      - name: Seed azd environment parameters
-        working-directory: ${{ env.AZD_WORKING_DIR }}
-        run: |
-          cat > /tmp/azd-params.env <<EOF
-          AuthenticationEnabled=${{ env.Parameters__AuthenticationEnabled }}
-          UseInMemoryData=${{ env.Parameters__UseInMemoryData }}
-          SqlPassword=${{ env.Parameters__SqlPassword }}
-          KeycloakPassword=${{ env.Parameters__KeycloakPassword }}
-          KeycloakDbUsername=${{ env.Parameters__KeycloakDbUsername }}
-          KeycloakDbPassword=${{ env.Parameters__KeycloakDbPassword }}
-          InviteEmailEnabled=${{ env.Parameters__InviteEmailEnabled }}
-          InviteFromEmail=${{ env.Parameters__InviteFromEmail }}
-          InviteSmtpHost=${{ env.Parameters__InviteSmtpHost }}
-          InviteSmtpPort=${{ env.Parameters__InviteSmtpPort }}
-          InviteSmtpEnableSsl=${{ env.Parameters__InviteSmtpEnableSsl }}
-          InviteSmtpUsername=${{ env.Parameters__InviteSmtpUsername }}
-          InviteSmtpPassword=${{ env.Parameters__InviteSmtpPassword }}
-          EOF
-
-          azd env set --environment "${{ env.AZURE_ENV_NAME }}" --file /tmp/azd-params.env --no-prompt
-
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
-        run: azd provision --no-prompt
+        run: azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Deploy
         working-directory: ${{ env.AZD_WORKING_DIR }}
-        run: azd deploy --no-prompt
+        run: azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
