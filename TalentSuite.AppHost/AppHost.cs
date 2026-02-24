@@ -67,7 +67,11 @@ var keycloak = builder.AddKeycloak(
     .WithRealmImport("./keycloak/realms");
 if (!useLocalInfrastructure)
 {
-    keycloak.WithExternalHttpEndpoints();
+    keycloak
+        .WithExternalHttpEndpoints()
+        .WithArgs("--http-enabled=true")
+        .WithArgs("--proxy-headers=xforwarded")
+        .WithArgs("--hostname-strict=false");
 }
 var messaging = builder.AddAzureServiceBus("messaging");
 if (useLocalInfrastructure)
