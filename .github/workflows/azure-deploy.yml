@@ -17,6 +17,7 @@ jobs:
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       AZD_WORKING_DIR: "."
+      AZD_AUTH_USE_AZ_CLI_AUTH: "true"
 
       # ---- AppHost mode switch ----
       TALENTSUITE_INFRA_MODE: "azure"
@@ -56,8 +57,8 @@ jobs:
           test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
           test -n "${{ vars.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
 
-      - name: Configure azd to use Azure CLI auth
-        run: azd config set auth.useAzCliAuth "true"
+      - name: Verify Azure CLI session
+        run: az account show --output none
 
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
