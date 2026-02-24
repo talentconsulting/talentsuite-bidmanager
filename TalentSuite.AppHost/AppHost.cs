@@ -8,11 +8,9 @@ var useLocalInfrastructure = string.Equals(infrastructureMode, "local", StringCo
 
 var keycloakPassword = builder.AddParameter(
                                 "KeycloakPassword",
-                                secret: true,
                                 value: "admin");
 var sqlPassword = builder.AddParameter(
                                 "SqlPassword",
-                                secret: true,
                                 value: "Your_strong_password123!");
 var keycloakDbUsername = builder.AddParameter(
                                 "KeycloakDbUsername",
@@ -20,7 +18,6 @@ var keycloakDbUsername = builder.AddParameter(
                                 publishValueAsDefault: true);
 var keycloakDbPassword = builder.AddParameter(
                                 "KeycloakDbPassword",
-                                secret: true,
                                 value: "");
 var authenticationEnabled = builder.AddParameter(
                                 "AuthenticationEnabled",
@@ -56,7 +53,6 @@ var inviteSmtpUsername = builder.AddParameter(
                                 publishValueAsDefault: true);
 var inviteSmtpPassword = builder.AddParameter(
                                 "InviteSmtpPassword",
-                                secret: true,
                                 value: "");
 
 var keycloak = builder.AddKeycloak(
