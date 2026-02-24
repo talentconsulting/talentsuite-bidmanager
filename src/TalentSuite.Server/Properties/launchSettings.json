@@ -1,0 +1,36 @@
+{
+  "profiles": {
+    "TalentSuite.Server": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "TALENTFRONTEND_HTTPS": "https://localhost:5173",
+        "DocumentIntelligence__Endpoint": "__SET_ME__",
+        "DocumentIntelligence__ApiKey" : "__SET_ME__",
+        "AzureOpenAI__Endpoint": "__SET_ME__",
+        "AzureOpenAI__ApiKey": "__SET_ME__",
+        "AzureOpenAI__ChatDeployment": "gpt-4.1",
+        "AzureAIFoundry__ProjectEndpoint": "__SET_ME__",
+        "Agents__AgentId": "__SET_ME__"
+      },
+      "applicationUrl": "https://localhost:5001;http://localhost:5000"
+    },
+    "TalentSuite.Server.Azure": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "TALENTFRONTEND_HTTPS": "https://localhost:5173",
+        "DocumentIntelligence__Endpoint": "__SET_ME__",
+        "DocumentIntelligence__ApiKey": "__SET_ME__",
+        "AzureOpenAI__Endpoint": "__SET_ME__",
+        "AzureOpenAI__ApiKey": "__SET_ME__",
+        "AzureOpenAI__ChatDeployment": "gpt-4.1",
+        "AzureAIFoundry__ProjectEndpoint": "__SET_ME__",
+        "Agents__AgentId": "__SET_ME__"
+      },
+      "applicationUrl": "https://localhost:5001;http://localhost:5000"
+    }
+  }
+}

@@ -1,0 +1,451 @@
+@page "/bids/manage/{BidId}"
+@inherits BidManage
+
+<div class="container-fluid">
+    <div class="row">
+
+        <!-- Left Nav -->
+        <aside class="col-12 col-md-4 col-lg-3 border-end min-vh-100 p-3 bg-light">
+            <h5 class="mb-3">Bid</h5>
+
+            @if (IsLoading)
+            {
+                <div class="text-muted">Loading…</div>
+            }
+            else if (!string.IsNullOrWhiteSpace(ErrorText))
+            {
+                <div class="alert alert-danger small">@ErrorText</div>
+            }
+            else if (Bid is null)
+            {
+                <div class="text-muted">No bid loaded.</div>
+            }
+            else
+            {
+                <div class="mb-3">
+                    <div class="fw-bold">@Bid.Company</div>
+                    <div class="text-muted small">@Bid.Company</div>
+                </div>
+
+                <div class="list-group mb-3">
+                    <button type="button"
+                            class="list-group-item list-group-item-action @(LeftNav == LeftNavSection.Overview ? "active" : "")"
+                            @onclick="() => SetLeftNav(LeftNavSection.Overview)">
+                        Overview
+                    </button>
+
+                    @if (CanManageBidUsers)
+                    {
+                        <button type="button"
+                                class="list-group-item list-group-item-action @(LeftNav == LeftNavSection.Users ? "active" : "")"
+                                @onclick="() => SetLeftNav(LeftNavSection.Users)">
+                            Manage users
+                        </button>
+                    }
+
+                    <button type="button"
+                            class="list-group-item list-group-item-action @(LeftNav == LeftNavSection.Questions ? "active" : "")"
+                            @onclick="() => SetLeftNav(LeftNavSection.Questions)">
+                        Questions
+                        <span class="badge bg-secondary float-end">@Bid.Questions.Count</span>
+                    </button>
+                    <button type="button"
+                            class="list-group-item list-group-item-action @(LeftNav == LeftNavSection.AllQuestions ? "active" : "")"
+                            @onclick="() => SetLeftNav(LeftNavSection.AllQuestions)">
+                        Final Submission
+                    </button>
+                    <button type="button"
+                            class="list-group-item list-group-item-action @(LeftNav == LeftNavSection.Files ? "active" : "")"
+                            @onclick="() => SetLeftNav(LeftNavSection.Files)">
+                        Files
+                    </button>
+                </div>
+
+                @if (LeftNav == LeftNavSection.Questions)
+                {
+                    <hr />
+                    <div class="small text-muted mb-2">Categories</div>
+
+                    <div class="list-group" style="max-height:55vh; overflow:auto;">
+                        @foreach (var g in CategoryGroups)
+                        {
+                            var isActive = g.Key == ActiveCategory;
+
+                            <button type="button"
+                                    class="list-group-item list-group-item-action @(isActive ? "active" : "")"
+                                    @onclick="() => SelectCategory(g.Key)">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-truncate">@g.Key</span>
+                                    <span class="badge @(isActive ? "bg-light text-dark" : "bg-secondary")">@g.Count</span>
+                                </div>
+                            </button>
+                        }
+                    </div>
+                }
+            }
+        </aside>
+
+        <!-- Main Content -->
+        <main class="col-12 col-md-8 col-lg-9 p-4">
+            @if (IsLoading)
+            {
+                <div class="text-muted">Loading bid…</div>
+            }
+            else if (!string.IsNullOrWhiteSpace(ErrorText))
+            {
+                <div class="alert alert-danger">
+                    <strong>Error</strong>
+                    <pre class="mb-0">@ErrorText</pre>
+                </div>
+            }
+            else if (Bid is null)
+            {
+                <div class="alert alert-warning">Bid not found.</div>
+            }
+            else
+            {
+                @if (LeftNav == LeftNavSection.Overview)
+                {
+                    <OverviewPanel Bid="Bid"
+                                   QuestionsWithoutFinalAnswerCount="QuestionsWithoutFinalAnswerCount"
+                                   QuestionsWithoutUsersCount="QuestionsWithoutUsersCount"
+                                   OnGoToQuestions="@(() => SetLeftNav(LeftNavSection.Questions))" />
+                }
+                else if (LeftNav == LeftNavSection.AllQuestions)
+                {
+                    <FinalDraftsPanel Questions="Bid.Questions"
+                                     BidStatus="Bid.Status"
+                                     BidLibraryPush="Bid.BidLibraryPush"
+                                     IsStatusBusy="IsBusy"
+                                     AssignedUserNamesById="AssignedUserNamesById"
+                                     OnBidStatusSelected="UpdateBidStatusFromSummaryAsync"
+                                     OnPushToBidLibrary="PushBidToLibraryFromSummaryAsync"
+                                     OnGoToFinalAnswer="GoToFinalAnswerFromSummaryAsync" />
+                }
+                else if (LeftNav == LeftNavSection.Questions)
+                {
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <div class="text-muted">
+                            Category: <span class="badge bg-secondary">@ActiveCategory</span>
+                            <span class="ms-2">(@QuestionsInCategory.Count questions)</span>
+                        </div>
+
+                    </div>
+
+                    <!-- Question Tabs -->
+                    <ul class="nav nav-tabs mb-3" style="flex-wrap: wrap;">
+                        @foreach (var q in QuestionsInCategory)
+                        {
+                            var active = q.Id == ActiveQuestionId;
+                            var hasUsers = q.QuestionAssignments.Count > 0;
+                            var statusClass = q.ReadyForSubmission
+                                ? "bg-success text-white"
+                                : hasUsers
+                                    ? "bg-warning text-dark"
+                                    : "bg-danger text-white";
+                            <li class="nav-item">
+                                <button type="button"
+                                        class="nav-link @(active ? "active" : "") @statusClass"
+                                        @onclick="() => SelectQuestion(q.Id)">
+                                    #@q.Number
+                                </button>
+                            </li>
+                        }
+                    </ul>
+
+                    @if (ActiveQuestion is null)
+                    {
+                        <div class="alert alert-info">Pick a category on the left.</div>
+                    }
+                    else
+                    {
+                        <!-- Question Header -->
+                        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-3">
+                            <div>
+                                <h4 class="mb-1">#@ActiveQuestion.Number — @ActiveQuestion.Title</h4>
+                                <div class="text-muted small">
+                                    Category: <span class="badge bg-secondary">@NormaliseCategory(ActiveQuestion.Category)</span>
+                                    <span class="ms-2">Weighting: <span class="badge bg-info text-dark">@ActiveQuestion.Weighting</span></span>
+                                    <span class="ms-2">Length: <span class="badge bg-light text-dark border">@(string.IsNullOrWhiteSpace(ActiveQuestion.Length) ? "-" : ActiveQuestion.Length)</span></span>
+                                </div>
+                            </div>
+
+                            <div class="d-flex gap-2 align-items-center">
+                            </div>
+                        </div>
+
+                        <div class="card shadow-sm mb-3">
+                            <div class="card-body">
+                                <h5 class="mb-3">Question description</h5>
+                                <div class="border rounded p-3 bg-light" style="white-space: pre-wrap;">
+                                    @ActiveQuestion.Description
+                                </div>
+                            </div>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(QuestionErrorText))
+                        {
+                            <div class="alert alert-danger">
+                                <pre class="mb-0">@QuestionErrorText</pre>
+                            </div>
+                        }
+
+                        <!-- Nested Tabs -->
+                        <ul class="nav nav-pills mb-3">
+                            @if (CanManageQuestionUsers)
+                            {
+                                <li class="nav-item">
+                                    <button type="button"
+                                            class="nav-link @(ActiveInnerTab == InnerTab.Users ? "active" : "")"
+                                            @onclick="() => ActiveInnerTab = InnerTab.Users">
+                                        Question users
+                                    </button>
+                                </li>
+                            }
+
+                            <li class="nav-item">
+                                <button type="button"
+                                        class="nav-link @(ActiveInnerTab == InnerTab.Chat ? "active" : "")"
+                                        @onclick="() => ActiveInnerTab = InnerTab.Chat">
+                                    Chat
+                                </button>
+                            </li>
+
+                            <li class="nav-item">
+                                <button type="button"
+                                        class="nav-link @(ActiveInnerTab == InnerTab.Draft ? "active" : "")"
+                                        @onclick="ShowDraftTabAsync">
+                                    Draft
+                                </button>
+                            </li>
+
+                            <li class="nav-item">
+                                <button type="button"
+                                
+                                        class="nav-link @(ActiveInnerTab == InnerTab.RedReview ? "active" : "")"
+                                        @onclick="ShowRedReviewTabAsync">
+                                    Red review
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button type="button"
+                                        class="nav-link @(ActiveInnerTab == InnerTab.FinalAnswer ? "active" : "")"
+                                        @onclick="() => ActiveInnerTab = InnerTab.FinalAnswer">
+                                    Final answer
+                                </button>
+                            </li>
+                        </ul>
+
+                        @if (ActiveInnerTab == InnerTab.Users && CanManageQuestionUsers)
+                        {
+                            <QuestionUsersTab AssignedUsersCount="AssignedUsers.Count"
+                                              QuestionAvailableUsers="QuestionAvailableUsers"
+                                              QuestionAssignedUsers="QuestionAssignedUsers"
+                                              GetPendingRole="GetPendingQuestionUserRole"
+                                              OnPendingRoleChanged="OnPendingQuestionUserRoleChangedAsync"
+                                              OnAddQuestionUser="OnAddQuestionUserRequestedAsync"
+                                              OnAssignedRoleChanged="OnAssignedQuestionRoleChangedAsync"
+                                              OnRemoveQuestionUser="RemoveQuestionUserAsync" />
+                        }
+                        else if (ActiveInnerTab == InnerTab.Draft)
+                        {
+                            <QuestionDraftTab Question="ActiveQuestion"
+                                              IsDraftBusy="IsDraftBusy"
+                                              ShowNewDraft="ShowNewDraft"
+                                              NewDraftText="@NewDraftText"
+                                              DraftErrorText="@DraftErrorText"
+                                              OnShowNewDraftEditor="ShowNewDraftEditor"
+                                              OnNewDraftTextChanged="OnNewDraftTextChangedAsync"
+                                              OnSubmitDraftResponse="SubmitDraftResponseAsync"
+                                              OnCancelNewDraft="CancelNewDraft"
+                                              OnUpdateDraft="OnUpdateDraftRequestedAsync"
+                                              OnDeleteDraft="OnDeleteDraftRequestedAsync"
+                                              OnPromoteDraftToReview="PromoteDraftToReview"
+                                              DraftCommentTextsByDraftId="DraftCommentTextsByDraftId"
+                                              MentionableUsers="AssignedUsers"
+                                              OnDraftCommentTextChanged="OnDraftCommentTextChangedAsync"
+                                              OnSubmitDraftComment="OnSubmitDraftCommentRequestedAsync"
+                                              OnDraftCommentCompletionChanged="OnDraftCommentCompletionChangedAsync" />
+                        }
+                        else if (ActiveInnerTab == InnerTab.Chat)
+                        {
+                            <QuestionChatTab Question="ActiveQuestion"
+                                             IsBusy="IsBusy"
+                                             IsDraftBusy="IsDraftBusy"
+                                             ChatQuestionText="@ChatQuestionText"
+                                             OnChatQuestionTextChanged="OnChatQuestionTextChangedAsync"
+                                             OnSubmitChat="SubmitChatForActiveQuestionAsync"
+                                             OnAddChatToDrafts="AddActiveChatResponseToDraftsAsync" />
+                        }
+                        else if (ActiveInnerTab == InnerTab.RedReview)
+                        {
+                            <QuestionRedReviewTab Question="ActiveQuestion"
+                                                  IsBusy="IsBusy"
+                                                  Reviewers="GetRedReviewReviewers(ActiveQuestion)"
+                                                  MentionableUsers="AssignedUsers"
+                                                  OnSaveRedReview="SaveRedReview"
+                                                  OnPromoteToFinal="PromoteRedReviewToFinal"
+                                                  OnAddInlineComment="AddRedReviewInlineCommentAsync"
+                                                  OnCommentCompletionChanged="OnRedReviewCommentCompletionChangedAsync" />
+                        }
+                        else if (ActiveInnerTab == InnerTab.FinalAnswer)
+                        {
+                            <QuestionFinalAnswerTab Question="ActiveQuestion"
+                                                    IsBusy="IsBusy"
+                                                    MentionableUsers="AssignedUsers"
+                                                    OnSaveFinalAnswer="SaveFinalAnswer"
+                                                    OnAddInlineComment="AddFinalAnswerInlineCommentAsync"
+                                                    OnCommentCompletionChanged="OnFinalAnswerCommentCompletionChangedAsync" />
+                        }
+                    }
+                }
+                else if (LeftNav == LeftNavSection.Users && CanManageBidUsers)
+                {
+                    <div class="card shadow-sm position-relative">
+                        <div class="card-body">
+                            <h4 class="mb-3">Manage users</h4>
+
+                            @if (!string.IsNullOrWhiteSpace(UsersErrorText))
+                            {
+                                <div class="alert alert-danger">
+                                    <strong>Error</strong>
+                                    <pre class="mb-0">@UsersErrorText</pre>
+                                </div>
+                            }
+
+                            <div class="row g-4">
+                                <div class="col-12 col-lg-5">
+                                    <div class="card border-0 shadow-sm h-100">
+                                        <div class="card-body">
+                                            <h6 class="mb-3">Available users</h6>
+                                            @if (AvailableUsers.Count == 0)
+                                            {
+                                                <div class="text-muted">No available users.</div>
+                                            }
+                                            else
+                                            {
+                                                <div class="list-group">
+                                                    @foreach (var user in AvailableUsers)
+                                                    {
+                                                        <button type="button"
+                                                                class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                                                                @onclick="() => AddUserAsync(user)">
+                                                            <span>@user.Name</span>
+                                                        </button>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12 col-lg-2 d-flex align-items-center justify-content-center">
+                                    <div class="text-muted">Click a user to move →</div>
+                                </div>
+
+                                <div class="col-12 col-lg-5">
+                                    <div class="card border-0 shadow-sm h-100">
+                                        <div class="card-body">
+                                            <h6 class="mb-3">Users on this bid</h6>
+                                            @if (AssignedUsers.Count == 0)
+                                            {
+                                                <div class="text-muted">No users assigned.</div>
+                                            }
+                                            else
+                                            {
+                                                <div class="list-group">
+                                                    @foreach (var user in AssignedUsers)
+                                                    {
+                                                        var isLocked = IsUserAssignedToQuestion(user.Id);
+                                                        <button type="button"
+                                                                class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                                                                title="@(isLocked ? "Assigned to a question" : "Remove user")"
+                                                                @onclick="() => RemoveUserAsync(user)">
+                                                            <span>@user.Name</span>
+                                                        </button>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        @if (IsUsersBusy)
+                        {
+                            <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                                 style="background: rgba(255,255,255,0.7);">
+                                <div class="text-muted">Updating users…</div>
+                            </div>
+                        }
+                    </div>
+                }
+                else if (LeftNav == LeftNavSection.Files)
+                {
+                    <div class="card shadow-sm position-relative">
+                        <div class="card-body">
+                            <h4 class="mb-3">Files</h4>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Upload file</label>
+                                <InputFile OnChange="UploadBidFileAsync" class="form-control" />
+                            </div>
+
+                            @if (!string.IsNullOrWhiteSpace(FilesErrorText))
+                            {
+                                <div class="alert alert-danger">
+                                    <pre class="mb-0">@FilesErrorText</pre>
+                                </div>
+                            }
+
+                            @if (BidFiles.Count == 0)
+                            {
+                                <div class="text-muted">No files uploaded for this bid.</div>
+                            }
+                            else
+                            {
+                                <div class="list-group">
+                                    @foreach (var file in BidFiles)
+                                    {
+                                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <div class="fw-semibold">@file.FileName</div>
+                                                <div class="small text-muted">
+                                                    Uploaded @file.UploadedAtUtc.ToLocalTime().ToString("g")
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="badge bg-secondary">@FormatFileSize(file.SizeBytes)</span>
+                                                <button class="btn btn-sm btn-outline-primary"
+                                                        disabled="@IsFilesBusy"
+                                                        @onclick="() => DownloadBidFileAsync(file)">
+                                                    Download
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        disabled="@IsFilesBusy"
+                                                        @onclick="() => DeleteBidFileAsync(file)">
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        @if (IsFilesBusy)
+                        {
+                            <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                                 style="background: rgba(255,255,255,0.7);">
+                                <div class="text-muted">Working…</div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-info mb-0">
+                        You do not have permission to manage users for this bid.
+                    </div>
+                }
+            }
+        </main>
+    </div>
+</div>

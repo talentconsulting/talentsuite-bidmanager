@@ -1,0 +1,209 @@
+@page "/users/{UserId}/edit"
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components
+@using TalentSuite.Shared.Users
+@using TalentSuite.FrontEnd.Services
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject GlobalBannerState BannerState
+
+<div class="container-fluid">
+    <h3 class="mb-3">Edit User</h3>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            @if (!string.IsNullOrWhiteSpace(ErrorText))
+            {
+                <div class="alert alert-danger">@ErrorText</div>
+            }
+
+            @if (IsLoading)
+            {
+                <div class="text-muted">Loading user…</div>
+            }
+            else if (Form is null)
+            {
+                <div class="alert alert-warning mb-0">User not found.</div>
+            }
+            else
+            {
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label">User Id</label>
+                        <input class="form-control" value="@UserId" disabled />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Name</label>
+                        <input class="form-control" @bind="Form.Name" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Email</label>
+                        <input class="form-control" type="email" @bind="Form.Email" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Role</label>
+                        <select class="form-select" @bind="Form.Role">
+                            <option value="@UserRole.Admin">@UserRole.Admin</option>
+                            <option value="@UserRole.User">@UserRole.User</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6 d-flex align-items-end">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="acceptedRegistration" @bind="Form.HasAcceptedRegistration" />
+                            <label class="form-check-label" for="acceptedRegistration">
+                                Accepted registration
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 d-flex gap-2">
+                    <button type="button"
+                            class="btn btn-primary"
+                            disabled="@IsSaving"
+                            @onclick="SaveAsync">
+                        @(IsSaving ? "Saving..." : "Save Changes")
+                    </button>
+                    <a class="btn btn-outline-secondary" href="/users">Cancel</a>
+                    <button type="button"
+                            class="btn btn-outline-warning"
+                            disabled="@IsResendingInvite || Form.HasAcceptedRegistration"
+                            @onclick="ResendInviteAsync">
+                        @(IsResendingInvite ? "Resending..." : "Resend Invite")
+                    </button>
+                </div>
+                @if (Form.HasAcceptedRegistration)
+                {
+                    <div class="text-muted small mt-2">Invite resend is disabled because this user already accepted registration.</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(LatestInviteLink))
+                {
+                    <div class="mt-3">
+                        <label class="form-label">Invite Link</label>
+                        <input class="form-control" value="@LatestInviteLink" readonly />
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string UserId { get; set; } = string.Empty;
+
+    private bool IsLoading { get; set; } = true;
+    private bool IsSaving { get; set; }
+    private bool IsResendingInvite { get; set; }
+    private string? ErrorText { get; set; }
+    private string? LatestInviteLink { get; set; }
+    private UpdateUserRequest? Form { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadUserAsync();
+    }
+
+    private async Task LoadUserAsync()
+    {
+        IsLoading = true;
+        ErrorText = null;
+        Form = null;
+
+        try
+        {
+            var users = await Http.GetFromJsonAsync<List<UserResponse>>("api/users");
+            var user = users?.FirstOrDefault(x => string.Equals(x.Id, UserId, StringComparison.OrdinalIgnoreCase));
+            if (user is null)
+                return;
+
+            Form = new UpdateUserRequest
+            {
+                Name = user.Name,
+                Email = user.Email,
+                Role = user.Role,
+                HasAcceptedRegistration = user.HasAcceptedRegistration
+            };
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Form is null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(Form.Name) || string.IsNullOrWhiteSpace(Form.Email))
+        {
+            ErrorText = "Name and email are required.";
+            return;
+        }
+
+        ErrorText = null;
+        IsSaving = true;
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"api/users/{Uri.EscapeDataString(UserId)}", Form);
+            if (!response.IsSuccessStatusCode)
+            {
+                ErrorText = $"Failed to update user: {(int)response.StatusCode} {response.ReasonPhrase}";
+                return;
+            }
+
+            _ = BannerState.ShowAsync("User updated successfully.", "alert-success");
+            NavigationManager.NavigateTo("/users");
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    private async Task ResendInviteAsync()
+    {
+        if (Form is null || Form.HasAcceptedRegistration)
+            return;
+
+        ErrorText = null;
+        LatestInviteLink = null;
+        IsResendingInvite = true;
+        try
+        {
+            var response = await Http.PostAsync($"api/users/{Uri.EscapeDataString(UserId)}/resend-invite", content: null);
+            if (!response.IsSuccessStatusCode)
+            {
+                ErrorText = $"Failed to resend invite: {(int)response.StatusCode} {response.ReasonPhrase}";
+                return;
+            }
+
+            var invite = await response.Content.ReadFromJsonAsync<ResendInviteResponse>();
+            if (invite is null || string.IsNullOrWhiteSpace(invite.InvitationToken))
+            {
+                ErrorText = "Invite was resent, but token could not be read.";
+                return;
+            }
+
+            LatestInviteLink =
+                $"{NavigationManager.BaseUri.TrimEnd('/')}/accept-invite?token={Uri.EscapeDataString(invite.InvitationToken)}";
+            _ = BannerState.ShowAsync("Invite resent successfully. Share the invite link below.", "alert-success");
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+        }
+        finally
+        {
+            IsResendingInvite = false;
+        }
+    }
+}

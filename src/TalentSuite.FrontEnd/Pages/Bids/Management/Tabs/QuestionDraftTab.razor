@@ -1,0 +1,385 @@
+@using TalentSuite.FrontEnd.Pages.Bids.Management.Models
+@namespace TalentSuite.FrontEnd.Pages.Bids.Management.Tabs
+@inject IJSRuntime JS
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <h5 class="mb-3">Draft answer</h5>
+
+        @if (!string.IsNullOrWhiteSpace(DraftErrorText))
+        {
+            <div class="alert alert-danger">
+                <strong>Error</strong>
+                <pre class="mb-0">@DraftErrorText</pre>
+            </div>
+        }
+
+        @if (IsDraftBusy)
+        {
+            <div class="text-muted mb-3">Loading draft responses…</div>
+        }
+
+        @if (Question.DraftResponses.Count == 0)
+        {
+            <div class="text-muted">No draft responses yet.</div>
+        }
+        else
+        {
+            <div class="d-flex flex-column gap-3">
+                @foreach (var response in Question.DraftResponses)
+                {
+                    <div class="border rounded p-3">
+                        <div class="row g-3 align-items-start">
+                            <div class="col-12 col-lg-8">
+                                <div class="text-muted small">
+                                    @GetWordCount(response.Response) words • @GetCharCount(response.Response) characters
+                                </div>
+                                <textarea id="@GetDraftTextareaId(response.Id)"
+                                          class="form-control mt-2"
+                                          rows="8"
+                                          @bind="response.Response"
+                                          @bind:event="oninput"
+                                          @onmouseup="() => CaptureSelectionAsync(response.Id)"
+                                          @onkeyup="() => CaptureSelectionAsync(response.Id)"></textarea>
+                                <div class="d-flex justify-content-end gap-2 mt-2 flex-wrap">
+                                    <button type="button"
+                                            class="btn btn-outline-primary btn-sm"
+                                            @onclick="() => OnUpdateDraft.InvokeAsync((Question.Id, response.Id, response.Response))"
+                                            disabled="@IsDraftBusy">
+                                        @(IsDraftBusy ? "Updating…" : "Update draft")
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-outline-danger btn-sm"
+                                            @onclick="() => OnDeleteDraft.InvokeAsync((Question.Id, response.Id))"
+                                            disabled="@IsDraftBusy">
+                                        @(IsDraftBusy ? "Deleting…" : "Delete draft")
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-outline-secondary btn-sm"
+                                            @onclick="() => OnPromoteDraftToReview.InvokeAsync(response.Response)"
+                                            disabled="@IsDraftBusy">
+                                        Promote to review
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-lg-4">
+                                <div class="fw-semibold mb-2">Comments</div>
+                                @if (response.Comments.Count == 0)
+                                {
+                                    <div class="text-muted small mb-2">No comments yet.</div>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-column gap-2 mb-2" style="max-height: 320px; overflow: auto;">
+                                        @foreach (var comment in response.Comments)
+                                        {
+                                            <div class="border rounded p-2 bg-light" id="@($"draft-comment-{comment.Id}")">
+                                                <div class="form-check mb-1">
+                                                    <input class="form-check-input"
+                                                           type="checkbox"
+                                                           checked="@comment.IsComplete"
+                                                           disabled="@IsDraftBusy"
+                                                           @onchange="e => OnCommentCompletionChangeAsync(response.Id, comment.Id, e)" />
+                                                    <label class="form-check-label small">Complete</label>
+                                                </div>
+                                                <div class="small text-muted">
+                                                    @(string.IsNullOrWhiteSpace(comment.AuthorName) ? "Unknown" : comment.AuthorName)
+                                                    • @comment.CreatedAtUtc.ToLocalTime().ToString("g")
+                                                </div>
+                                                @if (!string.IsNullOrWhiteSpace(comment.SelectedText))
+                                                {
+                                                    <div class="small text-secondary fst-italic mb-1" style="white-space: pre-wrap;">
+                                                        "@comment.SelectedText"
+                                                    </div>
+                                                }
+                                                <div class="@(comment.IsComplete ? "text-muted text-decoration-line-through" : "")"
+                                                     style="white-space: pre-wrap;">@FormatMentions(comment.Comment)</div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+
+                                <div class="small text-muted mb-1">
+                                    @GetInlineSelectionText(response.Id)
+                                </div>
+                                <textarea class="form-control mb-2"
+                                          rows="3"
+                                          placeholder="Add a comment"
+                                          value="@GetCommentDraftText(response.Id)"
+                                          @oninput="e => OnCommentInputAsync(response.Id, e)"></textarea>
+                                @if (TryGetMentionQuery(response.Id, out var query))
+                                {
+                                    var matches = GetMentionMatches(query).ToList();
+                                    if (matches.Count > 0)
+                                    {
+                                        <div class="list-group mb-2">
+                                            @foreach (var user in matches)
+                                            {
+                                                <button type="button"
+                                                        class="list-group-item list-group-item-action"
+                                                        @onclick="() => InsertMentionAsync(response.Id, user.Id)">
+                                                    <span class="fw-semibold">@user.Name</span>
+                                                    <span class="text-muted small ms-2">@user.Id</span>
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+                                }
+                                <div class="d-flex justify-content-end">
+                                    <button type="button"
+                                            class="btn btn-outline-primary btn-sm"
+                                            @onclick="() => SubmitDraftCommentAsync(response.Id)"
+                                            disabled="@IsDraftBusy">
+                                        @(IsDraftBusy ? "Adding…" : "Add comment")
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="mt-3">
+            @if (!ShowNewDraft)
+            {
+                <button type="button" class="btn btn-outline-primary" @onclick="OnShowNewDraftEditor">
+                    Add draft response
+                </button>
+            }
+            else
+            {
+                <label class="form-label fw-bold">New draft response</label>
+                <div class="text-muted small mb-1">
+                    @GetWordCount(NewDraftText) words • @GetCharCount(NewDraftText) characters
+                </div>
+                <textarea class="form-control mb-2"
+                          rows="6"
+                          value="@NewDraftText"
+                          @oninput="e => OnNewDraftTextChanged.InvokeAsync(e.Value?.ToString())"></textarea>
+                <div class="d-flex gap-2">
+                    <button type="button"
+                            class="btn btn-primary"
+                            @onclick="OnSubmitDraftResponse"
+                            disabled="@IsDraftBusy">
+                        @(IsDraftBusy ? "Submitting…" : "Submit")
+                    </button>
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            @onclick="OnCancelNewDraft">
+                        Cancel
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public BidQuestionModel Question { get; set; } = default!;
+    [Parameter] public bool IsDraftBusy { get; set; }
+    [Parameter] public bool ShowNewDraft { get; set; }
+    [Parameter] public string? NewDraftText { get; set; }
+    [Parameter] public string? DraftErrorText { get; set; }
+    [Parameter] public EventCallback OnShowNewDraftEditor { get; set; }
+    [Parameter] public EventCallback<string?> OnNewDraftTextChanged { get; set; }
+    [Parameter] public EventCallback OnSubmitDraftResponse { get; set; }
+    [Parameter] public EventCallback OnCancelNewDraft { get; set; }
+    [Parameter] public EventCallback<(string QuestionId, string DraftId, string DraftText)> OnUpdateDraft { get; set; }
+    [Parameter] public EventCallback<(string QuestionId, string DraftId)> OnDeleteDraft { get; set; }
+    [Parameter] public EventCallback<string?> OnPromoteDraftToReview { get; set; }
+    [Parameter] public IReadOnlyDictionary<string, string?> DraftCommentTextsByDraftId { get; set; } =
+        new Dictionary<string, string?>();
+    [Parameter] public IReadOnlyList<UserOption> MentionableUsers { get; set; } = Array.Empty<UserOption>();
+    [Parameter] public EventCallback<(string DraftId, string? Text)> OnDraftCommentTextChanged { get; set; }
+    [Parameter] public EventCallback<(string QuestionId, string DraftId, int? StartIndex, int? EndIndex, string SelectedText, List<string> MentionedUserIds)> OnSubmitDraftComment { get; set; }
+    [Parameter] public EventCallback<(string QuestionId, string DraftId, string CommentId, bool IsComplete)> OnDraftCommentCompletionChanged { get; set; }
+
+    private readonly Dictionary<string, InlineSelectionState> _inlineSelections = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _mentionQueryByDraftId = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, HashSet<string>> _mentionedUserIdsByDraftId = new(StringComparer.OrdinalIgnoreCase);
+
+    private static int GetWordCount(string? text)
+        => string.IsNullOrWhiteSpace(text)
+            ? 0
+            : text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+
+    private static int GetCharCount(string? text)
+        => text?.Length ?? 0;
+
+    private string GetCommentDraftText(string draftId)
+    {
+        if (DraftCommentTextsByDraftId.TryGetValue(draftId, out var value))
+            return value ?? string.Empty;
+
+        return string.Empty;
+    }
+
+    private async Task CaptureSelectionAsync(string draftId)
+    {
+        var textareaId = GetDraftTextareaId(draftId);
+        var selection = await JS.InvokeAsync<TextSelectionState?>("bidManage.getTextAreaSelectionById", textareaId);
+        if (selection is null)
+            return;
+
+        _inlineSelections[draftId] = new InlineSelectionState(
+            selection.StartIndex,
+            selection.EndIndex,
+            selection.SelectedText ?? string.Empty);
+    }
+
+    private Task SubmitDraftCommentAsync(string draftId)
+    {
+        _inlineSelections.TryGetValue(draftId, out var selection);
+        var text = GetCommentDraftText(draftId);
+        var selectedText = selection?.SelectedText ?? string.Empty;
+        var hasSelection = !string.IsNullOrWhiteSpace(selectedText);
+        return OnSubmitDraftComment.InvokeAsync((
+            Question.Id,
+            draftId,
+            hasSelection ? selection?.StartIndex : null,
+            hasSelection ? selection?.EndIndex : null,
+            hasSelection ? selectedText : string.Empty,
+            ExtractMentionedUserIds(draftId, text)));
+    }
+
+    private async Task OnCommentInputAsync(string draftId, ChangeEventArgs e)
+    {
+        var text = e.Value?.ToString() ?? string.Empty;
+        await OnDraftCommentTextChanged.InvokeAsync((draftId, text));
+        if (TryExtractMentionQuery(text, out var query))
+            _mentionQueryByDraftId[draftId] = query;
+        else
+            _mentionQueryByDraftId.Remove(draftId);
+    }
+
+    private Task OnCommentCompletionChangeAsync(string draftId, string commentId, ChangeEventArgs e)
+    {
+        var isComplete = ParseCheckboxValue(e.Value);
+        return OnDraftCommentCompletionChanged.InvokeAsync((Question.Id, draftId, commentId, isComplete));
+    }
+
+    private static bool ParseCheckboxValue(object? value)
+    {
+        if (value is bool b)
+            return b;
+
+        return bool.TryParse(value?.ToString(), out var parsed) && parsed;
+    }
+
+    private bool TryGetMentionQuery(string draftId, out string query)
+        => _mentionQueryByDraftId.TryGetValue(draftId, out query!);
+
+    private IEnumerable<UserOption> GetMentionMatches(string query)
+    {
+        var q = query.Trim();
+        return MentionableUsers
+            .Where(u => string.IsNullOrWhiteSpace(q)
+                        || u.Id.Contains(q, StringComparison.OrdinalIgnoreCase)
+                        || u.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
+            .Take(8);
+    }
+
+    private async Task InsertMentionAsync(string draftId, string userId)
+    {
+        var current = GetCommentDraftText(draftId);
+        var user = MentionableUsers.FirstOrDefault(u => string.Equals(u.Id, userId, StringComparison.OrdinalIgnoreCase));
+        if (user is null)
+            return;
+
+        var updated = ReplaceTrailingMentionQuery(current, user.Name);
+        _mentionQueryByDraftId.Remove(draftId);
+        if (!_mentionedUserIdsByDraftId.TryGetValue(draftId, out var mentionedIds))
+        {
+            mentionedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _mentionedUserIdsByDraftId[draftId] = mentionedIds;
+        }
+        mentionedIds.Add(user.Id);
+        await OnDraftCommentTextChanged.InvokeAsync((draftId, updated));
+    }
+
+    private List<string> ExtractMentionedUserIds(string draftId, string text)
+    {
+        var byText = MentionableUsers
+            .Where(u => text.Contains($"@{u.Id}", StringComparison.OrdinalIgnoreCase)
+                        || text.Contains($"@{u.Name}", StringComparison.OrdinalIgnoreCase))
+            .Select(u => u.Id);
+
+        var bySelection = _mentionedUserIdsByDraftId.TryGetValue(draftId, out var selectedIds)
+            ? selectedIds
+            : Enumerable.Empty<string>();
+
+        return byText
+            .Concat(bySelection)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static bool TryExtractMentionQuery(string text, out string query)
+    {
+        query = string.Empty;
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        var atIndex = text.LastIndexOf('@');
+        if (atIndex < 0)
+            return false;
+
+        var isWordStart = atIndex == 0 || char.IsWhiteSpace(text[atIndex - 1]);
+        if (!isWordStart)
+            return false;
+
+        var trailing = text[(atIndex + 1)..];
+        if (trailing.Contains(' ') || trailing.Contains('\n') || trailing.Contains('\r') || trailing.Contains('\t'))
+            return false;
+
+        query = trailing;
+        return true;
+    }
+
+    private static string ReplaceTrailingMentionQuery(string text, string userId)
+    {
+        var atIndex = text.LastIndexOf('@');
+        if (atIndex < 0)
+            return text;
+
+        return $"{text[..atIndex]}@{userId} ";
+    }
+
+    private string FormatMentions(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || MentionableUsers.Count == 0)
+            return text;
+
+        var formatted = text;
+        foreach (var user in MentionableUsers.OrderByDescending(x => x.Id.Length))
+        {
+            formatted = formatted.Replace($"@{user.Id}", $"@{user.Name}", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return formatted;
+    }
+
+    private string GetInlineSelectionText(string draftId)
+    {
+        if (!_inlineSelections.TryGetValue(draftId, out var selection))
+            return "Inline selection: none (select text in the draft to anchor this comment).";
+
+        if (string.IsNullOrWhiteSpace(selection.SelectedText))
+            return "Inline selection: none (select text in the draft to anchor this comment).";
+
+        return $"Inline selection: chars {selection.StartIndex}-{selection.EndIndex}";
+    }
+
+    private static string GetDraftTextareaId(string draftId) => $"draft-textarea-{draftId}";
+
+    private sealed record InlineSelectionState(int? StartIndex, int? EndIndex, string SelectedText);
+
+    private sealed class TextSelectionState
+    {
+        public int? StartIndex { get; set; }
+        public int? EndIndex { get; set; }
+        public string SelectedText { get; set; } = string.Empty;
+    }
+}

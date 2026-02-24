@@ -1,0 +1,106 @@
+{
+  "realm": "TalentConsulting",
+  "enabled": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Admin user"
+      },
+      {
+        "name": "user",
+        "description": "Standard user"
+      }
+    ]
+  },
+  "defaultRoles": [
+    "user"
+  ],
+  "clients": [
+    {
+      "clientId": "talentsuite-frontend",
+      "name": "TalentSuite Frontend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/authentication/login-callback",
+        "https://localhost:5173/authentication/login-callback",
+        "http://localhost:5173/authentication/logout-callback",
+        "https://localhost:5173/authentication/logout-callback",
+        "http://localhost:5173/authentication/logged-out",
+        "https://localhost:5173/authentication/logged-out",
+        "http://talentfrontend/authentication/login-callback",
+        "https://talentfrontend/authentication/login-callback",
+        "http://talentfrontend/authentication/logout-callback",
+        "https://talentfrontend/authentication/logout-callback",
+        "http://talentfrontend/authentication/logged-out",
+        "https://talentfrontend/authentication/logged-out",
+        "http://localhost:5173/*",
+        "https://localhost:5173/*",
+        "http://talentfrontend/*",
+        "https://talentfrontend/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "https://localhost:5173",
+        "http://talentfrontend",
+        "https://talentfrontend"
+      ]
+    },
+    {
+      "clientId": "talentsuite-server",
+      "name": "TalentSuite Server API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "talentsuite-server-dev-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "richard.parkins",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Richard",
+      "lastName": "Parkins",
+      "email": "richard.parkins@talentconsulting.local",
+      "id": "3e22f0c0-e221-49ba-a85b-483c22002e38",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Passw0rd!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin",
+        "user"
+      ]
+    },
+    {
+      "username": "karen.spearing",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Karen",
+      "lastName": "Spearing",
+      "email": "karen.spearing@talentconsulting.local",
+      "id": "a2b0eb66-75d7-40ad-8548-345533685f23",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Passw0rd!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "user"
+      ]
+    }
+  ]
+}

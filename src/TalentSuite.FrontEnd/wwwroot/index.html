@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Talent Consulting - TalentSuite</title>
+  <base href="/" />
+  <link href=" https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css" rel="stylesheet"/>
+</head>
+<body>
+  <div id="app">Loading...</div>
+  <script src="js/bid-manage-draft.js"></script>
+  <script src="_content/Microsoft.AspNetCore.Components.WebAssembly.Authentication/AuthenticationService.js"></script>
+  <script>
+    (function () {
+      window.talentSuiteAuth = window.talentSuiteAuth || {};
+      window.talentSuiteAuth.clearClientAuthState = function () {
+        const prefixes = ["oidc.", "Microsoft.AspNetCore.Components.WebAssembly.Authentication"];
+        const clearStore = function (store) {
+          if (!store) {
+            return;
+          }
+
+          const keysToRemove = [];
+          for (let i = 0; i < store.length; i += 1) {
+            const key = store.key(i);
+            if (!key) {
+              continue;
+            }
+
+            if (prefixes.some(prefix => key.startsWith(prefix))) {
+              keysToRemove.push(key);
+            }
+          }
+
+          keysToRemove.forEach(key => store.removeItem(key));
+        };
+
+        clearStore(window.localStorage);
+        clearStore(window.sessionStorage);
+      };
+
+      const authService = window.AuthenticationService;
+      if (!authService) {
+        return;
+      }
+
+      if (typeof authService.init === "function") {
+        const originalInit = authService.init.bind(authService);
+        authService.init = function (options, loggerOptions) {
+          if (options && typeof options === "object") {
+            options.automaticSilentRenew = false;
+            options.monitorSession = false;
+            options.checkSessionIntervalInSeconds = 0;
+
+            if (options.providerOptions && typeof options.providerOptions === "object") {
+              options.providerOptions.automaticSilentRenew = false;
+              options.providerOptions.monitorSession = false;
+              options.providerOptions.checkSessionIntervalInSeconds = 0;
+            }
+          }
+
+          return originalInit(options, loggerOptions);
+        };
+      }
+
+      if (typeof authService.getUser === "function") {
+        const originalGetUser = authService.getUser.bind(authService);
+        authService.getUser = async function () {
+          try {
+            return await originalGetUser();
+          } catch (error) {
+            const message = error && error.message ? error.message : String(error);
+            if (message.includes("Blocked a frame with origin") ||
+                message.includes("Failed to read a named property 'document'")) {
+              console.warn("Suppressed OIDC cross-origin frame access during session check.", error);
+              return null;
+            }
+
+            throw error;
+          }
+        };
+      }
+    })();
+  </script>
+  <script src="_framework/blazor.webassembly.js"></script>
+</body>
+</html>

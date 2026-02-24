@@ -1,0 +1,62 @@
+name: Azure Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      # ---- azd / Azure context ----
+      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZD_WORKING_DIR: "."
+
+      # ---- AppHost mode switch ----
+      TALENTSUITE_INFRA_MODE: "azure"
+
+      # ---- AppHost Parameters__ placeholders ----
+      Parameters__AuthenticationEnabled: "true"
+      Parameters__UseInMemoryData: "false"
+      Parameters__SqlPassword: ${{ secrets.SQL_PASSWORD }}
+      Parameters__KeycloakPassword: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+      Parameters__KeycloakDbJdbcUrl: ${{ secrets.KEYCLOAK_DB_JDBC_URL }}
+      Parameters__KeycloakDbUsername: ${{ secrets.KEYCLOAK_DB_USERNAME }}
+      Parameters__KeycloakDbPassword: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
+      Parameters__InviteEmailEnabled: "false"
+      Parameters__InviteFromEmail: ${{ secrets.INVITE_FROM_EMAIL }}
+      Parameters__InviteSmtpHost: ${{ secrets.INVITE_SMTP_HOST }}
+      Parameters__InviteSmtpPort: "587"
+      Parameters__InviteSmtpEnableSsl: "true"
+      Parameters__InviteSmtpUsername: ${{ secrets.INVITE_SMTP_USERNAME }}
+      Parameters__InviteSmtpPassword: ${{ secrets.INVITE_SMTP_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup azd
+        uses: Azure/setup-azd@v2
+
+      - name: Provision
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: azd provision --no-prompt
+
+      - name: Deploy
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: azd deploy --no-prompt

@@ -1,0 +1,115 @@
+@namespace TalentSuite.FrontEnd.Pages.Bids.Management.Tabs
+@using TalentSuite.FrontEnd.Pages.Bids.Management.Models
+@using TalentSuite.Shared.Bids
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <h5 class="mb-3">Question users</h5>
+
+        <div class="mb-3 text-muted small">Assign users and select role: Owner, Reviewer, or Support.</div>
+
+        @if (AssignedUsersCount == 0)
+        {
+            <div class="text-muted">No users assigned to this bid.</div>
+        }
+        else
+        {
+            <div class="row g-4">
+                <div class="col-12 col-lg-5">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body">
+                            <h6 class="mb-3">Available users</h6>
+                            @if (QuestionAvailableUsers.Count == 0)
+                            {
+                                <div class="text-muted">No available users.</div>
+                            }
+                            else
+                            {
+                                <div class="list-group">
+                                    @foreach (var user in QuestionAvailableUsers)
+                                    {
+                                        <div class="list-group-item">
+                                            <div class="d-flex flex-column gap-2">
+                                                <div class="fw-semibold">@user.Name</div>
+                                                <div class="d-flex gap-2 align-items-center">
+                                                    <select class="form-select form-select-sm"
+                                                            style="max-width: 180px;"
+                                                            value="@GetPendingRole(user.Id)"
+                                                            @onchange="e => OnPendingRoleChanged.InvokeAsync((user.Id, e))">
+                                                        <option value="Owner">Owner</option>
+                                                        <option value="Reviewer">Reviewer</option>
+                                                        <option value="Support">Support</option>
+                                                    </select>
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-primary"
+                                                            @onclick="() => OnAddQuestionUser.InvokeAsync((user.Id, GetPendingRole(user.Id)))">
+                                                        Add
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-2 d-flex align-items-center justify-content-center">
+                    <div class="text-muted">Click to move →</div>
+                </div>
+
+                <div class="col-12 col-lg-5">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body">
+                            <h6 class="mb-3">Assigned users</h6>
+                            @if (QuestionAssignedUsers.Count == 0)
+                            {
+                                <div class="text-muted">No users assigned.</div>
+                            }
+                            else
+                            {
+                                <div class="list-group">
+                                    @foreach (var user in QuestionAssignedUsers)
+                                    {
+                                        <div class="list-group-item">
+                                            <div class="d-flex justify-content-between align-items-center gap-2">
+                                                <span class="fw-semibold">@user.Name</span>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <select class="form-select form-select-sm"
+                                                            style="max-width: 180px;"
+                                                            value="@user.Role"
+                                                            @onchange="e => OnAssignedRoleChanged.InvokeAsync((user.Id, e))">
+                                                        <option value="Owner">Owner</option>
+                                                        <option value="Reviewer">Reviewer</option>
+                                                        <option value="Support">Support</option>
+                                                    </select>
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-outline-danger"
+                                                            @onclick="() => OnRemoveQuestionUser.InvokeAsync(user.Id)">
+                                                        Remove
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public int AssignedUsersCount { get; set; }
+    [Parameter] public List<UserOption> QuestionAvailableUsers { get; set; } = new();
+    [Parameter] public List<QuestionAssignedUserOption> QuestionAssignedUsers { get; set; } = new();
+    [Parameter] public Func<string, QuestionUserRole> GetPendingRole { get; set; } = _ => QuestionUserRole.Reviewer;
+    [Parameter] public EventCallback<(string UserId, ChangeEventArgs Args)> OnPendingRoleChanged { get; set; }
+    [Parameter] public EventCallback<(string UserId, QuestionUserRole Role)> OnAddQuestionUser { get; set; }
+    [Parameter] public EventCallback<(string UserId, ChangeEventArgs Args)> OnAssignedRoleChanged { get; set; }
+    [Parameter] public EventCallback<string> OnRemoveQuestionUser { get; set; }
+}
