@@ -67,6 +67,23 @@ jobs:
           --federated-credential-provider "github"
           --no-prompt
 
+      - name: Seed azd environment parameters
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          azd env set AuthenticationEnabled "${{ env.Parameters__AuthenticationEnabled }}"
+          azd env set UseInMemoryData "${{ env.Parameters__UseInMemoryData }}"
+          azd env set SqlPassword "${{ env.Parameters__SqlPassword }}"
+          azd env set KeycloakPassword "${{ env.Parameters__KeycloakPassword }}"
+          azd env set KeycloakDbUsername "${{ env.Parameters__KeycloakDbUsername }}"
+          azd env set KeycloakDbPassword "${{ env.Parameters__KeycloakDbPassword }}"
+          azd env set InviteEmailEnabled "${{ env.Parameters__InviteEmailEnabled }}"
+          azd env set InviteFromEmail "${{ env.Parameters__InviteFromEmail }}"
+          azd env set InviteSmtpHost "${{ env.Parameters__InviteSmtpHost }}"
+          azd env set InviteSmtpPort "${{ env.Parameters__InviteSmtpPort }}"
+          azd env set InviteSmtpEnableSsl "${{ env.Parameters__InviteSmtpEnableSsl }}"
+          azd env set InviteSmtpUsername "${{ env.Parameters__InviteSmtpUsername }}"
+          azd env set InviteSmtpPassword "${{ env.Parameters__InviteSmtpPassword }}"
+
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: azd provision --no-prompt
