@@ -67,7 +67,7 @@ jobs:
         run: |
           vals="$(azd env get-values --environment "${{ env.AZURE_ENV_NAME }}")"
           for k in SqlPassword KeycloakPassword KeycloakDbPassword InviteSmtpPassword; do
-            echo "$vals" | rg -q "^${k}=.+" && echo "$k: set" || (echo "$k: MISSING" && exit 1)
+            echo "$vals" | grep -Eq "^${k}=.+" && echo "$k: set" || (echo "$k: MISSING" && exit 1)
           done
 
       - name: Provision
