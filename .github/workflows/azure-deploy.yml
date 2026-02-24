@@ -35,6 +35,8 @@ jobs:
 
       - name: Setup azd
         uses: Azure/setup-azd@v2
+        with:
+          version: latest
 
       - name: Validate Azure login inputs
         run: |
