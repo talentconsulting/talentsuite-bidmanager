@@ -97,3 +97,30 @@ jobs:
       - name: Deploy
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
+
+      - name: Deploy frontend as static website
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          blob_endpoint="$(azd env get-value STORAGE_BLOBENDPOINT --environment "${{ env.AZURE_ENV_NAME }}")"
+          storage_account="$(echo "$blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
+
+          test -n "$storage_account" || (echo "Could not resolve storage account from STORAGE_BLOBENDPOINT" && exit 1)
+
+          dotnet publish src/TalentSuite.FrontEnd/TalentSuite.FrontEnd.csproj -c Release -o /tmp/talentsuite-frontend-publish
+
+          az storage blob service-properties update \
+            --account-name "$storage_account" \
+            --static-website \
+            --index-document index.html \
+            --404-document index.html
+
+          storage_key="$(az storage account keys list --account-name "$storage_account" --query '[0].value' -o tsv)"
+
+          az storage blob upload-batch \
+            --account-name "$storage_account" \
+            --account-key "$storage_key" \
+            --destination '$web' \
+            --source /tmp/talentsuite-frontend-publish/wwwroot \
+            --overwrite
+
+          echo "Frontend URL: https://${storage_account}.z33.web.core.windows.net/"

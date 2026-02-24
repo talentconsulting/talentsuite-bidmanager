@@ -170,17 +170,15 @@ builder.AddProject<TalentSuite_Functions>("talentfunctions")
     .WaitFor(messaging)
     .WaitFor(server);
 
-    
-var frontend = builder.AddProject<TalentSuite_FrontEnd>("talentfrontend")
-    .WithEnvironment("AUTHENTICATION_ENABLED", authenticationEnabled)
-    .WithEnvironment("USE_IN_MEMORY_DATA", useInMemoryData)
-    .WithReference(keycloak)
-    .WithReference(server)
-    .WaitFor(keycloak)
-    .WaitFor(server);
-if (!useLocalInfrastructure)
+if (useLocalInfrastructure)
 {
-    frontend.WithExternalHttpEndpoints();
+    builder.AddProject<TalentSuite_FrontEnd>("talentfrontend")
+        .WithEnvironment("AUTHENTICATION_ENABLED", authenticationEnabled)
+        .WithEnvironment("USE_IN_MEMORY_DATA", useInMemoryData)
+        .WithReference(keycloak)
+        .WithReference(server)
+        .WaitFor(keycloak)
+        .WaitFor(server);
 }
 
 builder.Build().Run();
