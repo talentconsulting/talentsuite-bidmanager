@@ -56,6 +56,9 @@ jobs:
           test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
           test -n "${{ vars.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
 
+      - name: Configure azd to use Azure CLI auth
+        run: azd config set auth.useAzCliAuth "true"
+
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: azd provision --no-prompt
