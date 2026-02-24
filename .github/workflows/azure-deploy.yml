@@ -62,6 +62,14 @@ jobs:
           jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' /tmp/azd-initial.json > /tmp/azd-initial.env
           azd env set --environment "${{ env.AZURE_ENV_NAME }}" --file /tmp/azd-initial.env --no-prompt
 
+      - name: Verify required azd secure parameters exist
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          vals="$(azd env get-values --environment "${{ env.AZURE_ENV_NAME }}")"
+          for k in SqlPassword KeycloakPassword KeycloakDbPassword InviteSmtpPassword; do
+            echo "$vals" | rg -q "^${k}=.+" && echo "$k: set" || (echo "$k: MISSING" && exit 1)
+          done
+
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
