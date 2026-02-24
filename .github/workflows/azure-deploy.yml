@@ -17,6 +17,7 @@ jobs:
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       AZD_WORKING_DIR: "."
+      AZD_INITIAL_ENVIRONMENT_CONFIG: ${{ secrets.AZD_INITIAL_ENVIRONMENT_CONFIG }}
 
       # ---- AppHost mode switch ----
       TALENTSUITE_INFRA_MODE: "azure"
@@ -70,6 +71,7 @@ jobs:
           test -n "${{ secrets.AZURE_CLIENT_ID }}" || (echo "AZURE_CLIENT_ID missing" && exit 1)
           test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
           test -n "${{ vars.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
+          test -n "${{ secrets.AZD_INITIAL_ENVIRONMENT_CONFIG }}" || (echo "AZD_INITIAL_ENVIRONMENT_CONFIG missing" && exit 1)
 
       - name: Verify Azure CLI session
         run: az account show --output none
