@@ -64,6 +64,16 @@ jobs:
           jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' /tmp/azd-initial.json > /tmp/azd-initial.env
           azd env set --environment "${{ env.AZURE_ENV_NAME }}" --file /tmp/azd-initial.env --no-prompt
 
+          sql_password="$(jq -r '.SqlPassword' /tmp/azd-initial.json)"
+          keycloak_password="$(jq -r '.KeycloakPassword' /tmp/azd-initial.json)"
+          keycloak_db_password="$(jq -r '.KeycloakDbPassword' /tmp/azd-initial.json)"
+          invite_smtp_password="$(jq -r '.InviteSmtpPassword' /tmp/azd-initial.json)"
+
+          azd env set --environment "${{ env.AZURE_ENV_NAME }}" SqlPassword "$sql_password" --no-prompt
+          azd env set --environment "${{ env.AZURE_ENV_NAME }}" KeycloakPassword "$keycloak_password" --no-prompt
+          azd env set --environment "${{ env.AZURE_ENV_NAME }}" KeycloakDbPassword "$keycloak_db_password" --no-prompt
+          azd env set --environment "${{ env.AZURE_ENV_NAME }}" InviteSmtpPassword "$invite_smtp_password" --no-prompt
+
       - name: Verify required azd secure parameters exist
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
