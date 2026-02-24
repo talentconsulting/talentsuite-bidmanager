@@ -1,0 +1,6 @@
+name: talentsuite-bidmanager
+services:
+  app:
+    project: ./TalentSuite.AppHost
+    language: dotnet
+    host: apphost
