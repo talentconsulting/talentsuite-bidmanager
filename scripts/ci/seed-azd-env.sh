@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+trap 'echo "seed-azd-env.sh failed at line $LINENO"' ERR
 
 require_env() {
   local name="$1"
@@ -13,12 +14,12 @@ require_env "AZURE_ENV_NAME"
 require_env "AZD_INITIAL_ENVIRONMENT_CONFIG"
 
 printf '%s' "$AZD_INITIAL_ENVIRONMENT_CONFIG" > /tmp/azd-initial.json
-jq -e . /tmp/azd-initial.json >/dev/null
+jq -e . /tmp/azd-initial.json >/dev/null || (echo "AZD_INITIAL_ENVIRONMENT_CONFIG is not valid JSON" && exit 1)
 
 azd env new "$AZURE_ENV_NAME" --no-prompt || true
 
 jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' /tmp/azd-initial.json > /tmp/azd-initial.env
-azd env set --environment "$AZURE_ENV_NAME" --file /tmp/azd-initial.env --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" --file /tmp/azd-initial.env --no-prompt || (echo "Failed to seed azd env from /tmp/azd-initial.env" && exit 1)
 
 read_required_value() {
   local key="$1"
@@ -86,6 +87,6 @@ azd env set --environment "$AZURE_ENV_NAME" AUTHENTICATION_ENABLED "$authenticat
 azd env set --environment "$AZURE_ENV_NAME" KEYCLOAK_CLIENT_ID "$keycloak_client_id" --no-prompt
 
 # Fail fast if azd did not persist required Keycloak DB values.
-vals_after_set="$(azd env get-values --environment "$AZURE_ENV_NAME")"
+vals_after_set="$(azd env get-values --environment "$AZURE_ENV_NAME" || (echo "Failed to read azd environment values after seed" && exit 1))"
 echo "$vals_after_set" | grep -Eq '^KeycloakDbUsername=.+' || (echo "KeycloakDbUsername not persisted in azd env" && exit 1)
 echo "$vals_after_set" | grep -Eq '^KeycloakDbPassword=.+' || (echo "KeycloakDbPassword not persisted in azd env" && exit 1)
