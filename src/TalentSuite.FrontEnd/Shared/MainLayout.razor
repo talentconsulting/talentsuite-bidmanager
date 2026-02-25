@@ -258,9 +258,14 @@
         get
         {
             var authority = Configuration["KEYCLOAK_AUTHORITY"]
-                            ?? BuildKeycloakAuthorityFromEndpointVariables()
-                            ?? "http://localhost:8080/realms/TalentConsulting";
-            var clientId = Configuration["KEYCLOAK_CLIENT_ID"] ?? "talentsuite-frontend";
+                            ?? BuildKeycloakAuthorityFromEndpointVariables();
+            if (string.IsNullOrWhiteSpace(authority))
+                throw new InvalidOperationException(
+                    "Missing KEYCLOAK_AUTHORITY (or KEYCLOAK_HTTPS/KEYCLOAK_HTTP) configuration for logout URL.");
+            var clientId = Configuration["KEYCLOAK_CLIENT_ID"];
+            if (string.IsNullOrWhiteSpace(clientId))
+                throw new InvalidOperationException(
+                    "Missing KEYCLOAK_CLIENT_ID configuration for logout URL.");
             var redirect = Uri.EscapeDataString(NavigationManager.BaseUri.TrimEnd('/'));
             return
                 $"{authority.TrimEnd('/')}/protocol/openid-connect/logout?client_id={Uri.EscapeDataString(clientId)}&post_logout_redirect_uri={redirect}";

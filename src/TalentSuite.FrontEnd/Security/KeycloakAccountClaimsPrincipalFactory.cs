@@ -57,7 +57,7 @@ public sealed class KeycloakAccountClaimsPrincipalFactory
             return;
 
         var clientId = _configuration["KEYCLOAK_CLIENT_ID"]
-            ?? "talentsuite-frontend";
+            ?? throw new InvalidOperationException("Missing KEYCLOAK_CLIENT_ID configuration.");
 
         if (!resourceElement.TryGetProperty(clientId, out var clientNode))
             return;
