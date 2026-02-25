@@ -2,9 +2,15 @@ using Projects;
 
 var builder = DistributedApplication.CreateBuilder(args);
 const string InfrastructureModeVariable = "TALENTSUITE_INFRA_MODE";
+const string ForceAzureInfrastructureVariable = "TALENTSUITE_FORCE_AZURE_INFRA";
 var infrastructureMode = Environment.GetEnvironmentVariable(InfrastructureModeVariable)
                          ?? "local";
-var useLocalInfrastructure = string.Equals(infrastructureMode, "local", StringComparison.OrdinalIgnoreCase);
+var forceAzureInfrastructure = string.Equals(
+    Environment.GetEnvironmentVariable(ForceAzureInfrastructureVariable),
+    "true",
+    StringComparison.OrdinalIgnoreCase);
+var useLocalInfrastructure = !forceAzureInfrastructure
+    && string.Equals(infrastructureMode, "local", StringComparison.OrdinalIgnoreCase);
 
 var keycloakPassword = builder.AddParameter(
                                 "KeycloakPassword",

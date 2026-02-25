@@ -19,6 +19,7 @@ jobs:
       AZD_WORKING_DIR: "."
       AZD_INITIAL_ENVIRONMENT_CONFIG: ${{ secrets.AZD_INITIAL_ENVIRONMENT_CONFIG }}
       DOTNET_LAUNCH_PROFILE: "https-azure"
+      TALENTSUITE_FORCE_AZURE_INFRA: "true"
 
       # ---- AppHost mode switch ----
       TALENTSUITE_INFRA_MODE: "azure"
