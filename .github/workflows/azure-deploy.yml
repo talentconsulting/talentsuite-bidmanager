@@ -76,54 +76,22 @@ jobs:
           echo "AZD_PRINCIPAL_ID=$principal_id" >> "$GITHUB_ENV"
           echo "Seeded azd env principalId"
 
+      - name: Export azd environment values for later steps
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          chmod +x scripts/ci/load-azd-env.sh
+          scripts/ci/load-azd-env.sh
+
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
-          params_keycloak_db_username="$(azd env get-value KeycloakDbUsername --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          params_keycloak_db_password="$(azd env get-value KeycloakDbPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          params_keycloak_password="$(azd env get-value KeycloakPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          params_sql_password="$(azd env get-value SqlPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          params_invite_smtp_password="$(azd env get-value InviteSmtpPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-
-          if [ -z "$params_keycloak_db_username" ]; then
-            params_keycloak_db_username="$(azd env get-value Parameters__KeycloakDbUsername --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          fi
-          if [ -z "$params_keycloak_db_password" ]; then
-            params_keycloak_db_password="$(azd env get-value Parameters__KeycloakDbPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          fi
-          if [ -z "$params_keycloak_password" ]; then
-            params_keycloak_password="$(azd env get-value Parameters__KeycloakPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          fi
-          if [ -z "$params_sql_password" ]; then
-            params_sql_password="$(azd env get-value Parameters__SqlPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          fi
-          if [ -z "$params_invite_smtp_password" ]; then
-            params_invite_smtp_password="$(azd env get-value Parameters__InviteSmtpPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          fi
-
-          params_keycloak_db_username="$(printf '%s' "$params_keycloak_db_username" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-          params_keycloak_db_password="$(printf '%s' "$params_keycloak_db_password" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-          params_keycloak_password="$(printf '%s' "$params_keycloak_password" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-          params_sql_password="$(printf '%s' "$params_sql_password" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-          params_invite_smtp_password="$(printf '%s' "$params_invite_smtp_password" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-
-          echo "::add-mask::$params_keycloak_db_password"
-          echo "::add-mask::$params_keycloak_password"
-          echo "::add-mask::$params_sql_password"
-          echo "::add-mask::$params_invite_smtp_password"
-
-          test -n "$params_keycloak_db_username" || (echo "KeycloakDbUsername is empty/missing before azd provision" && exit 1)
-          test -n "$params_keycloak_db_password" || (echo "KeycloakDbPassword is empty/missing before azd provision" && exit 1)
-          test -n "$params_keycloak_password" || (echo "KeycloakPassword is empty/missing before azd provision" && exit 1)
-          test -n "$params_sql_password" || (echo "SqlPassword is empty/missing before azd provision" && exit 1)
-          test -n "$params_invite_smtp_password" || (echo "InviteSmtpPassword is empty/missing before azd provision" && exit 1)
+          test -n "${Parameters__KeycloakDbUsername:-}" || (echo "Parameters__KeycloakDbUsername is empty/missing before azd provision" && exit 1)
+          test -n "${Parameters__KeycloakDbPassword:-}" || (echo "Parameters__KeycloakDbPassword is empty/missing before azd provision" && exit 1)
+          test -n "${Parameters__KeycloakPassword:-}" || (echo "Parameters__KeycloakPassword is empty/missing before azd provision" && exit 1)
+          test -n "${Parameters__SqlPassword:-}" || (echo "Parameters__SqlPassword is empty/missing before azd provision" && exit 1)
+          test -n "${Parameters__InviteSmtpPassword:-}" || (echo "Parameters__InviteSmtpPassword is empty/missing before azd provision" && exit 1)
           test -n "${AZD_PRINCIPAL_ID:-}" || (echo "AZD_PRINCIPAL_ID is empty/missing before azd provision" && exit 1)
 
-          Parameters__KeycloakDbUsername="$params_keycloak_db_username" \
-          Parameters__KeycloakDbPassword="$params_keycloak_db_password" \
-          Parameters__KeycloakPassword="$params_keycloak_password" \
-          Parameters__SqlPassword="$params_sql_password" \
-          Parameters__InviteSmtpPassword="$params_invite_smtp_password" \
           Parameters__principalId="${AZD_PRINCIPAL_ID}" \
           azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt --debug
 
@@ -148,32 +116,8 @@ jobs:
       - name: Deploy
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
-          params_keycloak_db_username="$(azd env get-value KeycloakDbUsername --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          params_keycloak_db_password="$(azd env get-value KeycloakDbPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          params_keycloak_password="$(azd env get-value KeycloakPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          params_sql_password="$(azd env get-value SqlPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-
-          if [ -z "$params_keycloak_db_username" ]; then
-            params_keycloak_db_username="$(azd env get-value Parameters__KeycloakDbUsername --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          fi
-          if [ -z "$params_keycloak_db_password" ]; then
-            params_keycloak_db_password="$(azd env get-value Parameters__KeycloakDbPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
-          fi
-
-          echo "::add-mask::$params_keycloak_db_password"
-          echo "::add-mask::$params_keycloak_password"
-          echo "::add-mask::$params_sql_password"
-
-          params_keycloak_db_username="$(printf '%s' "$params_keycloak_db_username" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-          params_keycloak_db_password="$(printf '%s' "$params_keycloak_db_password" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-
-          test -n "$params_keycloak_db_username" || (echo "KeycloakDbUsername is empty/missing before azd deploy" && exit 1)
-          test -n "$params_keycloak_db_password" || (echo "KeycloakDbPassword is empty/missing before azd deploy" && exit 1)
-
-          Parameters__KeycloakDbUsername="$params_keycloak_db_username" \
-          Parameters__KeycloakDbPassword="$params_keycloak_db_password" \
-          Parameters__KeycloakPassword="$params_keycloak_password" \
-          Parameters__SqlPassword="$params_sql_password" \
+          test -n "${Parameters__KeycloakDbUsername:-}" || (echo "Parameters__KeycloakDbUsername is empty/missing before azd deploy" && exit 1)
+          test -n "${Parameters__KeycloakDbPassword:-}" || (echo "Parameters__KeycloakDbPassword is empty/missing before azd deploy" && exit 1)
           azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Deploy frontend as static website
