@@ -239,6 +239,23 @@ jobs:
           authentication_enabled="$(find_env_value AUTHENTICATION_ENABLED AZURE_AUTHENTICATION_ENABLED || true)"
           keycloak_client_id="$(find_env_value KEYCLOAK_CLIENT_ID || true)"
 
+          # Fallback: resolve endpoints directly from Container Apps ingress FQDN.
+          if [ -z "$keycloak_base_url" ]; then
+            keycloak_fqdn="$(az containerapp show \
+              --resource-group "rg-${AZURE_ENV_NAME}" \
+              --name "keycloak" \
+              --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || true)"
+            [ -n "$keycloak_fqdn" ] && keycloak_base_url="https://${keycloak_fqdn}"
+          fi
+
+          if [ -z "$talentserver_base_url" ]; then
+            talentserver_fqdn="$(az containerapp show \
+              --resource-group "rg-${AZURE_ENV_NAME}" \
+              --name "talentserver" \
+              --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || true)"
+            [ -n "$talentserver_fqdn" ] && talentserver_base_url="https://${talentserver_fqdn}"
+          fi
+
           test -n "$keycloak_base_url" || (echo "Could not resolve Keycloak endpoint from azd environment values" && exit 1)
           test -n "$talentserver_base_url" || (echo "Could not resolve talentserver endpoint from azd environment values" && exit 1)
 
