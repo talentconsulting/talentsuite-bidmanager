@@ -175,7 +175,20 @@ jobs:
 
       - name: Deploy
         working-directory: ${{ env.AZD_WORKING_DIR }}
-        run: azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
+        run: |
+          params_keycloak_db_username="$(azd env get-value KeycloakDbUsername --environment "${{ env.AZURE_ENV_NAME }}")"
+          params_keycloak_db_password="$(azd env get-value KeycloakDbPassword --environment "${{ env.AZURE_ENV_NAME }}")"
+          params_keycloak_password="$(azd env get-value KeycloakPassword --environment "${{ env.AZURE_ENV_NAME }}")"
+          params_sql_password="$(azd env get-value SqlPassword --environment "${{ env.AZURE_ENV_NAME }}")"
+
+          test -n "$params_keycloak_db_username" || (echo "KeycloakDbUsername is empty before azd deploy" && exit 1)
+          test -n "$params_keycloak_db_password" || (echo "KeycloakDbPassword is empty before azd deploy" && exit 1)
+
+          Parameters__KeycloakDbUsername="$params_keycloak_db_username" \
+          Parameters__KeycloakDbPassword="$params_keycloak_db_password" \
+          Parameters__KeycloakPassword="$params_keycloak_password" \
+          Parameters__SqlPassword="$params_sql_password" \
+          azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Deploy frontend as static website
         working-directory: ${{ env.AZD_WORKING_DIR }}
