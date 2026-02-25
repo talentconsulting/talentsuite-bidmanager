@@ -175,3 +175,11 @@ jobs:
           Parameters__KeycloakPassword="$params_keycloak_password" \
           Parameters__SqlPassword="$params_sql_password" \
           azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
+
+      - name: Deploy frontend as static website
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        env:
+          DEPLOYER_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        run: |
+          chmod +x scripts/ci/deploy-frontend-static.sh
+          scripts/ci/deploy-frontend-static.sh
