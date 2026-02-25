@@ -66,12 +66,12 @@ jobs:
           jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' /tmp/azd-initial.json > /tmp/azd-initial.env
           azd env set --environment "${{ env.AZURE_ENV_NAME }}" --file /tmp/azd-initial.env --no-prompt
 
-          sql_password="$(jq -r '.SqlPassword' /tmp/azd-initial.json)"
-          keycloak_password="$(jq -r '.KeycloakPassword' /tmp/azd-initial.json)"
-          keycloak_db_username="$(jq -r '.KeycloakDbUsername' /tmp/azd-initial.json)"
-          keycloak_db_password="$(jq -r '.KeycloakDbPassword' /tmp/azd-initial.json)"
-          invite_smtp_username="$(jq -r '.InviteSmtpUsername' /tmp/azd-initial.json)"
-          invite_smtp_password="$(jq -r '.InviteSmtpPassword' /tmp/azd-initial.json)"
+          sql_password="$(jq -er '.SqlPassword // empty' /tmp/azd-initial.json)"
+          keycloak_password="$(jq -er '.KeycloakPassword // empty' /tmp/azd-initial.json)"
+          keycloak_db_username="$(jq -er '.KeycloakDbUsername // empty' /tmp/azd-initial.json)"
+          keycloak_db_password="$(jq -er '.KeycloakDbPassword // empty' /tmp/azd-initial.json)"
+          invite_smtp_username="$(jq -er '.InviteSmtpUsername // empty' /tmp/azd-initial.json)"
+          invite_smtp_password="$(jq -er '.InviteSmtpPassword // empty' /tmp/azd-initial.json)"
 
           is_placeholder_value() {
             case "$1" in
@@ -111,6 +111,11 @@ jobs:
           azd env set --environment "${{ env.AZURE_ENV_NAME }}" KeycloakDbPassword "$keycloak_db_password" --no-prompt
           azd env set --environment "${{ env.AZURE_ENV_NAME }}" InviteSmtpPassword "$invite_smtp_password" --no-prompt
 
+          # Fail fast if azd did not persist required Keycloak DB values.
+          vals_after_set="$(azd env get-values --environment "${{ env.AZURE_ENV_NAME }}")"
+          echo "$vals_after_set" | grep -Eq '^KeycloakDbUsername=.+' || (echo "KeycloakDbUsername not persisted in azd env" && exit 1)
+          echo "$vals_after_set" | grep -Eq '^KeycloakDbPassword=.+' || (echo "KeycloakDbPassword not persisted in azd env" && exit 1)
+
       - name: Verify required azd secure parameters exist
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
@@ -125,6 +130,25 @@ jobs:
             echo "AZURE_SUBSCRIPTION_ID=$(echo "$AZURE_SUBSCRIPTION_ID" | tr -d '\r\n[:space:]')"
             echo "AZURE_ENV_NAME=$(echo "$AZURE_ENV_NAME" | tr -d '\r\n[:space:]')"
             echo "AZURE_LOCATION=$(echo "$AZURE_LOCATION" | tr -d '\r\n[:space:]')"
+          } >> "$GITHUB_ENV"
+
+      - name: Export Aspire parameter env vars for AppHost
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          vals="$(azd env get-values --environment "${{ env.AZURE_ENV_NAME }}")"
+
+          keycloak_db_username="$(echo "$vals" | sed -n 's/^KeycloakDbUsername=//p' | head -n1)"
+          keycloak_db_password="$(echo "$vals" | sed -n 's/^KeycloakDbPassword=//p' | head -n1)"
+          keycloak_password="$(echo "$vals" | sed -n 's/^KeycloakPassword=//p' | head -n1)"
+          sql_password="$(echo "$vals" | sed -n 's/^SqlPassword=//p' | head -n1)"
+
+          test -n "$keycloak_db_username" || (echo "KeycloakDbUsername missing in azd env" && exit 1)
+
+          {
+            echo "Parameters__KeycloakDbUsername=$keycloak_db_username"
+            echo "Parameters__KeycloakDbPassword=$keycloak_db_password"
+            echo "Parameters__KeycloakPassword=$keycloak_password"
+            echo "Parameters__SqlPassword=$sql_password"
           } >> "$GITHUB_ENV"
 
       - name: Provision
