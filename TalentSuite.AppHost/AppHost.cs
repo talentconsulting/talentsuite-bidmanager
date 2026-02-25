@@ -74,8 +74,7 @@ var keycloak = builder.AddKeycloak(
 if (!useLocalInfrastructure)
 {
     keycloak
-        .WithEndpoint("http", endpoint => endpoint.IsExternal = true)
-        .WithEndpoint("https", endpoint => endpoint.IsExternal = false)
+        .WithEndpoint("http", endpoint => endpoint.IsExternal = true, createIfNotExists: false)
         .WithArgs("--http-enabled=true")
         .WithArgs("--proxy-headers=xforwarded")
         .WithArgs("--hostname-strict=false");

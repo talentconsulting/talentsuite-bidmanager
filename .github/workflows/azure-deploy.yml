@@ -68,11 +68,41 @@ jobs:
 
           sql_password="$(jq -r '.SqlPassword' /tmp/azd-initial.json)"
           keycloak_password="$(jq -r '.KeycloakPassword' /tmp/azd-initial.json)"
+          keycloak_db_username="$(jq -r '.KeycloakDbUsername' /tmp/azd-initial.json)"
           keycloak_db_password="$(jq -r '.KeycloakDbPassword' /tmp/azd-initial.json)"
+          invite_smtp_username="$(jq -r '.InviteSmtpUsername' /tmp/azd-initial.json)"
           invite_smtp_password="$(jq -r '.InviteSmtpPassword' /tmp/azd-initial.json)"
+
+          test -n "$keycloak_db_username" || (echo "KeycloakDbUsername missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
+          [ "$keycloak_db_username" != "sa" ] || (echo "KeycloakDbUsername must not be 'sa' for Azure SQL" && exit 1)
+          [[ ! "$keycloak_db_username" =~ ^<.*>$ ]] || (echo "KeycloakDbUsername appears to be a placeholder value" && exit 1)
+
+          validate_strong_password() {
+            local value="$1"
+            local field="$2"
+            if [ "${#value}" -lt 12 ] \
+              || [[ ! "$value" =~ [A-Z] ]] \
+              || [[ ! "$value" =~ [a-z] ]] \
+              || [[ ! "$value" =~ [0-9] ]] \
+              || [[ ! "$value" =~ [^A-Za-z0-9] ]]; then
+              echo "$field must be at least 12 chars and include upper, lower, number, and special character"
+              exit 1
+            fi
+          }
+
+          validate_strong_password "$sql_password" "SqlPassword"
+          validate_strong_password "$keycloak_db_password" "KeycloakDbPassword"
+
+          [[ ! "$invite_smtp_username" =~ ^<.*>$ ]] || (echo "InviteSmtpUsername appears to be a placeholder value" && exit 1)
+          [[ ! "$invite_smtp_password" =~ ^<.*>$ ]] || (echo "InviteSmtpPassword appears to be a placeholder value" && exit 1)
+          [[ "$invite_smtp_username" != *"your-smtp"* ]] || (echo "InviteSmtpUsername appears to be a placeholder value" && exit 1)
+          [[ "$invite_smtp_password" != *"your-smtp"* ]] || (echo "InviteSmtpPassword appears to be a placeholder value" && exit 1)
+          test -n "$invite_smtp_username" || (echo "InviteSmtpUsername missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
+          test -n "$invite_smtp_password" || (echo "InviteSmtpPassword missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
 
           azd env set --environment "${{ env.AZURE_ENV_NAME }}" SqlPassword "$sql_password" --no-prompt
           azd env set --environment "${{ env.AZURE_ENV_NAME }}" KeycloakPassword "$keycloak_password" --no-prompt
+          azd env set --environment "${{ env.AZURE_ENV_NAME }}" KeycloakDbUsername "$keycloak_db_username" --no-prompt
           azd env set --environment "${{ env.AZURE_ENV_NAME }}" KeycloakDbPassword "$keycloak_db_password" --no-prompt
           azd env set --environment "${{ env.AZURE_ENV_NAME }}" InviteSmtpPassword "$invite_smtp_password" --no-prompt
 
@@ -96,6 +126,24 @@ jobs:
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt --debug
 
+      - name: Disable SQL Entra-only auth for Keycloak SQL login
+        run: |
+          resource_group="rg-${AZURE_ENV_NAME}"
+          sql_server_name="$(az sql server list --resource-group "$resource_group" --query '[0].name' -o tsv)"
+
+          test -n "$sql_server_name" || (echo "Could not find SQL server in resource group $resource_group" && exit 1)
+
+          ad_only_enabled="$(az sql server ad-only-auth get \
+            --resource-group "$resource_group" \
+            --name "$sql_server_name" \
+            --query azureAdOnlyAuthentication -o tsv)"
+
+          if [ "$ad_only_enabled" = "true" ]; then
+            az sql server ad-only-auth disable \
+              --resource-group "$resource_group" \
+              --name "$sql_server_name"
+          fi
+
       - name: Deploy
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
@@ -107,6 +155,28 @@ jobs:
           storage_account="$(echo "$blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
 
           test -n "$storage_account" || (echo "Could not resolve storage account from STORAGE_BLOBENDPOINT" && exit 1)
+
+          storage_account_id="$(az storage account show --name "$storage_account" --query id -o tsv)"
+          deployer_object_id="$(az ad sp show --id "${{ secrets.AZURE_CLIENT_ID }}" --query id -o tsv)"
+
+          test -n "$storage_account_id" || (echo "Could not resolve storage account id" && exit 1)
+          test -n "$deployer_object_id" || (echo "Could not resolve deployer service principal object id" && exit 1)
+
+          existing_role_assignment="$(az role assignment list \
+            --assignee-object-id "$deployer_object_id" \
+            --scope "$storage_account_id" \
+            --role "Storage Blob Data Contributor" \
+            --query '[0].id' -o tsv)"
+
+          if [ -z "$existing_role_assignment" ]; then
+            az role assignment create \
+              --assignee-object-id "$deployer_object_id" \
+              --assignee-principal-type ServicePrincipal \
+              --scope "$storage_account_id" \
+              --role "Storage Blob Data Contributor"
+            # RBAC assignment can take a short time to become effective for data plane operations.
+            sleep 30
+          fi
 
           dotnet publish src/TalentSuite.FrontEnd/TalentSuite.FrontEnd.csproj -c Release -o /tmp/talentsuite-frontend-publish
 
