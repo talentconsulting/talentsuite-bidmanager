@@ -222,6 +222,42 @@ jobs:
 
           dotnet publish src/TalentSuite.FrontEnd/TalentSuite.FrontEnd.csproj -c Release -o /tmp/talentsuite-frontend-publish
 
+          azd_values="$(azd env get-values --environment "${{ env.AZURE_ENV_NAME }}")"
+          find_env_value() {
+            for key in "$@"; do
+              value="$(echo "$azd_values" | sed -n "s/^${key}=//p" | head -n1)"
+              if [ -n "$value" ]; then
+                echo "$value"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          keycloak_base_url="$(find_env_value KEYCLOAK_HTTPS KEYCLOAK_HTTP KEYCLOAK_ENDPOINT SERVICE_KEYCLOAK_ENDPOINT)"
+          talentserver_base_url="$(find_env_value TALENTSERVER_HTTPS TALENTSERVER_HTTP TALENTSERVER_ENDPOINT SERVICE_TALENTSERVER_ENDPOINT)"
+          authentication_enabled="$(find_env_value AUTHENTICATION_ENABLED AZURE_AUTHENTICATION_ENABLED)"
+          keycloak_client_id="$(find_env_value KEYCLOAK_CLIENT_ID)"
+
+          test -n "$keycloak_base_url" || (echo "Could not resolve Keycloak endpoint from azd environment values" && exit 1)
+          test -n "$talentserver_base_url" || (echo "Could not resolve talentserver endpoint from azd environment values" && exit 1)
+
+          keycloak_authority="$(echo "${keycloak_base_url%/}/realms/TalentConsulting")"
+          authentication_enabled="${authentication_enabled:-true}"
+          keycloak_client_id="${keycloak_client_id:-talentsuite-frontend}"
+
+          jq -n \
+            --arg auth "$authentication_enabled" \
+            --arg authority "$keycloak_authority" \
+            --arg clientId "$keycloak_client_id" \
+            --arg apiBase "${talentserver_base_url%/}" \
+            '{
+              AUTHENTICATION_ENABLED: $auth,
+              KEYCLOAK_AUTHORITY: $authority,
+              KEYCLOAK_CLIENT_ID: $clientId,
+              TALENTSERVER_HTTPS: $apiBase
+            }' > /tmp/talentsuite-frontend-publish/wwwroot/appsettings.json
+
           az storage blob service-properties update \
             --account-name "$storage_account" \
             --auth-mode login \
