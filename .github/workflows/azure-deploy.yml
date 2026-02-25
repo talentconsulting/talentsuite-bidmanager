@@ -18,6 +18,7 @@ jobs:
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       AZD_WORKING_DIR: "."
       AZD_INITIAL_ENVIRONMENT_CONFIG: ${{ secrets.AZD_INITIAL_ENVIRONMENT_CONFIG }}
+      DOTNET_LAUNCH_PROFILE: "https-azure"
 
       # ---- AppHost mode switch ----
       TALENTSUITE_INFRA_MODE: "azure"
