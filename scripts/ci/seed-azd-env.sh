@@ -32,12 +32,37 @@ read_required_value() {
   echo "$value"
 }
 
+read_required_value_any() {
+  local primary_key="$1"
+  local fallback_key="$2"
+  local value
+
+  value="$(jq -r --arg key "$primary_key" '.[$key] // empty | tostring' /tmp/azd-initial.json)"
+  if [ -z "$value" ] || [ "$value" = "null" ]; then
+    value="$(jq -r --arg key "$fallback_key" '.[$key] // empty | tostring' /tmp/azd-initial.json)"
+  fi
+
+  if [ -z "$value" ] || [ "$value" = "null" ]; then
+    echo "$primary_key/$fallback_key missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG"
+    exit 1
+  fi
+
+  # Trim surrounding whitespace. A value of only whitespace should be treated as empty.
+  value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+  if [ -z "$value" ]; then
+    echo "$primary_key/$fallback_key resolved to a blank value"
+    exit 1
+  fi
+
+  echo "$value"
+}
+
 authentication_enabled="$(read_required_value "AuthenticationEnabled")"
 sql_password="$(read_required_value "SqlPassword")"
 keycloak_password="$(read_required_value "KeycloakPassword")"
 keycloak_client_id="$(read_required_value "KeycloakClientId")"
-keycloak_db_username="$(read_required_value "KeycloakDbUsername")"
-keycloak_db_password="$(read_required_value "KeycloakDbPassword")"
+keycloak_db_username="$(read_required_value_any "KeycloakDbUsername" "Parameters__KeycloakDbUsername")"
+keycloak_db_password="$(read_required_value_any "KeycloakDbPassword" "Parameters__KeycloakDbPassword")"
 invite_smtp_username="$(read_required_value "InviteSmtpUsername")"
 invite_smtp_password="$(read_required_value "InviteSmtpPassword")"
 
@@ -85,6 +110,8 @@ is_placeholder_value "$invite_smtp_password" && (echo "InviteSmtpPassword appear
 # Add explicit alias keys used by frontend/runtime config resolution.
 azd env set --environment "$AZURE_ENV_NAME" AUTHENTICATION_ENABLED "$authentication_enabled" --no-prompt
 azd env set --environment "$AZURE_ENV_NAME" KEYCLOAK_CLIENT_ID "$keycloak_client_id" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" KeycloakDbUsername "$keycloak_db_username" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" KeycloakDbPassword "$keycloak_db_password" --no-prompt
 
 # Fail fast if azd did not persist required Keycloak DB values.
 vals_after_set="$(azd env get-values --environment "$AZURE_ENV_NAME" || (echo "Failed to read azd environment values after seed" && exit 1))"

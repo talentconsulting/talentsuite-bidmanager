@@ -21,6 +21,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ops", "ops", "{546A8A4D-408
 		.github\workflows\azure-deploy.yml = .github\workflows\azure-deploy.yml
 		set-env.sh = set-env.sh
 		azure.yaml = azure.yaml
+		scripts\ci\seed-azd-env.sh = scripts\ci\seed-azd-env.sh
+		scripts\ci\deploy-frontend-static.sh = scripts\ci\deploy-frontend-static.sh
 	EndProjectSection
 EndProject
 Global

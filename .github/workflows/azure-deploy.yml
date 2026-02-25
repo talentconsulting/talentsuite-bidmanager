@@ -61,6 +61,19 @@ jobs:
           chmod +x scripts/ci/seed-azd-env.sh
           scripts/ci/seed-azd-env.sh
 
+      - name: Seed azd principalId from OIDC token
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          arm_token="$(az account get-access-token --resource-type arm --query accessToken -o tsv)"
+          payload="$(printf '%s' "$arm_token" | cut -d'.' -f2 | tr '_-' '/+')"
+          padding=$(( (4 - ${#payload} % 4) % 4 ))
+          payload="${payload}$(printf '=%.0s' $(seq 1 "$padding"))"
+          principal_id="$(printf '%s' "$payload" | base64 -d | jq -r '.oid // empty')"
+
+          test -n "$principal_id" || (echo "Could not resolve principalId from OIDC token" && exit 1)
+          azd env set principalId "$principal_id" --environment "${{ env.AZURE_ENV_NAME }}"
+          echo "Seeded azd env principalId"
+
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt --debug
@@ -86,17 +99,27 @@ jobs:
       - name: Deploy
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
-          params_keycloak_db_username="$(azd env get-value KeycloakDbUsername --environment "${{ env.AZURE_ENV_NAME }}")"
-          params_keycloak_db_password="$(azd env get-value KeycloakDbPassword --environment "${{ env.AZURE_ENV_NAME }}")"
-          params_keycloak_password="$(azd env get-value KeycloakPassword --environment "${{ env.AZURE_ENV_NAME }}")"
-          params_sql_password="$(azd env get-value SqlPassword --environment "${{ env.AZURE_ENV_NAME }}")"
+          params_keycloak_db_username="$(azd env get-value KeycloakDbUsername --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
+          params_keycloak_db_password="$(azd env get-value KeycloakDbPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
+          params_keycloak_password="$(azd env get-value KeycloakPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
+          params_sql_password="$(azd env get-value SqlPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
+
+          if [ -z "$params_keycloak_db_username" ]; then
+            params_keycloak_db_username="$(azd env get-value Parameters__KeycloakDbUsername --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
+          fi
+          if [ -z "$params_keycloak_db_password" ]; then
+            params_keycloak_db_password="$(azd env get-value Parameters__KeycloakDbPassword --environment "${{ env.AZURE_ENV_NAME }}" 2>/dev/null || true)"
+          fi
 
           echo "::add-mask::$params_keycloak_db_password"
           echo "::add-mask::$params_keycloak_password"
           echo "::add-mask::$params_sql_password"
 
-          test -n "$params_keycloak_db_username" || (echo "KeycloakDbUsername is empty before azd deploy" && exit 1)
-          test -n "$params_keycloak_db_password" || (echo "KeycloakDbPassword is empty before azd deploy" && exit 1)
+          params_keycloak_db_username="$(printf '%s' "$params_keycloak_db_username" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+          params_keycloak_db_password="$(printf '%s' "$params_keycloak_db_password" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+
+          test -n "$params_keycloak_db_username" || (echo "KeycloakDbUsername is empty/missing before azd deploy" && exit 1)
+          test -n "$params_keycloak_db_password" || (echo "KeycloakDbPassword is empty/missing before azd deploy" && exit 1)
 
           Parameters__KeycloakDbUsername="$params_keycloak_db_username" \
           Parameters__KeycloakDbPassword="$params_keycloak_db_password" \

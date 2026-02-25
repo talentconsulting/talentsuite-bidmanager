@@ -15,10 +15,12 @@ var useLocalInfrastructure = !forceAzureInfrastructure
 var keycloakPassword = builder.AddParameter(
                                 "KeycloakPassword",
                                 value: "admin",
+                                secret: true,
                                 publishValueAsDefault: true);
 var sqlPassword = builder.AddParameter(
                                 "SqlPassword",
                                 value: "Your_strong_password123!",
+                                secret: true,
                                 publishValueAsDefault: true);
 var keycloakDbUsername = builder.AddParameter(
                                 "KeycloakDbUsername",
@@ -27,6 +29,7 @@ var keycloakDbUsername = builder.AddParameter(
 var keycloakDbPassword = builder.AddParameter(
                                 "KeycloakDbPassword",
                                 value: "unused",
+                                secret: true,
                                 publishValueAsDefault: true);
 var authenticationEnabled = builder.AddParameter(
                                 "AuthenticationEnabled",
@@ -63,6 +66,7 @@ var inviteSmtpUsername = builder.AddParameter(
 var inviteSmtpPassword = builder.AddParameter(
                                 "InviteSmtpPassword",
                                 value: "unused",
+                                secret: true,
                                 publishValueAsDefault: true);
 
 var keycloak = builder.AddKeycloak(
