@@ -20,17 +20,31 @@ azd env new "$AZURE_ENV_NAME" --no-prompt || true
 jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' /tmp/azd-initial.json > /tmp/azd-initial.env
 azd env set --environment "$AZURE_ENV_NAME" --file /tmp/azd-initial.env --no-prompt
 
-authentication_enabled="$(jq -er '.AuthenticationEnabled // empty' /tmp/azd-initial.json)"
-sql_password="$(jq -er '.SqlPassword // empty' /tmp/azd-initial.json)"
-keycloak_password="$(jq -er '.KeycloakPassword // empty' /tmp/azd-initial.json)"
-keycloak_client_id="$(jq -er '.KeycloakClientId // empty' /tmp/azd-initial.json)"
-keycloak_db_username="$(jq -er '.KeycloakDbUsername // empty' /tmp/azd-initial.json)"
-keycloak_db_password="$(jq -er '.KeycloakDbPassword // empty' /tmp/azd-initial.json)"
-invite_smtp_username="$(jq -er '.InviteSmtpUsername // empty' /tmp/azd-initial.json)"
-invite_smtp_password="$(jq -er '.InviteSmtpPassword // empty' /tmp/azd-initial.json)"
+read_required_value() {
+  local key="$1"
+  local value
+  value="$(jq -r --arg key "$key" '.[$key] // empty | tostring' /tmp/azd-initial.json)"
+  if [ -z "$value" ] || [ "$value" = "null" ]; then
+    echo "$key missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG"
+    exit 1
+  fi
+  echo "$value"
+}
 
-# Intentional no-op read to preserve existing validation behavior.
-test -n "$keycloak_password" || (echo "KeycloakPassword missing in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
+authentication_enabled="$(read_required_value "AuthenticationEnabled")"
+sql_password="$(read_required_value "SqlPassword")"
+keycloak_password="$(read_required_value "KeycloakPassword")"
+keycloak_client_id="$(read_required_value "KeycloakClientId")"
+keycloak_db_username="$(read_required_value "KeycloakDbUsername")"
+keycloak_db_password="$(read_required_value "KeycloakDbPassword")"
+invite_smtp_username="$(read_required_value "InviteSmtpUsername")"
+invite_smtp_password="$(read_required_value "InviteSmtpPassword")"
+
+# Mask secrets in GitHub logs to reduce accidental exposure.
+echo "::add-mask::$sql_password"
+echo "::add-mask::$keycloak_password"
+echo "::add-mask::$keycloak_db_password"
+echo "::add-mask::$invite_smtp_password"
 
 is_placeholder_value() {
   case "$1" in

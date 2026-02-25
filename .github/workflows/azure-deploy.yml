@@ -91,6 +91,10 @@ jobs:
           params_keycloak_password="$(azd env get-value KeycloakPassword --environment "${{ env.AZURE_ENV_NAME }}")"
           params_sql_password="$(azd env get-value SqlPassword --environment "${{ env.AZURE_ENV_NAME }}")"
 
+          echo "::add-mask::$params_keycloak_db_password"
+          echo "::add-mask::$params_keycloak_password"
+          echo "::add-mask::$params_sql_password"
+
           test -n "$params_keycloak_db_username" || (echo "KeycloakDbUsername is empty before azd deploy" && exit 1)
           test -n "$params_keycloak_db_password" || (echo "KeycloakDbPassword is empty before azd deploy" && exit 1)
 
