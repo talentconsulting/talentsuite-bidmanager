@@ -112,15 +112,14 @@ jobs:
 
           az storage blob service-properties update \
             --account-name "$storage_account" \
+            --auth-mode login \
             --static-website \
             --index-document index.html \
             --404-document index.html
 
-          storage_key="$(az storage account keys list --account-name "$storage_account" --query '[0].value' -o tsv)"
-
           az storage blob upload-batch \
             --account-name "$storage_account" \
-            --account-key "$storage_key" \
+            --auth-mode login \
             --destination '$web' \
             --source /tmp/talentsuite-frontend-publish/wwwroot \
             --overwrite
