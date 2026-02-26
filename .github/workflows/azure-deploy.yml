@@ -68,7 +68,11 @@ jobs:
           payload="$(printf '%s' "$arm_token" | cut -d'.' -f2 | tr '_-' '/+')"
           padding=$(( (4 - ${#payload} % 4) % 4 ))
           payload="${payload}$(printf '=%.0s' $(seq 1 "$padding"))"
-          principal_id="$(printf '%s' "$payload" | base64 -d | jq -r '.oid // empty')"
+          principal_id="$(printf '%s' "$payload" | base64 --decode --ignore-garbage 2>/dev/null | jq -r '.oid // empty')"
+
+          if [ -z "$principal_id" ]; then
+            principal_id="$(az ad sp show --id "${{ secrets.AZURE_CLIENT_ID }}" --query id -o tsv 2>/dev/null || true)"
+          fi
 
           test -n "$principal_id" || (echo "Could not resolve principalId from OIDC token" && exit 1)
           azd env set principalId "$principal_id" --environment "${{ env.AZURE_ENV_NAME }}"
@@ -85,14 +89,18 @@ jobs:
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
-          test -n "${Parameters__KeycloakDbUsername:-}" || (echo "Parameters__KeycloakDbUsername is empty/missing before azd provision" && exit 1)
-          test -n "${Parameters__KeycloakDbPassword:-}" || (echo "Parameters__KeycloakDbPassword is empty/missing before azd provision" && exit 1)
-          test -n "${Parameters__KeycloakPassword:-}" || (echo "Parameters__KeycloakPassword is empty/missing before azd provision" && exit 1)
-          test -n "${Parameters__SqlPassword:-}" || (echo "Parameters__SqlPassword is empty/missing before azd provision" && exit 1)
-          test -n "${Parameters__InviteSmtpPassword:-}" || (echo "Parameters__InviteSmtpPassword is empty/missing before azd provision" && exit 1)
+          test -n "${Parameters__KeycloakDbUsername:-${KeycloakDbUsername:-}}" || (echo "KeycloakDbUsername/Parameters__KeycloakDbUsername is empty/missing before azd provision" && exit 1)
+          test -n "${Parameters__KeycloakDbPassword:-${KeycloakDbPassword:-}}" || (echo "KeycloakDbPassword/Parameters__KeycloakDbPassword is empty/missing before azd provision" && exit 1)
+          test -n "${Parameters__KeycloakPassword:-${KeycloakPassword:-}}" || (echo "KeycloakPassword/Parameters__KeycloakPassword is empty/missing before azd provision" && exit 1)
+          test -n "${Parameters__SqlPassword:-${SqlPassword:-}}" || (echo "SqlPassword/Parameters__SqlPassword is empty/missing before azd provision" && exit 1)
+          test -n "${Parameters__InviteSmtpPassword:-${InviteSmtpPassword:-}}" || (echo "InviteSmtpPassword/Parameters__InviteSmtpPassword is empty/missing before azd provision" && exit 1)
           test -n "${AZD_PRINCIPAL_ID:-}" || (echo "AZD_PRINCIPAL_ID is empty/missing before azd provision" && exit 1)
 
-          Parameters__principalId="${AZD_PRINCIPAL_ID}" \
+          principalId="${AZD_PRINCIPAL_ID}" \
+          SqlPassword="${SqlPassword:-${Parameters__SqlPassword:-}}" \
+          KeycloakPassword="${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" \
+          KeycloakDbPassword="${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" \
+          InviteSmtpPassword="${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" \
           azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt --debug
 
       - name: Disable SQL Entra-only auth for Keycloak SQL login
@@ -116,8 +124,8 @@ jobs:
       - name: Deploy
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
-          test -n "${Parameters__KeycloakDbUsername:-}" || (echo "Parameters__KeycloakDbUsername is empty/missing before azd deploy" && exit 1)
-          test -n "${Parameters__KeycloakDbPassword:-}" || (echo "Parameters__KeycloakDbPassword is empty/missing before azd deploy" && exit 1)
+          test -n "${Parameters__KeycloakDbUsername:-${KeycloakDbUsername:-}}" || (echo "KeycloakDbUsername/Parameters__KeycloakDbUsername is empty/missing before azd deploy" && exit 1)
+          test -n "${Parameters__KeycloakDbPassword:-${KeycloakDbPassword:-}}" || (echo "KeycloakDbPassword/Parameters__KeycloakDbPassword is empty/missing before azd deploy" && exit 1)
           azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Deploy frontend as static website
