@@ -110,4 +110,19 @@ az storage blob upload-batch \
   --source /tmp/talentsuite-frontend-publish/wwwroot \
   --overwrite
 
+# Ensure browsers always fetch the latest runtime config and entrypoint.
+az storage blob update \
+  --account-name "$storage_account" \
+  --auth-mode login \
+  --container-name '$web' \
+  --name appsettings.json \
+  --content-cache-control "no-cache, no-store, must-revalidate" >/dev/null
+
+az storage blob update \
+  --account-name "$storage_account" \
+  --auth-mode login \
+  --container-name '$web' \
+  --name index.html \
+  --content-cache-control "no-cache, no-store, must-revalidate" >/dev/null
+
 echo "Frontend URL: https://${storage_account}.z33.web.core.windows.net/"
