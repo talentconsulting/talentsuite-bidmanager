@@ -38,8 +38,7 @@ jobs:
       - name: Setup azd
         uses: Azure/setup-azd@v2
         with:
-          # 1.23.6 panics in non-interactive provision when secure params are present.
-          version: 1.23.3
+          version: 1.23.6
 
       - name: Validate Azure login inputs
         run: |
