@@ -16,12 +16,12 @@ var keycloakPassword = builder.AddParameter(
                                 "KeycloakPassword",
                                 value: "admin",
                                 secret: true,
-                                publishValueAsDefault: true);
+                                publishValueAsDefault: false);
 var sqlPassword = builder.AddParameter(
                                 "SqlPassword",
                                 value: "Your_strong_password123!",
                                 secret: true,
-                                publishValueAsDefault: true);
+                                publishValueAsDefault: false);
 var keycloakDbUsername = builder.AddParameter(
                                 "KeycloakDbUsername",
                                 value: "",
@@ -30,7 +30,7 @@ var keycloakDbPassword = builder.AddParameter(
                                 "KeycloakDbPassword",
                                 value: "unused",
                                 secret: true,
-                                publishValueAsDefault: true);
+                                publishValueAsDefault: false);
 var authenticationEnabled = builder.AddParameter(
                                 "AuthenticationEnabled",
                                 value: "true",
@@ -67,7 +67,7 @@ var inviteSmtpPassword = builder.AddParameter(
                                 "InviteSmtpPassword",
                                 value: "unused",
                                 secret: true,
-                                publishValueAsDefault: true);
+                                publishValueAsDefault: false);
 
 var keycloak = builder.AddKeycloak(
             "keycloak",
