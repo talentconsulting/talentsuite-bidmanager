@@ -154,12 +154,22 @@ jobs:
           echo "$vals" | grep -Eq '^KeycloakPassword=.+' || (echo "KeycloakPassword missing/blank in azd env before deploy" && exit 1)
           echo "$vals" | grep -Eq '^KeycloakDbPassword=.+' || (echo "KeycloakDbPassword missing/blank in azd env before deploy" && exit 1)
 
+          # Keep keycloak out of azd deploy because Aspire emits inline ACA secrets
+          # (kc-bootstrap-*-password, kc-db-password), which conflicts with our
+          # Key Vault reference strategy and causes ContainerAppSecretInvalid.
           principalId="${AZD_PRINCIPAL_ID}" \
           SqlPassword="${SqlPassword:-${Parameters__SqlPassword:-}}" \
           KeycloakPassword="${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" \
           KeycloakDbPassword="${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" \
           InviteSmtpPassword="${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" \
-          azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
+          azd deploy talentserver --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
+
+          principalId="${AZD_PRINCIPAL_ID}" \
+          SqlPassword="${SqlPassword:-${Parameters__SqlPassword:-}}" \
+          KeycloakPassword="${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" \
+          KeycloakDbPassword="${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" \
+          InviteSmtpPassword="${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" \
+          azd deploy talentfunctions --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Post-sync Container App secrets from GitHub secrets to Key Vault refs
         if: always()
