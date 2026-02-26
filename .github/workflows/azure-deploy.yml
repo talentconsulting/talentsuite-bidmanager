@@ -45,15 +45,6 @@ jobs:
           test -n "${{ vars.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
           test -n "$AZD_INITIAL_ENVIRONMENT_CONFIG" || (echo "AZD_INITIAL_ENVIRONMENT_CONFIG missing" && exit 1)
 
-      - name: Ensure azd authentication
-        run: |
-          set -euo pipefail
-          azd version
-          if ! azd auth login --check-status >/dev/null 2>&1; then
-            azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
-          fi
-          azd auth login --check-status >/dev/null
-
       - name: Seed azd environment from initial config
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
@@ -88,12 +79,18 @@ jobs:
       - name: Provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
+          set -euo pipefail
           test -n "${Parameters__KeycloakDbUsername:-${KeycloakDbUsername:-}}" || (echo "KeycloakDbUsername/Parameters__KeycloakDbUsername is empty/missing before azd provision" && exit 1)
           test -n "${Parameters__KeycloakDbPassword:-${KeycloakDbPassword:-}}" || (echo "KeycloakDbPassword/Parameters__KeycloakDbPassword is empty/missing before azd provision" && exit 1)
           test -n "${Parameters__KeycloakPassword:-${KeycloakPassword:-}}" || (echo "KeycloakPassword/Parameters__KeycloakPassword is empty/missing before azd provision" && exit 1)
           test -n "${Parameters__SqlPassword:-${SqlPassword:-}}" || (echo "SqlPassword/Parameters__SqlPassword is empty/missing before azd provision" && exit 1)
           test -n "${Parameters__InviteSmtpPassword:-${InviteSmtpPassword:-}}" || (echo "InviteSmtpPassword/Parameters__InviteSmtpPassword is empty/missing before azd provision" && exit 1)
           test -n "${AZD_PRINCIPAL_ID:-}" || (echo "AZD_PRINCIPAL_ID is empty/missing before azd provision" && exit 1)
+
+          if ! azd auth login --check-status >/dev/null 2>&1; then
+            azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
+          fi
+          azd auth login --check-status >/dev/null
 
           principalId="${AZD_PRINCIPAL_ID}" \
           SqlPassword="${SqlPassword:-${Parameters__SqlPassword:-}}" \
@@ -123,8 +120,13 @@ jobs:
       - name: Deploy
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
+          set -euo pipefail
           test -n "${Parameters__KeycloakDbUsername:-${KeycloakDbUsername:-}}" || (echo "KeycloakDbUsername/Parameters__KeycloakDbUsername is empty/missing before azd deploy" && exit 1)
           test -n "${Parameters__KeycloakDbPassword:-${KeycloakDbPassword:-}}" || (echo "KeycloakDbPassword/Parameters__KeycloakDbPassword is empty/missing before azd deploy" && exit 1)
+          if ! azd auth login --check-status >/dev/null 2>&1; then
+            azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
+          fi
+          azd auth login --check-status >/dev/null
           azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Deploy frontend as static website
