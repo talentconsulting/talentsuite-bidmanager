@@ -37,6 +37,9 @@ jobs:
 
       - name: Setup azd
         uses: Azure/setup-azd@v2
+        with:
+          # 1.23.6 panics in non-interactive provision when secure params are present.
+          version: 1.23.3
 
       - name: Validate Azure login inputs
         run: |
@@ -106,7 +109,7 @@ jobs:
           KeycloakPassword="${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" \
           KeycloakDbPassword="${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" \
           InviteSmtpPassword="${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" \
-          azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt --debug
+          azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Disable SQL Entra-only auth for Keycloak SQL login
         run: |
