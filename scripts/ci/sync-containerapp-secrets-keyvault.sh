@@ -19,10 +19,9 @@ ensure_role_assignment() {
   local assignment_id
   assignment_id="$(az role assignment list \
     --assignee-object-id "$assignee_object_id" \
-    --assignee-principal-type "$principal_type" \
     --scope "$scope" \
     --role "$role_name" \
-    --query '[0].id' -o tsv)"
+    --query '[0].id' -o tsv 2>/dev/null || true)"
 
   if [ -n "$assignment_id" ]; then
     return 0
@@ -33,7 +32,13 @@ ensure_role_assignment() {
     --assignee-principal-type "$principal_type" \
     --scope "$scope" \
     --role "$role_name" >/dev/null 2>&1; then
-    return 1
+    # Older Azure CLI versions may not support --assignee-principal-type here.
+    if ! az role assignment create \
+      --assignee-object-id "$assignee_object_id" \
+      --scope "$scope" \
+      --role "$role_name" >/dev/null 2>&1; then
+      return 1
+    fi
   fi
 
   # Azure RBAC propagation is eventually consistent.
