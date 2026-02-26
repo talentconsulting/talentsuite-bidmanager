@@ -57,14 +57,39 @@ read_required_value_any() {
   echo "$value"
 }
 
-authentication_enabled="$(read_required_value "AuthenticationEnabled")"
-sql_password="$(read_required_value "SqlPassword")"
-keycloak_password="$(read_required_value "KeycloakPassword")"
+read_value_any_or_default() {
+  local primary_key="$1"
+  local fallback_key="$2"
+  local default_value="$3"
+  local value
+
+  value="$(jq -r --arg key "$primary_key" '.[$key] // empty | tostring' /tmp/azd-initial.json)"
+  if [ -z "$value" ] || [ "$value" = "null" ]; then
+    value="$(jq -r --arg key "$fallback_key" '.[$key] // empty | tostring' /tmp/azd-initial.json)"
+  fi
+
+  if [ -z "$value" ] || [ "$value" = "null" ]; then
+    value="$default_value"
+  fi
+
+  value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+  echo "$value"
+}
+
+authentication_enabled="$(read_required_value_any "AuthenticationEnabled" "Parameters__AuthenticationEnabled")"
+use_in_memory_data="$(read_required_value_any "UseInMemoryData" "Parameters__UseInMemoryData")"
+sql_password="$(read_required_value_any "SqlPassword" "Parameters__SqlPassword")"
+keycloak_password="$(read_required_value_any "KeycloakPassword" "Parameters__KeycloakPassword")"
 keycloak_client_id="$(read_required_value "KeycloakClientId")"
 keycloak_db_username="$(read_required_value_any "KeycloakDbUsername" "Parameters__KeycloakDbUsername")"
 keycloak_db_password="$(read_required_value_any "KeycloakDbPassword" "Parameters__KeycloakDbPassword")"
-invite_smtp_username="$(read_required_value "InviteSmtpUsername")"
-invite_smtp_password="$(read_required_value "InviteSmtpPassword")"
+invite_email_enabled="$(read_value_any_or_default "InviteEmailEnabled" "Parameters__InviteEmailEnabled" "false")"
+invite_from_email="$(read_value_any_or_default "InviteFromEmail" "Parameters__InviteFromEmail" "")"
+invite_smtp_host="$(read_value_any_or_default "InviteSmtpHost" "Parameters__InviteSmtpHost" "")"
+invite_smtp_port="$(read_value_any_or_default "InviteSmtpPort" "Parameters__InviteSmtpPort" "587")"
+invite_smtp_enable_ssl="$(read_value_any_or_default "InviteSmtpEnableSsl" "Parameters__InviteSmtpEnableSsl" "true")"
+invite_smtp_username="$(read_required_value_any "InviteSmtpUsername" "Parameters__InviteSmtpUsername")"
+invite_smtp_password="$(read_required_value_any "InviteSmtpPassword" "Parameters__InviteSmtpPassword")"
 
 # Mask secrets in GitHub logs to reduce accidental exposure.
 echo "::add-mask::$sql_password"
@@ -80,6 +105,7 @@ is_placeholder_value() {
 }
 
 test -n "$authentication_enabled" || (echo "AuthenticationEnabled missing in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
+test -n "$use_in_memory_data" || (echo "UseInMemoryData missing in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
 test -n "$keycloak_client_id" || (echo "KeycloakClientId missing in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
 test -n "$keycloak_db_username" || (echo "KeycloakDbUsername missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
 [ "$keycloak_db_username" != "sa" ] || (echo "KeycloakDbUsername must not be 'sa' for Azure SQL" && exit 1)
@@ -107,13 +133,44 @@ test -n "$invite_smtp_password" || (echo "InviteSmtpPassword missing or empty in
 is_placeholder_value "$invite_smtp_username" && (echo "InviteSmtpUsername appears to be a placeholder value" && exit 1)
 is_placeholder_value "$invite_smtp_password" && (echo "InviteSmtpPassword appears to be a placeholder value" && exit 1)
 
-# Add explicit alias keys used by frontend/runtime config resolution.
-azd env set --environment "$AZURE_ENV_NAME" AUTHENTICATION_ENABLED "$authentication_enabled" --no-prompt
-azd env set --environment "$AZURE_ENV_NAME" KEYCLOAK_CLIENT_ID "$keycloak_client_id" --no-prompt
+# Persist expected parameter keys for AppHost + aliases used by frontend/runtime config.
+azd env set --environment "$AZURE_ENV_NAME" Parameters__AuthenticationEnabled "$authentication_enabled" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Parameters__UseInMemoryData "$use_in_memory_data" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Parameters__SqlPassword "$sql_password" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Parameters__KeycloakPassword "$keycloak_password" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Parameters__KeycloakDbUsername "$keycloak_db_username" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Parameters__KeycloakDbPassword "$keycloak_db_password" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Parameters__InviteEmailEnabled "$invite_email_enabled" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Parameters__InviteFromEmail "$invite_from_email" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Parameters__InviteSmtpHost "$invite_smtp_host" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Parameters__InviteSmtpPort "$invite_smtp_port" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Parameters__InviteSmtpEnableSsl "$invite_smtp_enable_ssl" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Parameters__InviteSmtpUsername "$invite_smtp_username" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Parameters__InviteSmtpPassword "$invite_smtp_password" --no-prompt
+
+azd env set --environment "$AZURE_ENV_NAME" AuthenticationEnabled "$authentication_enabled" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" UseInMemoryData "$use_in_memory_data" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" SqlPassword "$sql_password" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" KeycloakPassword "$keycloak_password" --no-prompt
 azd env set --environment "$AZURE_ENV_NAME" KeycloakDbUsername "$keycloak_db_username" --no-prompt
 azd env set --environment "$AZURE_ENV_NAME" KeycloakDbPassword "$keycloak_db_password" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" InviteEmailEnabled "$invite_email_enabled" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" InviteFromEmail "$invite_from_email" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" InviteSmtpHost "$invite_smtp_host" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" InviteSmtpPort "$invite_smtp_port" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" InviteSmtpEnableSsl "$invite_smtp_enable_ssl" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" InviteSmtpUsername "$invite_smtp_username" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" InviteSmtpPassword "$invite_smtp_password" --no-prompt
+
+azd env set --environment "$AZURE_ENV_NAME" AUTHENTICATION_ENABLED "$authentication_enabled" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" KEYCLOAK_CLIENT_ID "$keycloak_client_id" --no-prompt
 
 # Fail fast if azd did not persist required Keycloak DB values.
 vals_after_set="$(azd env get-values --environment "$AZURE_ENV_NAME" || (echo "Failed to read azd environment values after seed" && exit 1))"
+echo "$vals_after_set" | grep -Eq '^Parameters__KeycloakDbUsername=.+' || (echo "Parameters__KeycloakDbUsername not persisted in azd env" && exit 1)
+echo "$vals_after_set" | grep -Eq '^Parameters__KeycloakDbPassword=.+' || (echo "Parameters__KeycloakDbPassword not persisted in azd env" && exit 1)
+echo "$vals_after_set" | grep -Eq '^Parameters__SqlPassword=.+' || (echo "Parameters__SqlPassword not persisted in azd env" && exit 1)
+echo "$vals_after_set" | grep -Eq '^Parameters__KeycloakPassword=.+' || (echo "Parameters__KeycloakPassword not persisted in azd env" && exit 1)
+echo "$vals_after_set" | grep -Eq '^Parameters__InviteSmtpPassword=.+' || (echo "Parameters__InviteSmtpPassword not persisted in azd env" && exit 1)
 echo "$vals_after_set" | grep -Eq '^KeycloakDbUsername=.+' || (echo "KeycloakDbUsername not persisted in azd env" && exit 1)
 echo "$vals_after_set" | grep -Eq '^KeycloakDbPassword=.+' || (echo "KeycloakDbPassword not persisted in azd env" && exit 1)

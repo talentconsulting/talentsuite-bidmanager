@@ -125,6 +125,15 @@ elif [[ "$MODE" == "azure" ]]; then
   # Reasonable defaults if not present in supplied config.
   export Parameters__AuthenticationEnabled="${Parameters__AuthenticationEnabled:-${AuthenticationEnabled:-true}}"
   export Parameters__UseInMemoryData="${Parameters__UseInMemoryData:-${UseInMemoryData:-false}}"
+  export Parameters__SqlPassword="${Parameters__SqlPassword:-${SqlPassword:-}}"
+  export Parameters__KeycloakPassword="${Parameters__KeycloakPassword:-${KeycloakPassword:-}}"
+  export Parameters__InviteEmailEnabled="${Parameters__InviteEmailEnabled:-${InviteEmailEnabled:-false}}"
+  export Parameters__InviteFromEmail="${Parameters__InviteFromEmail:-${InviteFromEmail:-}}"
+  export Parameters__InviteSmtpHost="${Parameters__InviteSmtpHost:-${InviteSmtpHost:-}}"
+  export Parameters__InviteSmtpPort="${Parameters__InviteSmtpPort:-${InviteSmtpPort:-587}}"
+  export Parameters__InviteSmtpEnableSsl="${Parameters__InviteSmtpEnableSsl:-${InviteSmtpEnableSsl:-true}}"
+  export Parameters__InviteSmtpUsername="${Parameters__InviteSmtpUsername:-${InviteSmtpUsername:-}}"
+  export Parameters__InviteSmtpPassword="${Parameters__InviteSmtpPassword:-${InviteSmtpPassword:-}}"
 
   test -n "${Parameters__KeycloakDbUsername:-${KeycloakDbUsername:-}}" || fail "Missing Keycloak DB username (Parameters__KeycloakDbUsername or KeycloakDbUsername)."
   test -n "${Parameters__KeycloakDbPassword:-${KeycloakDbPassword:-}}" || fail "Missing Keycloak DB password (Parameters__KeycloakDbPassword or KeycloakDbPassword)."
