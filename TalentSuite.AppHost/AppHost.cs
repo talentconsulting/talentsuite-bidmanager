@@ -1,4 +1,5 @@
 using Projects;
+using Azure.Provisioning.Sql;
 
 var builder = DistributedApplication.CreateBuilder(args);
 const string InfrastructureModeVariable = "TALENTSUITE_INFRA_MODE";
@@ -135,7 +136,15 @@ if (useLocalInfrastructure)
 }
 else
 {
-    var sql = builder.AddAzureSqlServer("sql");
+    var sql = builder.AddAzureSqlServer("sql")
+        .ConfigureInfrastructure(infra =>
+        {
+            var sqlServer = infra.GetProvisionableResources().OfType<SqlServer>().Single();
+            if (sqlServer.Administrators is not null)
+            {
+                sqlServer.Administrators.IsAzureADOnlyAuthenticationEnabled = false;
+            }
+        });
     var appDb = sql.AddDatabase("talentconsultingdb");
     var keycloakDb = sql.AddDatabase("keycloakdb");
 
