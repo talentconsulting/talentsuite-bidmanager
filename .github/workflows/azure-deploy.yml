@@ -135,8 +135,16 @@ jobs:
           set -euo pipefail
           test -n "${Parameters__KeycloakDbUsername:-${KeycloakDbUsername:-}}" || (echo "KeycloakDbUsername/Parameters__KeycloakDbUsername is empty/missing before azd deploy" && exit 1)
           test -n "${Parameters__KeycloakDbPassword:-${KeycloakDbPassword:-}}" || (echo "KeycloakDbPassword/Parameters__KeycloakDbPassword is empty/missing before azd deploy" && exit 1)
+          test -n "${Parameters__KeycloakPassword:-${KeycloakPassword:-}}" || (echo "KeycloakPassword/Parameters__KeycloakPassword is empty/missing before azd deploy" && exit 1)
           azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
           azd auth login --check-status >/dev/null
+
+          # Re-seed secure parameters right before deploy to avoid empty Container App secrets.
+          azd env set KeycloakPassword "${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set Parameters__KeycloakPassword "${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set KeycloakDbPassword "${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set Parameters__KeycloakDbPassword "${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
+
           azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Deploy frontend as static website
