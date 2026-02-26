@@ -200,6 +200,30 @@ When `TALENTSUITE_INFRA_MODE=local`, AppHost runs local emulators/containers for
 - Service Bus
 - Azurite (Blob storage)
 
+### Azure Secret Handling (CI Baseline)
+The working CI baseline (commit `39319ad`) uses this pattern:
+
+1. Keep real secrets in GitHub Secrets.
+2. Seed `azd` env values in CI (`seed-azd-env.sh` / `load-azd-env.sh`).
+3. Use placeholder parameter defaults in `TalentSuite.AppHost/AppHost.cs` for values that become Container App secrets:
+   - `KeycloakPassword`
+   - `KeycloakDbPassword`
+   - `SqlPassword`
+   - `InviteSmtpPassword`
+4. Run `azd provision` and `azd deploy`.
+5. Post-process Container Apps with `scripts/ci/sync-containerapp-secrets-keyvault.sh`:
+   - write real secret values to Key Vault
+   - assign managed identity access
+   - map Container App secret refs to `keyvaultref:... ,identityref:system`
+
+Why this is required:
+- Marking those AppHost parameters as Aspire `secret: true` caused `ContainerAppSecretInvalid` failures in CI for secret names like:
+  - `kc-bootstrap-***-password`
+  - `kc-db-password`
+  - `keycloak-***-password`
+  - `inviteemail--smtppassword`
+- The placeholder + Key Vault ref sync approach avoids invalid empty inline secrets during `azd deploy`.
+
 ## Troubleshooting
 - If authentication UI loops or role-based UI seems wrong, verify token claims (`roles`, `realm_access`, `resource_access`) and `/api/users/me-identity-debug`.
 - If local state is inconsistent, restart `aspire run`.
