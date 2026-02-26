@@ -87,9 +87,7 @@ jobs:
           test -n "${Parameters__InviteSmtpPassword:-${InviteSmtpPassword:-}}" || (echo "InviteSmtpPassword/Parameters__InviteSmtpPassword is empty/missing before azd provision" && exit 1)
           test -n "${AZD_PRINCIPAL_ID:-}" || (echo "AZD_PRINCIPAL_ID is empty/missing before azd provision" && exit 1)
 
-          if ! azd auth login --check-status >/dev/null 2>&1; then
-            azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
-          fi
+          azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
           azd auth login --check-status >/dev/null
 
           principalId="${AZD_PRINCIPAL_ID}" \
@@ -123,9 +121,7 @@ jobs:
           set -euo pipefail
           test -n "${Parameters__KeycloakDbUsername:-${KeycloakDbUsername:-}}" || (echo "KeycloakDbUsername/Parameters__KeycloakDbUsername is empty/missing before azd deploy" && exit 1)
           test -n "${Parameters__KeycloakDbPassword:-${KeycloakDbPassword:-}}" || (echo "KeycloakDbPassword/Parameters__KeycloakDbPassword is empty/missing before azd deploy" && exit 1)
-          if ! azd auth login --check-status >/dev/null 2>&1; then
-            azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
-          fi
+          azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
           azd auth login --check-status >/dev/null
           azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
