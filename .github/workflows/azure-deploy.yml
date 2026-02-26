@@ -109,7 +109,7 @@ jobs:
           KeycloakPassword="${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" \
           KeycloakDbPassword="${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" \
           InviteSmtpPassword="${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" \
-          azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
+          azd provision --environment "${{ env.AZURE_ENV_NAME }}"
 
       - name: Disable SQL Entra-only auth for Keycloak SQL login
         run: |
