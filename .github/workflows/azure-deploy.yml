@@ -149,10 +149,13 @@ jobs:
           azd env set Parameters__KeycloakPassword "${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set KeycloakDbPassword "${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set Parameters__KeycloakDbPassword "${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set InviteSmtpPassword "${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set Parameters__InviteSmtpPassword "${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
 
           vals="$(azd env get-values --environment "${{ env.AZURE_ENV_NAME }}")"
           echo "$vals" | grep -Eq '^KeycloakPassword=.+' || (echo "KeycloakPassword missing/blank in azd env before deploy" && exit 1)
           echo "$vals" | grep -Eq '^KeycloakDbPassword=.+' || (echo "KeycloakDbPassword missing/blank in azd env before deploy" && exit 1)
+          echo "$vals" | grep -Eq '^InviteSmtpPassword=.+' || (echo "InviteSmtpPassword missing/blank in azd env before deploy" && exit 1)
 
           # Use placeholders in AppHost for azd manifest generation; real values are
           # rebound to Key Vault references in the post-sync step.
