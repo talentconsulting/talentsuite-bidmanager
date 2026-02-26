@@ -10,6 +10,37 @@ require_env() {
   fi
 }
 
+ensure_role_assignment() {
+  local assignee_object_id="$1"
+  local principal_type="$2"
+  local scope="$3"
+  local role_name="$4"
+
+  local assignment_id
+  assignment_id="$(az role assignment list \
+    --assignee-object-id "$assignee_object_id" \
+    --assignee-principal-type "$principal_type" \
+    --scope "$scope" \
+    --role "$role_name" \
+    --query '[0].id' -o tsv)"
+
+  if [ -n "$assignment_id" ]; then
+    return 0
+  fi
+
+  if ! az role assignment create \
+    --assignee-object-id "$assignee_object_id" \
+    --assignee-principal-type "$principal_type" \
+    --scope "$scope" \
+    --role "$role_name" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  # Azure RBAC propagation is eventually consistent.
+  sleep 10
+  return 0
+}
+
 require_env "AZURE_ENV_NAME"
 require_env "AZURE_LOCATION"
 
@@ -38,8 +69,46 @@ fi
 key_vault_id="$(az keyvault show --name "$key_vault_name" --resource-group "$resource_group" --query id -o tsv)"
 key_vault_uri="$(az keyvault show --name "$key_vault_name" --resource-group "$resource_group" --query properties.vaultUri -o tsv)"
 
-az keyvault secret set --vault-name "$key_vault_name" --name "keycloak-admin-password" --value "$keycloak_password" >/dev/null
-az keyvault secret set --vault-name "$key_vault_name" --name "keycloak-db-password" --value "$keycloak_db_password" >/dev/null
+# Ensure the current deployment principal has data-plane permission to write Key Vault secrets.
+deployer_principal_id="${AZD_PRINCIPAL_ID:-}"
+if [ -z "$deployer_principal_id" ]; then
+  arm_token="$(az account get-access-token --resource-type arm --query accessToken -o tsv)"
+  payload="$(printf '%s' "$arm_token" | cut -d'.' -f2 | tr '_-' '/+')"
+  padding=$(( (4 - ${#payload} % 4) % 4 ))
+  payload="${payload}$(printf '=%.0s' $(seq 1 "$padding"))"
+  deployer_principal_id="$(printf '%s' "$payload" | base64 --decode --ignore-garbage 2>/dev/null | jq -r '.oid // empty')"
+fi
+test -n "$deployer_principal_id" || (echo "Could not resolve deployer principal id for Key Vault role assignment" && exit 1)
+
+if ! ensure_role_assignment "$deployer_principal_id" "ServicePrincipal" "$key_vault_id" "Key Vault Secrets Officer"; then
+  echo "Unable to assign 'Key Vault Secrets Officer' on $key_vault_name to deployer principal $deployer_principal_id."
+  echo "Grant this once using an Owner/User Access Administrator identity, then re-run:"
+  echo "az role assignment create --assignee-object-id $deployer_principal_id --assignee-principal-type ServicePrincipal --scope $key_vault_id --role \"Key Vault Secrets Officer\""
+  exit 1
+fi
+
+set_secret_with_retry() {
+  local name="$1"
+  local value="$2"
+  local attempts=10
+  local delay=10
+  local i
+
+  for i in $(seq 1 "$attempts"); do
+    if az keyvault secret set --vault-name "$key_vault_name" --name "$name" --value "$value" >/dev/null 2>&1; then
+      return 0
+    fi
+    if [ "$i" -lt "$attempts" ]; then
+      sleep "$delay"
+    fi
+  done
+
+  echo "Failed to set Key Vault secret '$name' after RBAC propagation retries."
+  az keyvault secret set --vault-name "$key_vault_name" --name "$name" --value "$value"
+}
+
+set_secret_with_retry "keycloak-admin-password" "$keycloak_password"
+set_secret_with_retry "keycloak-db-password" "$keycloak_db_password"
 
 mapfile -t app_names < <(az containerapp list --resource-group "$resource_group" --query '[].name' -o tsv)
 
@@ -63,19 +132,11 @@ for app_name in "${app_names[@]}"; do
   principal_id="$(az containerapp show --name "$app_name" --resource-group "$resource_group" --query identity.principalId -o tsv)"
   test -n "$principal_id" || (echo "Failed to resolve managed identity principalId for $app_name" && exit 1)
 
-  role_assignment_id="$(az role assignment list \
-    --assignee-object-id "$principal_id" \
-    --assignee-principal-type ServicePrincipal \
-    --scope "$key_vault_id" \
-    --role "Key Vault Secrets User" \
-    --query '[0].id' -o tsv)"
-
-  if [ -z "$role_assignment_id" ]; then
-    az role assignment create \
-      --assignee-object-id "$principal_id" \
-      --assignee-principal-type ServicePrincipal \
-      --scope "$key_vault_id" \
-      --role "Key Vault Secrets User" >/dev/null
+  if ! ensure_role_assignment "$principal_id" "ServicePrincipal" "$key_vault_id" "Key Vault Secrets User"; then
+    echo "Unable to assign 'Key Vault Secrets User' on $key_vault_name to container app $app_name principal $principal_id."
+    echo "Grant this once using an Owner/User Access Administrator identity, then re-run:"
+    echo "az role assignment create --assignee-object-id $principal_id --assignee-principal-type ServicePrincipal --scope $key_vault_id --role \"Key Vault Secrets User\""
+    exit 1
   fi
 
   secret_updates=()
