@@ -23,6 +23,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ops", "ops", "{546A8A4D-408
 		azure.yaml = azure.yaml
 		scripts\ci\seed-azd-env.sh = scripts\ci\seed-azd-env.sh
 		scripts\ci\deploy-frontend-static.sh = scripts\ci\deploy-frontend-static.sh
+		scripts\ci\sync-containerapp-secrets-keyvault.sh = scripts\ci\sync-containerapp-secrets-keyvault.sh
+		scripts\ci\load-azd-env.sh = scripts\ci\load-azd-env.sh
 	EndProjectSection
 EndProject
 Global

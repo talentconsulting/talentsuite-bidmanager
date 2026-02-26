@@ -16,13 +16,13 @@ var useLocalInfrastructure = !forceAzureInfrastructure
 var keycloakPassword = builder.AddParameter(
                                 "KeycloakPassword",
                                 value: "admin",
-                                secret: true,
-                                publishValueAsDefault: false);
+                                secret: false,
+                                publishValueAsDefault: true);
 var sqlPassword = builder.AddParameter(
                                 "SqlPassword",
                                 value: "Your_strong_password123!",
-                                secret: true,
-                                publishValueAsDefault: false);
+                                secret: false,
+                                publishValueAsDefault: true);
 var keycloakDbUsername = builder.AddParameter(
                                 "KeycloakDbUsername",
                                 value: "",
@@ -30,8 +30,8 @@ var keycloakDbUsername = builder.AddParameter(
 var keycloakDbPassword = builder.AddParameter(
                                 "KeycloakDbPassword",
                                 value: "unused",
-                                secret: true,
-                                publishValueAsDefault: false);
+                                secret: false,
+                                publishValueAsDefault: true);
 var authenticationEnabled = builder.AddParameter(
                                 "AuthenticationEnabled",
                                 value: "true",
@@ -67,8 +67,8 @@ var inviteSmtpUsername = builder.AddParameter(
 var inviteSmtpPassword = builder.AddParameter(
                                 "InviteSmtpPassword",
                                 value: "unused",
-                                secret: true,
-                                publishValueAsDefault: false);
+                                secret: false,
+                                publishValueAsDefault: true);
 
 var keycloak = builder.AddKeycloak(
             "keycloak",

@@ -128,6 +128,12 @@ jobs:
               --name "$sql_server_name"
           fi
 
+      - name: Pre-sync Container App secrets from GitHub secrets to Key Vault refs
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
+          scripts/ci/sync-containerapp-secrets-keyvault.sh
+
       - name: Deploy
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
@@ -153,6 +159,13 @@ jobs:
           # Deploy the app services explicitly and leave keycloak unchanged.
           azd deploy talentserver --environment "${{ env.AZURE_ENV_NAME }}"
           azd deploy talentfunctions --environment "${{ env.AZURE_ENV_NAME }}"
+
+      - name: Post-sync Container App secrets from GitHub secrets to Key Vault refs
+        if: always()
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
+          scripts/ci/sync-containerapp-secrets-keyvault.sh
 
       - name: Deploy frontend as static website
         working-directory: ${{ env.AZD_WORKING_DIR }}
