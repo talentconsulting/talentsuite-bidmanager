@@ -5,56 +5,20 @@ using TalentSuite.FrontEnd;
 using TalentSuite.FrontEnd.Pages;
 using TalentSuite.FrontEnd.Pages.Bids;
 using TalentSuite.FrontEnd.Pages.Bids.Management;
+using TalentSuite.FrontEnd.Configuration;
 using TalentSuite.FrontEnd.Security;
 using TalentSuite.FrontEnd.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 var strictConfiguration = IsStrictConfiguration(builder.Configuration, builder.HostEnvironment);
-var authenticationEnabled = IsAuthenticationEnabled(builder.Configuration, strictConfiguration);
-var apiBaseAddress = builder.Configuration["TALENTSERVER_HTTPS"]
-    ?? builder.Configuration["TALENTSERVER_HTTP"];
-var keycloakAuthority = builder.Configuration["KEYCLOAK_AUTHORITY"]
-    ?? BuildKeycloakAuthorityFromEndpointVariables(builder.Configuration);
-var keycloakClientId = builder.Configuration["KEYCLOAK_CLIENT_ID"];
-
-if (string.IsNullOrWhiteSpace(apiBaseAddress))
-{
-    if (!strictConfiguration)
-    {
-        apiBaseAddress = "https://localhost:5001";
-    }
-    else
-    {
-        throw new InvalidOperationException(
-            "Missing TALENTSERVER_HTTPS/TALENTSERVER_HTTP configuration for frontend API base address.");
-    }
-}
-
-if (authenticationEnabled && string.IsNullOrWhiteSpace(keycloakAuthority))
-{
-    if (!strictConfiguration)
-    {
-        keycloakAuthority = "http://localhost:8080/realms/TalentConsulting";
-    }
-    else
-    {
-        throw new InvalidOperationException(
-            "Missing KEYCLOAK_AUTHORITY (or KEYCLOAK_HTTPS/KEYCLOAK_HTTP) configuration for OIDC authority.");
-    }
-}
-
-if (authenticationEnabled && string.IsNullOrWhiteSpace(keycloakClientId))
-{
-    if (!strictConfiguration)
-    {
-        keycloakClientId = "talentsuite-frontend";
-    }
-    else
-    {
-        throw new InvalidOperationException(
-            "Missing KEYCLOAK_CLIENT_ID configuration for OIDC client id.");
-    }
-}
+var authenticationEnabled = FrontendConfiguration.IsAuthenticationEnabled(builder.Configuration, strictConfiguration);
+var apiBaseAddress = FrontendConfiguration.ResolveApiBaseAddress(builder.Configuration, strictConfiguration);
+var keycloakAuthority = authenticationEnabled
+    ? FrontendConfiguration.ResolveKeycloakAuthority(builder.Configuration, strictConfiguration)
+    : null;
+var keycloakClientId = authenticationEnabled
+    ? FrontendConfiguration.ResolveKeycloakClientId(builder.Configuration, strictConfiguration)
+    : null;
 
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
@@ -108,40 +72,10 @@ builder.Services.AddScoped(sp =>
 
 await builder.Build().RunAsync();
 
-static bool IsAuthenticationEnabled(IConfiguration configuration, bool strictConfiguration)
-{
-    var raw = configuration["AUTHENTICATION_ENABLED"];
-    if (string.IsNullOrWhiteSpace(raw))
-    {
-        if (strictConfiguration)
-        {
-            throw new InvalidOperationException(
-                "Missing AUTHENTICATION_ENABLED configuration.");
-        }
-
-        raw = "true";
-    }
-
-    return !string.Equals(raw, "false", StringComparison.OrdinalIgnoreCase);
-}
-
 static bool IsStrictConfiguration(IConfiguration configuration, IWebAssemblyHostEnvironment hostEnvironment)
 {
-    var strictFromConfig = configuration["STRICT_CONFIGURATION"];
-    if (bool.TryParse(strictFromConfig, out var parsed))
-        return parsed;
-
-    return !hostEnvironment.IsDevelopment();
-}
-
-static string? BuildKeycloakAuthorityFromEndpointVariables(IConfiguration configuration)
-{
-    var keycloakBaseAddress = configuration["KEYCLOAK_HTTPS"]
-                              ?? configuration["KEYCLOAK_HTTP"];
-    if (string.IsNullOrWhiteSpace(keycloakBaseAddress))
-        return null;
-
-    return $"{keycloakBaseAddress.TrimEnd('/')}/realms/TalentConsulting";
+    var strictFromConfig = FrontendConfiguration.IsStrictConfiguration(configuration);
+    return strictFromConfig || !hostEnvironment.IsDevelopment();
 }
 
 static void EnsureScope(ICollection<string> scopes, string scope)

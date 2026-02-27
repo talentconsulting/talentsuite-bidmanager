@@ -25,6 +25,7 @@
     <ItemGroup>
         <ProjectReference Include="..\TalentSuite.Server\TalentSuite.Server.csproj" />
         <ProjectReference Include="..\TalentSuite.Functions\TalentSuite.Functions.csproj" />
+        <ProjectReference Include="..\TalentSuite.FrontEnd\TalentSuite.FrontEnd.csproj" />
         <ProjectReference Include="..\TalentSuite.Shared\TalentSuite.Shared.csproj" />
     </ItemGroup>
 

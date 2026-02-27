@@ -4,11 +4,17 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write
   contents: read
 
 jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
   deploy:
+    needs: tests
+    permissions:
+      id-token: write
+      contents: read
     runs-on: ubuntu-latest
     environment: dev
     env:
