@@ -15,8 +15,22 @@ public sealed class ApiAuthorizationMessageHandler : AuthorizationMessageHandler
             ?? configuration["TALENTSERVER_HTTP"];
 
         if (string.IsNullOrWhiteSpace(apiBaseAddress))
-            throw new InvalidOperationException(
-                "Missing TALENTSERVER_HTTPS/TALENTSERVER_HTTP configuration for authorized API URL.");
+        {
+            var strictFromConfig = configuration["STRICT_CONFIGURATION"];
+            var strictConfiguration = bool.TryParse(strictFromConfig, out var parsed)
+                ? parsed
+                : false;
+
+            if (!strictConfiguration)
+            {
+                apiBaseAddress = "https://localhost:5001";
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "Missing TALENTSERVER_HTTPS/TALENTSERVER_HTTP configuration for authorized API URL.");
+            }
+        }
 
         ConfigureHandler(
             authorizedUrls: [apiBaseAddress]
