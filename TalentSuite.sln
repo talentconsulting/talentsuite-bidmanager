@@ -27,6 +27,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ops", "ops", "{546A8A4D-408
 		scripts\ci\load-azd-env.sh = scripts\ci\load-azd-env.sh
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.Server.Tests", "src\TalentSuite.Server.Tests\TalentSuite.Server.Tests.csproj", "{4E49D6B9-7833-4E61-B4F2-DFBA519CF702}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -61,6 +63,10 @@ Global
 		{285ACC83-DA24-4768-A298-A9B1E5D4654E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{285ACC83-DA24-4768-A298-A9B1E5D4654E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{285ACC83-DA24-4768-A298-A9B1E5D4654E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4E49D6B9-7833-4E61-B4F2-DFBA519CF702}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4E49D6B9-7833-4E61-B4F2-DFBA519CF702}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4E49D6B9-7833-4E61-B4F2-DFBA519CF702}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4E49D6B9-7833-4E61-B4F2-DFBA519CF702}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
