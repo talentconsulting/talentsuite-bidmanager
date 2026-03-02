@@ -124,7 +124,14 @@ public class UserService : IUserService
         if (string.IsNullOrWhiteSpace(invitationToken)
             || string.IsNullOrWhiteSpace(username)
             || string.IsNullOrWhiteSpace(password))
+        {
+            _logger.LogWarning(
+                "RegisterInvitedUser rejected due to missing input. tokenPresent={TokenPresent}, usernamePresent={UsernamePresent}, passwordPresent={PasswordPresent}",
+                !string.IsNullOrWhiteSpace(invitationToken),
+                !string.IsNullOrWhiteSpace(username),
+                !string.IsNullOrWhiteSpace(password));
             return null;
+        }
 
         var users = await _userRepository.GetUsers(ct);
         var pending = users.FirstOrDefault(u =>
@@ -133,7 +140,33 @@ public class UserService : IUserService
             u.InvitationExpiresAtUtc.Value >= DateTimeOffset.UtcNow);
 
         if (pending is null)
+        {
+            var sameTokenAnyState = users.FirstOrDefault(u =>
+                string.Equals(u.InvitationToken, invitationToken, StringComparison.Ordinal));
+
+            if (sameTokenAnyState is null)
+            {
+                _logger.LogWarning(
+                    "RegisterInvitedUser failed: no user found for token prefix {TokenPrefix}.",
+                    SafeTokenPrefix(invitationToken));
+            }
+            else if (!sameTokenAnyState.InvitationExpiresAtUtc.HasValue)
+            {
+                _logger.LogWarning(
+                    "RegisterInvitedUser failed: token prefix {TokenPrefix} matched user {UserId} but expiry is missing.",
+                    SafeTokenPrefix(invitationToken),
+                    sameTokenAnyState.Id);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "RegisterInvitedUser failed: token prefix {TokenPrefix} matched user {UserId} but expired at {ExpiresAtUtc}.",
+                    SafeTokenPrefix(invitationToken),
+                    sameTokenAnyState.Id,
+                    sameTokenAnyState.InvitationExpiresAtUtc);
+            }
             return null;
+        }
 
         var keycloakSubject = await _keycloakAdminService.CreateUserAsync(
             username.Trim(),
@@ -143,7 +176,13 @@ public class UserService : IUserService
             "user",
             ct);
         if (string.IsNullOrWhiteSpace(keycloakSubject))
+        {
+            _logger.LogWarning(
+                "RegisterInvitedUser failed: Keycloak user creation returned empty subject for pending user {UserId} (token prefix {TokenPrefix}).",
+                pending.Id,
+                SafeTokenPrefix(invitationToken));
             return null;
+        }
 
         var linked = await _userRepository.AcceptInvite(
             invitationToken,
@@ -152,6 +191,14 @@ public class UserService : IUserService
             username.Trim(),
             pending.Email ?? string.Empty,
             ct);
+
+        if (linked is null)
+        {
+            _logger.LogWarning(
+                "RegisterInvitedUser failed: repository link step returned null for user {UserId} (token prefix {TokenPrefix}).",
+                pending.Id,
+                SafeTokenPrefix(invitationToken));
+        }
 
         return linked is null ? null : _mapper.ToModel(linked);
     }
@@ -172,5 +219,14 @@ public class UserService : IUserService
             email,
             ct);
         return user is null ? null : _mapper.ToModel(user);
+    }
+
+    private static string SafeTokenPrefix(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return "(empty)";
+
+        var trimmed = token.Trim();
+        return trimmed.Length <= 8 ? trimmed : trimmed[..8];
     }
 }

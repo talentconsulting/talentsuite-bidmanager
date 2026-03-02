@@ -15,11 +15,16 @@ public class UserInvitesController : ControllerBase
 {
     private readonly UserMapper _mapper;
     private readonly IUserService _userService;
+    private readonly ILogger<UserInvitesController> _logger;
 
-    public UserInvitesController(UserMapper mapper, IUserService userService)
+    public UserInvitesController(
+        UserMapper mapper,
+        IUserService userService,
+        ILogger<UserInvitesController> logger)
     {
         _mapper = mapper;
         _userService = userService;
+        _logger = logger;
     }
 
     [HttpGet("me")]
@@ -164,7 +169,13 @@ public class UserInvitesController : ControllerBase
             request.Password,
             ct);
         if (user is null)
+        {
+            _logger.LogWarning(
+                "Invite registration failed for token prefix {TokenPrefix} and username {Username}.",
+                SafeTokenPrefix(request.InvitationToken),
+                request.Username);
             return BadRequest("Invite registration failed.");
+        }
 
         return Ok(_mapper.ToResponse(user));
     }
@@ -185,5 +196,14 @@ public class UserInvitesController : ControllerBase
             (!string.IsNullOrWhiteSpace(username) && string.Equals(u.Id, username, StringComparison.OrdinalIgnoreCase)));
 
         return match;
+    }
+
+    private static string SafeTokenPrefix(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return "(empty)";
+
+        var trimmed = token.Trim();
+        return trimmed.Length <= 8 ? trimmed : trimmed[..8];
     }
 }
