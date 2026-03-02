@@ -47,6 +47,48 @@ public partial class BidManage : ComponentBase
     protected bool IsAdminUser { get; set; }
     protected bool CanManageBidUsers => IsAdminUser;
     protected bool CanManageQuestionUsers => IsAdminUser;
+    protected bool IsApiCallInProgress => IsLoading || IsBusy || IsUsersBusy || IsDraftBusy || IsFilesBusy;
+    protected string BusyOverlayMessage
+        => IsLoading ? "Loading bid..."
+            : IsUsersBusy ? "Updating users..."
+            : IsFilesBusy ? "Working with files..."
+            : IsDraftBusy ? "Updating draft..."
+            : "Working...";
+
+    private async Task SetLoadingAsync()
+    {
+        IsLoading = true;
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+    }
+
+    private async Task SetBusyAsync()
+    {
+        IsBusy = true;
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+    }
+
+    private async Task SetUsersBusyAsync()
+    {
+        IsUsersBusy = true;
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+    }
+
+    private async Task SetDraftBusyAsync()
+    {
+        IsDraftBusy = true;
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+    }
+
+    private async Task SetFilesBusyAsync()
+    {
+        IsFilesBusy = true;
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+    }
 
     protected List<UserOption> AvailableUsers { get; } = new();
     protected List<UserOption> AssignedUsers { get; } = new();
@@ -76,7 +118,7 @@ public partial class BidManage : ComponentBase
 
     protected async Task LoadBidAsync()
     {
-        IsLoading = true;
+        await SetLoadingAsync();
         ErrorText = null;
 
         try
@@ -144,7 +186,7 @@ public partial class BidManage : ComponentBase
     protected async Task LoadAssignedUserIdsAsync()
     {
         UsersErrorText = null;
-        IsUsersBusy = true;
+        await SetUsersBusyAsync();
 
         try
         {
@@ -187,7 +229,7 @@ public partial class BidManage : ComponentBase
             return;
 
         UsersErrorText = null;
-        IsUsersBusy = true;
+        await SetUsersBusyAsync();
 
         try
         {
@@ -245,7 +287,7 @@ public partial class BidManage : ComponentBase
             return;
 
         UsersErrorText = null;
-        IsUsersBusy = true;
+        await SetUsersBusyAsync();
 
         var bidAssignedIds = new HashSet<string>(
             AssignedUsers.Select(user => user.Id),
@@ -328,7 +370,7 @@ public partial class BidManage : ComponentBase
             return;
 
         FilesErrorText = null;
-        IsFilesBusy = true;
+        await SetFilesBusyAsync();
 
         try
         {
@@ -355,7 +397,7 @@ public partial class BidManage : ComponentBase
             return;
 
         FilesErrorText = null;
-        IsFilesBusy = true;
+        await SetFilesBusyAsync();
 
         try
         {
@@ -380,7 +422,7 @@ public partial class BidManage : ComponentBase
             return;
 
         FilesErrorText = null;
-        IsFilesBusy = true;
+        await SetFilesBusyAsync();
 
         try
         {
@@ -409,7 +451,7 @@ public partial class BidManage : ComponentBase
             return;
 
         FilesErrorText = null;
-        IsFilesBusy = true;
+        await SetFilesBusyAsync();
 
         try
         {
@@ -500,7 +542,7 @@ public partial class BidManage : ComponentBase
         if (Bid.Status == status)
             return;
 
-        IsBusy = true;
+        await SetBusyAsync();
         try
         {
             await ApiClient.UpdateBidStatusAsync(BidId, status);
@@ -526,7 +568,7 @@ public partial class BidManage : ComponentBase
         if (Bid.BidLibraryPush is not null)
             return;
 
-        IsBusy = true;
+        await SetBusyAsync();
         try
         {
             var result = await ApiClient.PushBidToLibraryAsync(BidId);
@@ -707,7 +749,7 @@ public partial class BidManage : ComponentBase
     {
         if (Bid is null) return;
 
-        IsBusy = true;
+        await SetBusyAsync();
         try
         {
             // TODO: call API to save overview
@@ -724,7 +766,7 @@ public partial class BidManage : ComponentBase
         if (Bid is null) return;
         if (ActiveQuestion is null) return;
 
-        IsBusy = true;
+        await SetBusyAsync();
         try
         {
             // TODO: call API to save question edits
@@ -741,7 +783,7 @@ public partial class BidManage : ComponentBase
         if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(q.Id))
             return;
 
-        IsBusy = true;
+        await SetBusyAsync();
         QuestionErrorText = null;
 
         try
@@ -789,7 +831,7 @@ public partial class BidManage : ComponentBase
         if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(ActiveQuestion.Id))
             return;
 
-        IsBusy = true;
+        await SetBusyAsync();
         try
         {
             EnsureRedReviewReviewerStateEntries(ActiveQuestion);
@@ -850,7 +892,7 @@ public partial class BidManage : ComponentBase
         if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(ActiveQuestion.Id))
             return false;
 
-        IsBusy = true;
+        await SetBusyAsync();
         try
         {
             await ApiClient.SaveFinalAnswerAsync(
@@ -887,6 +929,7 @@ public partial class BidManage : ComponentBase
         if (ActiveQuestion.IsRedReviewLoaded && !force)
             return;
 
+        await SetBusyAsync();
         try
         {
             var url = $"api/bids/{Uri.EscapeDataString(BidId)}/questions/{Uri.EscapeDataString(ActiveQuestion.Id)}/red-review";
@@ -932,6 +975,10 @@ public partial class BidManage : ComponentBase
             QuestionErrorText = ex.ToString();
             _ = BannerState.ShowAsync("Could not load red review.");
         }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     protected async Task ShowDraftTabAsync()
@@ -950,7 +997,7 @@ public partial class BidManage : ComponentBase
         if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(ActiveQuestion.Id))
             return;
 
-        IsDraftBusy = true;
+        await SetDraftBusyAsync();
         DraftErrorText = null;
 
         try
@@ -999,7 +1046,7 @@ public partial class BidManage : ComponentBase
             return;
         }
 
-        IsDraftBusy = true;
+        await SetDraftBusyAsync();
         DraftErrorText = null;
 
         try
@@ -1048,7 +1095,7 @@ public partial class BidManage : ComponentBase
             return;
         }
 
-        IsDraftBusy = true;
+        await SetDraftBusyAsync();
         DraftErrorText = null;
 
         try
@@ -1094,7 +1141,7 @@ public partial class BidManage : ComponentBase
             return;
         }
 
-        IsDraftBusy = true;
+        await SetDraftBusyAsync();
         DraftErrorText = null;
 
         try
@@ -1134,7 +1181,7 @@ public partial class BidManage : ComponentBase
             return;
         }
 
-        IsDraftBusy = true;
+        await SetDraftBusyAsync();
         DraftErrorText = null;
 
         try
@@ -1195,7 +1242,7 @@ public partial class BidManage : ComponentBase
         }
 
         UsersErrorText = null;
-        IsUsersBusy = true;
+        await SetUsersBusyAsync();
         try
         {
             var url = $"api/bids/{Uri.EscapeDataString(BidId)}/users";
@@ -1240,7 +1287,7 @@ public partial class BidManage : ComponentBase
         }
 
         UsersErrorText = null;
-        IsUsersBusy = true;
+        await SetUsersBusyAsync();
         try
         {
             var url = $"api/bids/{Uri.EscapeDataString(BidId)}/users";
@@ -1323,6 +1370,7 @@ public partial class BidManage : ComponentBase
             return;
         }
 
+        await SetUsersBusyAsync();
         try
         {
             var url = $"api/bids/{Uri.EscapeDataString(BidId)}/questions/{Uri.EscapeDataString(ActiveQuestion.Id)}/users";
@@ -1351,6 +1399,10 @@ public partial class BidManage : ComponentBase
             UsersErrorText = ex.ToString();
             _ = BannerState.ShowAsync("Could not assign user to question.");
         }
+        finally
+        {
+            IsUsersBusy = false;
+        }
     }
 
     protected async Task RemoveQuestionUserAsync(string userId)
@@ -1373,6 +1425,7 @@ public partial class BidManage : ComponentBase
             return;
         }
 
+        await SetUsersBusyAsync();
         try
         {
             var url = $"api/bids/{Uri.EscapeDataString(BidId)}/questions/{Uri.EscapeDataString(ActiveQuestion.Id)}/users";
@@ -1393,6 +1446,10 @@ public partial class BidManage : ComponentBase
         {
             UsersErrorText = ex.ToString();
             _ = BannerState.ShowAsync("Could not remove user from question.");
+        }
+        finally
+        {
+            IsUsersBusy = false;
         }
     }
 
@@ -1419,6 +1476,7 @@ public partial class BidManage : ComponentBase
             return;
         }
 
+        await SetUsersBusyAsync();
         try
         {
             var url = $"api/bids/{Uri.EscapeDataString(BidId)}/questions/{Uri.EscapeDataString(ActiveQuestion.Id)}/users";
@@ -1441,6 +1499,10 @@ public partial class BidManage : ComponentBase
         {
             UsersErrorText = ex.ToString();
             _ = BannerState.ShowAsync("Could not update user role for question.");
+        }
+        finally
+        {
+            IsUsersBusy = false;
         }
     }
 
@@ -1507,7 +1569,7 @@ public partial class BidManage : ComponentBase
             return;
         }
 
-        IsDraftBusy = true;
+        await SetDraftBusyAsync();
         DraftErrorText = null;
 
         try
@@ -1569,7 +1631,7 @@ public partial class BidManage : ComponentBase
             || string.IsNullOrWhiteSpace(commentId))
             return;
 
-        IsDraftBusy = true;
+        await SetDraftBusyAsync();
         DraftErrorText = null;
 
         try
@@ -1630,7 +1692,7 @@ public partial class BidManage : ComponentBase
             return;
         }
 
-        IsBusy = true;
+        await SetBusyAsync();
         try
         {
             var url = $"api/bids/{Uri.EscapeDataString(BidId)}/questions/{Uri.EscapeDataString(ActiveQuestion.Id)}/red-review/comments";
@@ -1680,7 +1742,7 @@ public partial class BidManage : ComponentBase
             || string.IsNullOrWhiteSpace(commentId))
             return;
 
-        IsBusy = true;
+        await SetBusyAsync();
         try
         {
             var updated = await ApiClient.SetRedReviewCommentCompletionAsync(
@@ -1722,7 +1784,7 @@ public partial class BidManage : ComponentBase
             return;
         }
 
-        IsBusy = true;
+        await SetBusyAsync();
         try
         {
             var url = $"api/bids/{Uri.EscapeDataString(BidId)}/questions/{Uri.EscapeDataString(ActiveQuestion.Id)}/final-answer/comments";
@@ -1772,7 +1834,7 @@ public partial class BidManage : ComponentBase
             || string.IsNullOrWhiteSpace(commentId))
             return;
 
-        IsBusy = true;
+        await SetBusyAsync();
         try
         {
             var updated = await ApiClient.SetFinalAnswerCommentCompletionAsync(

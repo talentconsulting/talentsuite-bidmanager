@@ -8,7 +8,7 @@ namespace TalentSuite.SliceTests.Infrastructure;
 
 public sealed class HeaderTestAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
-    public const string Scheme = "TestHeaderAuth";
+    public new const string Scheme = "TestHeaderAuth";
     public const string SubjectHeader = "X-Test-Subject";
     public const string UsernameHeader = "X-Test-Username";
     public const string RolesHeader = "X-Test-Roles";

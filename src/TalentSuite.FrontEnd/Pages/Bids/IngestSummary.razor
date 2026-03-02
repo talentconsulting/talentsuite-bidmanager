@@ -236,6 +236,8 @@ else
     </EditForm>
 }
 
+<BusyOverlay IsVisible="@IsBusy" Message="Saving bid..." />
+
 @code {
     private string? ActiveCategory { get; set; }
     private bool ShowQuestions { get; set; }
