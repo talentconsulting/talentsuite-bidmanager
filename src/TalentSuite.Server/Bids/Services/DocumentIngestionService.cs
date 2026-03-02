@@ -75,7 +75,16 @@ public sealed class DocumentIngestionService : IDocumentIngestionservice
         var json = await ExtractQuestionsJsonWithAzureOpenAiAsync(extractedText, fileName, stage, ct);
 
         // 3) Parse into strongly typed list
-        return JsonSerializer.Deserialize<ParsedDocumentModel>(json, SerialiserOptions.JsonOptions);
+        var parsed = JsonSerializer.Deserialize<ParsedDocumentModel>(json, SerialiserOptions.JsonOptions);
+        if (parsed?.Questions is { Count: > 0 })
+        {
+            for (var i = 0; i < parsed.Questions.Count; i++)
+            {
+                parsed.Questions[i].QuestionOrderIndex = i + 1;
+            }
+        }
+
+        return parsed;
     }
 
     private async Task<string> ExtractTextWithDocumentIntelligenceAsync(Stream document, CancellationToken ct)

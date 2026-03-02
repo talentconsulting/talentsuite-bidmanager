@@ -2,6 +2,8 @@ namespace TalentSuite.Server.Bids.Services.Models;
 
 public class ParsedQuestionModel
 {
+    public int QuestionOrderIndex { get; set; }
+
     public string Category { get; set; }
     public string Number { get; set; }
     public string Title { get; set; } = "";

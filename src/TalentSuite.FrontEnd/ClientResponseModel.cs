@@ -19,8 +19,7 @@ public class ClientResponseModel
     public void Sort()
     {
         Response.Questions = Response.Questions
-            .OrderBy(q => q.Category)
-            .ThenBy(q => Int16.Parse(q.Number))
+            .OrderBy(q => q.QuestionOrderIndex <= 0 ? int.MaxValue : q.QuestionOrderIndex)
             .ToList();
     }
 }

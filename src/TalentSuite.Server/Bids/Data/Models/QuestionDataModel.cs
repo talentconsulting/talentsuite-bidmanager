@@ -12,6 +12,7 @@ public class QuestionDataModel
     }
 
     public string Id { get; set; }
+    public int QuestionOrderIndex { get; set; }
     public string Category { get; set; }
     public string Number { get; set; }
     public string Title { get; set; } = "";

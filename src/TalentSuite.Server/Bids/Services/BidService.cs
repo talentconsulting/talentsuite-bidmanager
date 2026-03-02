@@ -376,6 +376,7 @@ public sealed class BidService : IBidService
             questionId,
             dataModel.Id,
             dataModel.Comment,
+            dataModel.SelectedText ?? string.Empty,
             "drafts",
             mentionedUserIds,
             ct);
@@ -532,6 +533,7 @@ public sealed class BidService : IBidService
             questionId,
             result.Id,
             result.Comment,
+            result.SelectedText ?? string.Empty,
             "review",
             request.MentionedUserIds,
             ct);
@@ -585,6 +587,7 @@ public sealed class BidService : IBidService
             questionId,
             result.Id,
             result.Comment,
+            result.SelectedText ?? string.Empty,
             "final-answer",
             request.MentionedUserIds,
             ct);
@@ -703,6 +706,7 @@ public sealed class BidService : IBidService
         string questionId,
         string commentId,
         string comment,
+        string selectedText,
         string tab,
         List<string>? mentionedUserIds,
         CancellationToken ct)
@@ -744,6 +748,7 @@ public sealed class BidService : IBidService
             CommentId = commentId,
             Tab = tab,
             Comment = comment ?? string.Empty,
+            SelectedText = selectedText ?? string.Empty,
             QuestionLink = questionLink,
             MentionedUsers = mentionedUsers
         };

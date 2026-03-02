@@ -3,6 +3,7 @@ namespace TalentSuite.Server.Bids.Services.Models;
 public class CreateQuestionModel
 {
     public string? Id { get; set; }
+    public int QuestionOrderIndex { get; set; }
     public string Number { get; set; }
     public string Title { get; set; } = "";
     public string Category { get; set; } = "";

@@ -7,7 +7,7 @@ using TalentSuite.SliceTests.Infrastructure;
 
 namespace TalentSuite.SliceTests.Bids;
 
-public class Authroisation_for_user_role
+public class Authorisation_for_user_role
 {
     [Test]
     public async Task AssignedUserRole_User_CanAccessBidAndDraftWork_ButCannotCreateBidOrManageUsers()

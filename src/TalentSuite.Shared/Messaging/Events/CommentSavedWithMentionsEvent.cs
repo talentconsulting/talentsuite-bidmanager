@@ -7,6 +7,7 @@ public sealed class CommentSavedWithMentionsEvent
     public string CommentId { get; set; } = string.Empty;
     public string Tab { get; set; } = string.Empty;
     public string Comment { get; set; } = string.Empty;
+    public string SelectedText { get; set; } = string.Empty;
     public string QuestionLink { get; set; } = string.Empty;
     public List<CommentMentionedUser> MentionedUsers { get; set; } = new();
 }

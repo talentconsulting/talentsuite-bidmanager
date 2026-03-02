@@ -81,6 +81,7 @@ public partial class BidMapper
     {
         return new QuestionDataModel(Guid.NewGuid().ToString())
         {
+            QuestionOrderIndex = source.QuestionOrderIndex,
             Number = source.Number,
             Title = source.Title,
             Category = source.Category,

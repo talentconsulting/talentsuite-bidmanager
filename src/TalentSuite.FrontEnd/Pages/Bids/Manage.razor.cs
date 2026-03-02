@@ -669,7 +669,8 @@ public partial class BidManage : ComponentBase
 
             var list = Bid.Questions
                 .Where(q => NormaliseCategory(q.Category) == cat)
-                .OrderBy(q => q.Number)
+                .OrderBy(q => q.QuestionOrderIndex <= 0 ? int.MaxValue : q.QuestionOrderIndex)
+                .ThenBy(q => q.Number)
                 .ToList();
 
             // Keep ActiveQuestionId valid

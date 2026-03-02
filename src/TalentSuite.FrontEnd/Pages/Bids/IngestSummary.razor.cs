@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components;
+using Microsoft.JSInterop;
 using TalentSuite.FrontEnd.Mappers;
 using TalentSuite.Shared.Bids;
 
@@ -10,6 +11,7 @@ public partial class IngestSummary : ComponentBase
     [Inject] public NavigationManager Nav { get; set; } = default!;
     [Inject] public HttpClient Http { get; set; } = default!;
     [Inject] public Services.BidState DraftState { get; set; } = default!;
+    [Inject] public IJSRuntime JS { get; set; } = default!;
 
     [Inject] public BidMapper Mapper { get; set; } = default!;
 
@@ -48,6 +50,28 @@ public partial class IngestSummary : ComponentBase
 
         // Optional UX rule: if NiceToHave = true, Required = false
         if (isChecked) Model.Response.Questions[index].Required = false;
+    }
+
+    protected async Task DeleteQuestionAsync(int index)
+    {
+        if (index < 0 || index >= Model.Response.Questions.Count)
+            return;
+
+        var question = Model.Response.Questions[index];
+        var questionLabel = string.IsNullOrWhiteSpace(question.Number)
+            ? question.Title
+            : $"#{question.Number} {question.Title}";
+
+        var confirmed = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Are you sure you want to remove question '{questionLabel}'?");
+
+        if (!confirmed)
+            return;
+
+        Model.Response.Questions.RemoveAt(index);
+        ReindexQuestions();
+        EnsureActiveCategoryAfterRemoval();
     }
 
     private async Task SaveQuestions()
@@ -97,5 +121,29 @@ public partial class IngestSummary : ComponentBase
     private class CreatedId
     {
         public string Result { get; set; }
+    }
+
+    private void ReindexQuestions()
+    {
+        for (var i = 0; i < Model.Response.Questions.Count; i++)
+            Model.Response.Questions[i].QuestionOrderIndex = i + 1;
+    }
+
+    private void EnsureActiveCategoryAfterRemoval()
+    {
+        if (Model.Response.Questions.Count == 0)
+        {
+            ActiveCategory = null;
+            return;
+        }
+
+        var availableCategories = Model.Response.Questions
+            .Select(q => string.IsNullOrWhiteSpace(q.Category) ? "Uncategorised" : q.Category!)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(x => x)
+            .ToList();
+
+        if (string.IsNullOrWhiteSpace(ActiveCategory) || !availableCategories.Contains(ActiveCategory))
+            ActiveCategory = availableCategories[0];
     }
 }

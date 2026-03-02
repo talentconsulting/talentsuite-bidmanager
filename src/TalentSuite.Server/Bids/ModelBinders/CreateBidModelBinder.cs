@@ -39,6 +39,7 @@ public sealed class CreateBidModelBinder : IModelBinder
             
             var q = new CreateQuestionRequest
             {
+                QuestionOrderIndex = ParseInt(form[$"Questions[{i}].QuestionOrderIndex"]),
                 Number = form[$"Questions[{i}].Number"],
                 Category = form[$"Questions[{i}].Category"],
                 Title = form[$"Questions[{i}].Title"],

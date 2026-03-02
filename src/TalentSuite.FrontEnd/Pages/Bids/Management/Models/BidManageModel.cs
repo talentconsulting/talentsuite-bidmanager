@@ -21,7 +21,8 @@ public sealed class BidManageModel
 public sealed class BidQuestionModel
 {
     public string Id { get; set; } = "";
-    public int Number { get; set; }
+    public int QuestionOrderIndex { get; set; }
+    public string Number { get; set; } = "";
     public string? Category { get; set; }
     public string Title { get; set; } = "";
     public string Description { get; set; } = "";
@@ -33,7 +34,6 @@ public sealed class BidQuestionModel
     public List<QuestionAssignmentResponse> QuestionAssignments { get; set; } = new();
     public string ChatResponse { get; set; } = string.Empty;
     public string? ChatThreadId { get; set; }
-    public string? DraftAnswer { get; set; }
     public string? FinalAnswer { get; set; }
     public bool ReadyForSubmission { get; set; }
     public List<DraftCommentResponse> FinalAnswerComments { get; set; } = new();

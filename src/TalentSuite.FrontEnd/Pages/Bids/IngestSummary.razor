@@ -166,6 +166,13 @@ else
 
                                         <div class="card mb-4 border">
                                             <div class="card-body">
+                                                <div class="d-flex justify-content-end mb-2">
+                                                    <button type="button"
+                                                            class="btn btn-outline-danger btn-sm"
+                                                            @onclick="(() => DeleteQuestionAsync(i))">
+                                                        Delete
+                                                    </button>
+                                                </div>
 
                                                 <div class="row mb-3">
                                                     <div class="col-md-2">
@@ -173,11 +180,13 @@ else
                                                     </div>
 
                                                     <div class="col-md-2">
+                                                        <label class="form-label mb-1">Length</label>
                                                         <InputText class="form-control"
                                                                    @bind-Value="q.Length" />
                                                     </div>
 
                                                     <div class="col-md-2">
+                                                        <label class="form-label mb-1">Weighting</label>
                                                         <InputNumber class="form-control"
                                                                      @bind-Value="q.Weighting"
                                                                      min="0"

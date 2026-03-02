@@ -10,8 +10,16 @@ public sealed class InMemoryDocumentIngestionService : IDocumentIngestionservice
     public Task<ParsedDocumentModel?> ExtractDocumentAsync(Stream documentStream, string filename, BidStage stage,
         CancellationToken ct = default)
     {
-        return Task.FromResult(
-            JsonSerializer.Deserialize<ParsedDocumentModel>(_response, SerialiserOptions.JsonOptions));
+        var parsed = JsonSerializer.Deserialize<ParsedDocumentModel>(_response, SerialiserOptions.JsonOptions);
+        if (parsed?.Questions is { Count: > 0 })
+        {
+            for (var i = 0; i < parsed.Questions.Count; i++)
+            {
+                parsed.Questions[i].QuestionOrderIndex = i + 1;
+            }
+        }
+
+        return Task.FromResult(parsed);
     }
 
     string _response =

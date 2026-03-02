@@ -2,6 +2,8 @@ namespace TalentSuite.Shared.Bids;
 
 public class ParsedQuestionResponse
 {
+    public int QuestionOrderIndex { get; set; }
+
     public string Category { get; set; }
     
     public string Number { get; set; }

@@ -60,7 +60,9 @@
 {
     <div class="mb-3">
         <h5 class="mb-2">@group.Key</h5>
-        @foreach (var q in group)
+        @foreach (var q in group
+            .OrderBy(q => q.QuestionOrderIndex <= 0 ? int.MaxValue : q.QuestionOrderIndex)
+            .ThenBy(q => q.Number))
         {
             <div class="card shadow-sm mb-3">
                 <div class="card-body">

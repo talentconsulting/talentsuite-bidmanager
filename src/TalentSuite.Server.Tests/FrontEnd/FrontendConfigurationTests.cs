@@ -21,7 +21,7 @@ public class FrontendConfigurationTests
     [Test]
     public void ResolveApiBaseAddress_UsesDevFallback_WhenMissingAndNonStrict()
     {
-        var config = BuildConfig([]);
+        var config = BuildConfig(new Dictionary<string, string?>());
 
         var result = FrontendConfiguration.ResolveApiBaseAddress(config, strictConfiguration: false);
 
@@ -31,7 +31,7 @@ public class FrontendConfigurationTests
     [Test]
     public void ResolveApiBaseAddress_Throws_WhenMissingAndStrict()
     {
-        var config = BuildConfig([]);
+        var config = BuildConfig(new Dictionary<string, string?>());
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => FrontendConfiguration.ResolveApiBaseAddress(config, strictConfiguration: true));
@@ -42,7 +42,7 @@ public class FrontendConfigurationTests
     [Test]
     public void ResolveAuthorizedApiUrl_UsesDevFallback_WhenMissingAndNonStrict()
     {
-        var config = BuildConfig([]);
+        var config = BuildConfig(new Dictionary<string, string?>());
 
         var result = FrontendConfiguration.ResolveAuthorizedApiUrl(config);
 
@@ -79,7 +79,7 @@ public class FrontendConfigurationTests
     [Test]
     public void ResolveKeycloakClientId_UsesFallback_WhenMissingAndNonStrict()
     {
-        var config = BuildConfig([]);
+        var config = BuildConfig(new Dictionary<string, string?>());
 
         var result = FrontendConfiguration.ResolveKeycloakClientId(config, strictConfiguration: false);
 
@@ -89,7 +89,7 @@ public class FrontendConfigurationTests
     [Test]
     public void IsAuthenticationEnabled_Throws_WhenMissingAndStrict()
     {
-        var config = BuildConfig([]);
+        var config = BuildConfig(new Dictionary<string, string?>());
 
         Assert.Throws<InvalidOperationException>(
             () => FrontendConfiguration.IsAuthenticationEnabled(config, strictConfiguration: true));

@@ -13,7 +13,7 @@
     "InviteEmail:SmtpHost": "smtp.gmail.com",
     "InviteEmail:SmtpPort": "587",
     "InviteEmail:SmtpEnableSsl": true,
-    "InviteEmail:SmtpUsername": "",
-    "InviteEmail:SmtpPassword": ""
+    "InviteEmail:SmtpUsername": "richard.parkins@gmail.com",
+    "InviteEmail:SmtpPassword": "*****"
   }
 }
