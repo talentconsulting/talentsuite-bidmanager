@@ -27,6 +27,14 @@ From repository root:
 aspire run
 ```
 
+Or use the executable helper script:
+
+```bash
+./scripts/run-local-all.sh
+```
+
+This script validates prerequisites (`dotnet`, `aspire`, `docker`) and starts the full local stack.
+
 This starts the full local environment (frontend, backend, SQL Server, Keycloak, messaging emulator).
 
 Infrastructure mode is controlled by one variable in `TalentSuite.AppHost`:

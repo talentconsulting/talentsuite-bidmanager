@@ -3,7 +3,6 @@
 @using TalentSuite.FrontEnd.Pages
 @implements IDisposable
 @inject GlobalBannerState BannerState
-@inject GlobalLoadingState LoadingState
 @inject NavigationManager NavigationManager
 @inject IServiceProvider Services
 @inject IConfiguration Configuration
@@ -15,16 +14,6 @@
     {
         <div class="alert @BannerState.CssClass" role="alert">
             @BannerState.Message
-        </div>
-    }
-
-    @if (LoadingState.IsBusy)
-    {
-        <div class="position-fixed top-0 end-0 p-3" style="z-index: 1080;">
-            <div class="d-flex align-items-center gap-2">
-                <div class="spinner-border spinner-border-sm text-primary" role="status" aria-label="Loading"></div>
-                <div class="small text-muted">Working…</div>
-            </div>
         </div>
     }
 
@@ -204,7 +193,6 @@
         await ResolveAdminVisibilityAsync();
 
         BannerState.OnChange += HandleBannerChanged;
-        LoadingState.OnChange += HandleBannerChanged;
         NavigationManager.LocationChanged += HandleLocationChanged;
     }
 
@@ -312,7 +300,6 @@
     public void Dispose()
     {
         BannerState.OnChange -= HandleBannerChanged;
-        LoadingState.OnChange -= HandleBannerChanged;
         NavigationManager.LocationChanged -= HandleLocationChanged;
     }
 }
