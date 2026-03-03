@@ -138,6 +138,35 @@ Behavior notes:
 - If `InviteEmail__Enabled` is `false`, no email is sent.
 - If `InviteEmail__SmtpHost` or `InviteEmail__FromEmail` is missing, sending is skipped and a warning is logged.
 
+## Azure AI Usage
+
+### Azure OpenAI (direct in code)
+- Used by bid document ingestion in `src/TalentSuite.Server/Bids/Services/DocumentIngestionService.cs`.
+- Flow:
+  1. Azure AI Document Intelligence extracts document text.
+  2. Azure OpenAI chat completion structures that text into strict JSON (company, summary, questions, etc.).
+- API endpoint:
+  - `POST /api/document` (`src/TalentSuite.Server/Bids/Controllers/BidDocumentController.cs`)
+- Required config:
+  - `AzureOpenAI:Endpoint`
+  - `AzureOpenAI:ApiKey`
+  - `AzureOpenAI:ChatDeployment`
+
+### Azure AI Search (indirect via Azure AI Foundry Agent)
+- There is no direct Azure AI Search SDK usage in this repository.
+- Chat answers use an Azure AI Foundry Persistent Agent in:
+  - `src/TalentSuite.Server/Bids/Services/AzureOpenAiChatService.cs`
+- The agent’s retrieval behavior (including AI Search/knowledge connections/tools) is configured in Azure AI Foundry, not in this code.
+- Chat API endpoint:
+  - `POST /api/ai/questions/{Uri.EscapeDataString(q.Id)}` (`src/TalentSuite.Server/Bids/Controllers/ChatQuestionController.cs`)
+- Required config:
+  - `AzureAIFoundry:ProjectEndpoint`
+  - `Agents:AgentId`
+
+### Ingestion fallback behavior
+- Service registration in `src/TalentSuite.Server/Bids/Extensions.cs` checks ingestion config.
+- If required Document Intelligence or Azure OpenAI settings are missing, the app falls back to `InMemoryDocumentIngestionService`.
+
 ## Auth Model (Current)
 - Frontend authenticates with Keycloak OIDC (`code` flow).
 - Backend validates JWT bearer tokens.
