@@ -163,6 +163,16 @@ Behavior notes:
   - `AzureAIFoundry:ProjectEndpoint`
   - `Agents:AgentId`
 
+### How Foundry Project, Agent, Knowledge Source, OpenAI and AI Search work together
+- `AzureAIFoundry:ProjectEndpoint` identifies the Azure AI Foundry Project that hosts your AI app assets and runtime resources.
+- `Agents:AgentId` identifies the Persistent Agent inside that project.
+- Chat requests come to `POST /api/ai/questions/{Uri.EscapeDataString(q.Id)}` and the backend calls `AzureOpenAiChatService`.
+- The service creates or reuses a thread, adds the user message, and executes a run against the configured agent.
+- Inside Foundry, the agent uses its configured knowledge/tool connections to retrieve relevant content (for example, via Azure AI Search over indexed documents).
+- The retrieved context plus prompt are sent to the configured OpenAI model to generate the final answer.
+- The backend returns the response text and thread id; the thread id is persisted so follow-up questions keep conversation context.
+- In this repository, orchestration is in code, while retrieval/tool behavior is mostly configured in Foundry.
+
 ### Ingestion fallback behavior
 - Service registration in `src/TalentSuite.Server/Bids/Extensions.cs` checks ingestion config.
 - If required Document Intelligence or Azure OpenAI settings are missing, the app falls back to `InMemoryDocumentIngestionService`.
