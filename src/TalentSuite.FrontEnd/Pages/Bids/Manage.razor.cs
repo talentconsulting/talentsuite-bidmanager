@@ -827,46 +827,7 @@ public partial class BidManage : ComponentBase
     protected async Task SaveRedReview()
     {
         if (ActiveQuestion is null) return;
-
-        if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(ActiveQuestion.Id))
-            return;
-
-        await SetBusyAsync();
-        try
-        {
-            EnsureRedReviewReviewerStateEntries(ActiveQuestion);
-
-            var url = $"api/bids/{Uri.EscapeDataString(BidId)}/questions/{Uri.EscapeDataString(ActiveQuestion.Id)}/red-review";
-            var payload = new UpdateRedReviewRequest
-            {
-                ResultText = ActiveQuestion.RedReviewAnswer ?? string.Empty,
-                State = ActiveQuestion.RedReviewState,
-                Reviewers = ActiveQuestion.RedReviewReviewers
-                    .Select(reviewer => new RedReviewReviewerResponse
-                    {
-                        UserId = reviewer.UserId,
-                        State = reviewer.State
-                    })
-                    .ToList()
-            };
-
-            var response = await Http.PutAsJsonAsync(url, payload);
-            if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException(
-                    $"Failed to save red review: {(int)response.StatusCode} {response.ReasonPhrase}");
-
-            ActiveQuestion.IsRedReviewLoaded = true;
-            _ = BannerState.ShowAsync("Red review saved.", "alert-success");
-        }
-        catch (Exception ex)
-        {
-            QuestionErrorText = ex.ToString();
-            _ = BannerState.ShowAsync("Could not save red review.");
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+        await SetRedReviewAsync(showSuccessBanner: true);
     }
 
     protected async Task PromoteRedReviewToFinal()
@@ -1212,16 +1173,70 @@ public partial class BidManage : ComponentBase
         }
     }
 
-    protected void PromoteDraftToReview(string? draftText)
+    protected async Task PromoteDraftToReview(string? draftText)
     {
         if (ActiveQuestion is null)
             return;
 
         ActiveQuestion.RedReviewAnswer = draftText ?? string.Empty;
+        var saved = await SetRedReviewAsync(showSuccessBanner: false);
+        if (!saved)
+            return;
+
         ActiveInnerTab = InnerTab.RedReview;
         EnsureRedReviewReviewerStateEntries(ActiveQuestion);
         ActiveQuestion.IsRedReviewLoaded = true;
         _ = BannerState.ShowAsync("Draft promoted to review.", "alert-success");
+    }
+
+    protected async Task<bool> SetRedReviewAsync(bool showSuccessBanner)
+    {
+        if (ActiveQuestion is null)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(ActiveQuestion.Id))
+            return false;
+
+        await SetBusyAsync();
+        try
+        {
+            EnsureRedReviewReviewerStateEntries(ActiveQuestion);
+
+            var url = $"api/bids/{Uri.EscapeDataString(BidId)}/questions/{Uri.EscapeDataString(ActiveQuestion.Id)}/red-review";
+            var payload = new UpdateRedReviewRequest
+            {
+                ResultText = ActiveQuestion.RedReviewAnswer ?? string.Empty,
+                State = ActiveQuestion.RedReviewState,
+                Reviewers = ActiveQuestion.RedReviewReviewers
+                    .Select(reviewer => new RedReviewReviewerResponse
+                    {
+                        UserId = reviewer.UserId,
+                        State = reviewer.State
+                    })
+                    .ToList()
+            };
+
+            var response = await Http.PutAsJsonAsync(url, payload);
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException(
+                    $"Failed to save red review: {(int)response.StatusCode} {response.ReasonPhrase}");
+
+            ActiveQuestion.IsRedReviewLoaded = true;
+            if (showSuccessBanner)
+                _ = BannerState.ShowAsync("Red review saved.", "alert-success");
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            QuestionErrorText = ex.ToString();
+            _ = BannerState.ShowAsync("Could not save red review.");
+            return false;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     protected async Task AddUserAsync(UserOption user)

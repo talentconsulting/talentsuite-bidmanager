@@ -1,0 +1,215 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" version="29.6.0" pages="3">
+  <diagram id="c1-context" name="C1-Context">
+    <mxGraphModel dx="1452" dy="934" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title1" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=20;fontStyle=1" value="TalentSuite Bid Manager - C1 System Context" vertex="1">
+          <mxGeometry height="30" width="520" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="u1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427b;strokeColor=#052e56;fontColor=#ffffff;fontSize=13" value="Bid Team Users\n(Admin, Writers, Reviewers)" vertex="1">
+          <mxGeometry height="90" width="220" x="60" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="sys" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168bd;strokeColor=#0b4884;fontColor=#ffffff;fontSize=14;fontStyle=1" value="TalentSuite Bid Manager\n(Your System)" vertex="1">
+          <mxGeometry height="170" width="300" x="480" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="keycloak" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Keycloak\n(Identity Provider)" vertex="1">
+          <mxGeometry height="80" width="240" x="810" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="foundry" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Azure AI Foundry Project\nPersistent Agent + Knowledge Connections" vertex="1">
+          <mxGeometry height="100" width="300" x="980" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="library" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Bid Library / Content Store\n(Referenced by knowledge source)" vertex="1">
+          <mxGeometry height="80" width="300" x="980" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="azure" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Azure Platform Services\n(SQL, Service Bus, Functions, Blob, AI Services)" vertex="1">
+          <mxGeometry height="100" width="400" x="430" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="u1" style="endArrow=block;html=1;rounded=0;strokeWidth=1.5" target="sys" value="Uses web UI">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="sys" style="endArrow=block;html=1;rounded=0;strokeWidth=1.5" target="keycloak" value="OIDC login / JWT">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="sys" style="endArrow=block;html=1;rounded=0;strokeWidth=1.5" target="foundry" value="Ask question / retrieve grounded answer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="foundry" style="endArrow=block;html=1;rounded=0;strokeWidth=1.5" target="library" value="Knowledge content">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="sys" style="endArrow=block;html=1;rounded=0;strokeWidth=1.5" target="azure" value="Stores bids, drafts, reviews\nRuns async integrations">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="c2-containers" name="C2-Containers">
+    <mxGraphModel dx="1645" dy="2159" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title2" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=20;fontStyle=1" value="TalentSuite Bid Manager - C2 Container Diagram" vertex="1">
+          <mxGeometry height="30" width="560" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="person2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427b;strokeColor=#052e56;fontColor=#ffffff;fontSize=12" value="Bid Team Users" vertex="1">
+          <mxGeometry height="70" width="180" x="120" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="fe" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168bd;strokeColor=#0b4884;fontColor=#ffffff;fontSize=12" value="TalentSuite.FrontEnd\nBlazor Web App\n- Bid management UI\n- Draft/Red Review/Final tabs" vertex="1">
+          <mxGeometry height="130" width="280" x="228" y="111" as="geometry" />
+        </mxCell>
+        <mxCell id="api" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168bd;strokeColor=#0b4884;fontColor=#ffffff;fontSize=12;fontStyle=1" value="TalentSuite.Server\nASP.NET Core API\n- Bids, Drafts, Red Review, Final Answer\n- ChatQuestionController\n- BidService orchestration" vertex="1">
+          <mxGeometry height="170" width="320" x="630" y="-3" as="geometry" />
+        </mxCell>
+        <mxCell id="sql" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#438dd5;strokeColor=#2e6295;fontColor=#ffffff;fontSize=12" value="SQL Database\n(QuestionDrafts, RedReviews, FinalAnswers, etc.)" vertex="1">
+          <mxGeometry height="90" width="270" x="1210" y="37" as="geometry" />
+        </mxCell>
+        <mxCell id="foundry2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Azure AI Foundry Project\nPersistent Agent" vertex="1">
+          <mxGeometry height="90" width="270" x="500" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="openai" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Azure OpenAI\nModel inference" vertex="1">
+          <mxGeometry height="70" width="220" x="310" y="730" as="geometry" />
+        </mxCell>
+        <mxCell id="aisearch" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Azure AI Search\nIndex + Retrieval" vertex="1">
+          <mxGeometry height="70" width="220" x="725" y="730" as="geometry" />
+        </mxCell>
+        <mxCell id="docintel" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Azure Document Intelligence" vertex="1">
+          <mxGeometry height="70" width="270" x="700" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="servicebus" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Azure Service Bus" vertex="1">
+          <mxGeometry height="60" width="270" x="1030" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="functions" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="TalentSuite.Functions\n- SaveSubmittedBidToLibraryFunction\n- Bid library writing" vertex="1">
+          <mxGeometry height="90" width="220" x="1055" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="blob" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#438dd5;strokeColor=#2e6295;fontColor=#ffffff;fontSize=12" value="Azure Blob Storage / Bid Library" vertex="1">
+          <mxGeometry height="80" width="220" x="1055" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="idp2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Keycloak (OIDC/JWT)" vertex="1">
+          <mxGeometry height="60" width="220" x="373" y="429" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e1" edge="1" parent="1" source="person2" style="endArrow=block;html=1;strokeWidth=1.5" target="fe" value="Uses">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e2" edge="1" parent="1" source="fe" style="endArrow=block;html=1;strokeWidth=1.5" target="api" value="HTTPS JSON API">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e3" edge="1" parent="1" source="api" style="endArrow=block;html=1;strokeWidth=1.5" target="sql" value="Read/write bid workflow data">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e4" edge="1" parent="1" source="api" style="endArrow=block;html=1;strokeWidth=1.5" target="foundry2" value="Chat question run">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e5" edge="1" parent="1" source="foundry2" style="endArrow=block;html=1;strokeWidth=1.5" target="openai" value="Uses model">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e6" edge="1" parent="1" source="foundry2" style="endArrow=block;html=1;strokeWidth=1.5" target="aisearch" value="Retrieval">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e7" edge="1" parent="1" source="api" style="endArrow=block;html=1;strokeWidth=1.5" target="docintel" value="Document parse + JSON structuring">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e8" edge="1" parent="1" source="api" style="endArrow=block;html=1;strokeWidth=1.5" target="servicebus" value="Publish events">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e9" edge="1" parent="1" source="servicebus" style="endArrow=block;html=1;strokeWidth=1.5" target="functions" value="Trigger/consume">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e10" edge="1" parent="1" source="functions" style="endArrow=block;html=1;strokeWidth=1.5" target="blob" value="Write bid content">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e11" edge="1" parent="1" source="fe" style="endArrow=block;html=1;strokeWidth=1.5" target="idp2" value="OIDC login + bearer token validation">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2e12" edge="1" parent="1" source="api" style="endArrow=block;html=1;strokeWidth=1.5" target="idp2" value="JWT auth">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="c3-server-components" name="C3-Server Components">
+    <mxGraphModel dx="1234" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="c3title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=20;fontStyle=1" value="TalentSuite.Server - C3 Component Diagram" vertex="1">
+          <mxGeometry height="30" width="520" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="c3api" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168bd;strokeColor=#0b4884;fontColor=#ffffff;fontSize=12;fontStyle=1" value="API Controllers&#xa;- BidsController&#xa;- DraftResponseController&#xa;- RedReviewController&#xa;- FinalAnswerController&#xa;- ChatQuestionController" vertex="1">
+          <mxGeometry height="180" width="300" x="80" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bidservice" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1168bd;strokeColor=#0b4884;fontColor=#ffffff;fontSize=12;fontStyle=1" value="BidService (Application Service)&#xa;- Workflow orchestration&#xa;- Draft/Review/Final operations&#xa;- Mention task publishing" vertex="1">
+          <mxGeometry height="140" width="320" x="470" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="c3chatservice" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="AzureOpenAiChatService&#xa;- PersistentAgentsClient&#xa;- Thread + message + run polling" vertex="1">
+          <mxGeometry height="110" width="320" x="470" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="c3docingest" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="DocumentIngestionService&#xa;- Document Intelligence extract&#xa;- Azure OpenAI structuring to JSON" vertex="1">
+          <mxGeometry height="120" width="320" x="470" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="c3repo" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="IManageBids / SqlServerBidRepository&#xa;- Bid, question, draft CRUD&#xa;- RedReviews / FinalAnswers persistence&#xa;- Mention tasks + assignments" vertex="1">
+          <mxGeometry height="170" width="340" x="880" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="c3mapper" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427b;strokeColor=#052e56;fontColor=#ffffff;fontSize=12" value="BidMapper&#xa;- Data/Service/API model mapping" vertex="1">
+          <mxGeometry height="70" width="340" x="880" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="c3auth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427b;strokeColor=#052e56;fontColor=#ffffff;fontSize=12" value="AuthN/AuthZ&#xa;- JWT bearer validation&#xa;- BidAccessAuthorizationHandler&#xa;- role policy checks" vertex="1">
+          <mxGeometry height="90" width="300" x="80" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="c3bus" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="IAzureServiceBusClient&#xa;- publishes comment-mention events" vertex="1">
+          <mxGeometry height="70" width="340" x="880" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="c3sql" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#438dd5;strokeColor=#2e6295;fontColor=#ffffff;fontSize=12" value="SQL Database" vertex="1">
+          <mxGeometry height="70" width="210" x="1310" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="c3foundry" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Azure AI Foundry Project&#xa;(Persistent Agent)" vertex="1">
+          <mxGeometry height="80" width="210" x="1310" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="c3docintel" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Azure Document Intelligence" vertex="1">
+          <mxGeometry height="60" width="210" x="1310" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="c3aoai" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Azure OpenAI" vertex="1">
+          <mxGeometry height="60" width="210" x="1310" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="c3servicebus_ext" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;strokeColor=#6b6b6b;fontColor=#ffffff;fontSize=12" value="Azure Service Bus" vertex="1">
+          <mxGeometry height="60" width="210" x="1310" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="c3e1" edge="1" parent="1" source="c3api" style="endArrow=block;html=1;strokeWidth=1.5" target="c3bidservice" value="HTTP endpoints">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3e2" edge="1" parent="1" source="c3api" style="endArrow=block;html=1;strokeWidth=1.5" target="c3chatservice" value="chat orchestration">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3e3" edge="1" parent="1" source="c3api" style="endArrow=block;html=1;strokeWidth=1.5" target="c3docingest" value="doc ingestion endpoint">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3e4" edge="1" parent="1" source="c3bidservice" style="endArrow=block;html=1;strokeWidth=1.5" target="c3repo" value="read/write domain data">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3e5" edge="1" parent="1" source="c3bidservice" style="endArrow=block;html=1;strokeWidth=1.5" target="c3mapper" value="map models">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3e6" edge="1" parent="1" source="c3bidservice" style="endArrow=block;html=1;strokeWidth=1.5" target="c3bus" value="publish mention events">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3e7" edge="1" parent="1" source="c3repo" style="endArrow=block;html=1;strokeWidth=1.5" target="c3sql" value="persists records">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3e8" edge="1" parent="1" source="c3chatservice" style="endArrow=block;html=1;strokeWidth=1.5" target="c3foundry" value="agent run (thread/message)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3e9" edge="1" parent="1" source="c3docingest" style="endArrow=block;html=1;strokeWidth=1.5" target="c3docintel" value="extract content">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3e10" edge="1" parent="1" source="c3docingest" style="endArrow=block;html=1;strokeWidth=1.5" target="c3aoai" value="structure parsed output">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3e11" edge="1" parent="1" source="c3bus" style="endArrow=block;html=1;strokeWidth=1.5" target="c3servicebus_ext" value="bus client">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3e12" edge="1" parent="1" source="c3api" style="dashed=1;endArrow=block;html=1;strokeWidth=1.5" target="c3auth" value="authorization checks">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
