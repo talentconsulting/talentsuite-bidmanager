@@ -122,12 +122,12 @@ public class SaveSubmittedBidToLibraryFunctionTests
             NullLogger<SaveSubmittedBidToLibraryFunction>.Instance,
             writer);
 
-        var payload = new BidSubmittedEvent
-        {
-            BidId = "bid-123",
-            Bid = null!
-        };
-        var json = System.Text.Json.JsonSerializer.Serialize(payload, SerialiserOptions.JsonOptions);
+        var json = """
+                   {
+                     "bidId": "bid-123",
+                     "bid": null
+                   }
+                   """;
 
         await sut.Run(json, CancellationToken.None);
 

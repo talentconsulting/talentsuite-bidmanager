@@ -43,6 +43,20 @@ Infrastructure mode is controlled by one variable in `TalentSuite.AppHost`:
 
 When `TALENTSUITE_INFRA_MODE=azure`, Aspire derives the Keycloak JDBC URL from the provisioned Azure SQL `keycloakdb` resource automatically.
 
+For local secret overrides used by `set-env.sh`, create:
+- `.env.local`
+- `.env.azure.local` (for azure mode only)
+
+Example `.env.azure.local`:
+```bash
+AZURE_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000
+```
+
+Then run:
+```bash
+source ./set-env.sh azure
+```
+
 Notes:
 - The app uses HTTPS locally.
 - On first run, Aspire may attempt to trust a dev certificate.

@@ -51,6 +51,12 @@ load_exports_from_azd_env_text() {
   done
 }
 
+load_local_env_file() {
+  local file_path="$1"
+  [ -f "$file_path" ] || return 0
+  load_exports_from_azd_env_text < "$file_path"
+}
+
 load_exports_from_json_object() {
   local json="$1"
   if ! command -v jq >/dev/null 2>&1; then
@@ -82,6 +88,7 @@ ensure_parameters_aliases() {
 }
 
 if [[ "$MODE" == "local" ]]; then
+  load_local_env_file ".env.local"
   export TALENTSUITE_INFRA_MODE="local"
 
   # AppHost parameters (optional overrides)
@@ -101,6 +108,8 @@ if [[ "$MODE" == "local" ]]; then
 
   echo "Local mode env vars set."
 elif [[ "$MODE" == "azure" ]]; then
+  load_local_env_file ".env.local"
+  load_local_env_file ".env.azure.local"
   export TALENTSUITE_INFRA_MODE="azure"
 
   if [ -n "${AZD_INITIAL_ENVIRONMENT_CONFIG:-}" ]; then
@@ -137,6 +146,7 @@ elif [[ "$MODE" == "azure" ]]; then
 
   test -n "${Parameters__KeycloakDbUsername:-${KeycloakDbUsername:-}}" || fail "Missing Keycloak DB username (Parameters__KeycloakDbUsername or KeycloakDbUsername)."
   test -n "${Parameters__KeycloakDbPassword:-${KeycloakDbPassword:-}}" || fail "Missing Keycloak DB password (Parameters__KeycloakDbPassword or KeycloakDbPassword)."
+  test -n "${AZURE_SUBSCRIPTION_ID:-}" || fail "Missing AZURE_SUBSCRIPTION_ID. Set it in .env.azure.local or your shell environment."
 
   echo "Azure mode env vars set from configuration."
 else
