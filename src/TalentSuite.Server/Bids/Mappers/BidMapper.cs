@@ -37,6 +37,7 @@ public partial class BidMapper
         {
             Company = source.Company,
             Summary = source.Summary,
+            KeyInformation = source.KeyInformation,
             Budget = source.Budget,
             DeadlineForQualifying = source.DeadlineForQualifying,
             DeadlineForSubmission = source.DeadlineForSubmission,

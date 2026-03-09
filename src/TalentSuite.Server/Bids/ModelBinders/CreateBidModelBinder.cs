@@ -24,6 +24,7 @@ public sealed class CreateBidModelBinder : IModelBinder
         {
             Company = form["Company"],
             Summary = form["Summary"],
+            KeyInformation = form["KeyInformation"],
             Budget = form["Budget"],
             DeadlineForQualifying = form["DeadlineForQualifying"],
             DeadlineForSubmission = form["DeadlineForSubmission"],

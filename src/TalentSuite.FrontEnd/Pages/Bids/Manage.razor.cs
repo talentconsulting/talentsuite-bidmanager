@@ -95,6 +95,8 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     protected List<UserOption> AssignedUsers { get; } = new();
     protected List<UserOption> AllUsers { get; } = new();
     protected List<BidFileResponse> BidFiles { get; } = new();
+    protected string? PreviewUrl { get; set; }
+    protected string? PreviewFileName { get; set; }
     protected Dictionary<string, QuestionUserRole> PendingQuestionUserRoles { get; } = new(StringComparer.OrdinalIgnoreCase);
     private string? _targetQuestionId;
     private string? _targetCommentId;
@@ -125,6 +127,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _dirtySources.Clear();
+        await RevokePreviewUrlAsync();
         await SyncBeforeUnloadAsync(forceDisable: true);
     }
 
@@ -457,6 +460,42 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         }
     }
 
+    protected async Task PreviewBidFileAsync(BidFileResponse file)
+    {
+        if (file is null || string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(file.Id))
+            return;
+
+        FilesErrorText = null;
+        await SetFilesBusyAsync();
+
+        try
+        {
+            var downloaded = await ApiClient.DownloadBidFileAsync(BidId, file.Id);
+            await RevokePreviewUrlAsync();
+
+            var base64 = Convert.ToBase64String(downloaded.Content);
+            PreviewUrl = await JS.InvokeAsync<string>(
+                "bidManage.createBlobUrlFromBase64",
+                downloaded.ContentType,
+                base64);
+            PreviewFileName = downloaded.FileName;
+        }
+        catch (Exception ex)
+        {
+            FilesErrorText = ex.ToString();
+            _ = BannerState.ShowAsync("Could not preview file.");
+        }
+        finally
+        {
+            IsFilesBusy = false;
+        }
+    }
+
+    protected async Task ClosePreviewAsync()
+    {
+        await RevokePreviewUrlAsync();
+    }
+
     protected async Task DeleteBidFileAsync(BidFileResponse file)
     {
         if (file is null || string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(file.Id))
@@ -469,6 +508,10 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         {
             await ApiClient.DeleteBidFileAsync(BidId, file.Id);
             BidFiles.RemoveAll(x => string.Equals(x.Id, file.Id, StringComparison.OrdinalIgnoreCase));
+            if (string.Equals(file.FileName, PreviewFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                await RevokePreviewUrlAsync();
+            }
             _ = BannerState.ShowAsync($"Deleted {file.FileName}.", "alert-success");
         }
         catch (Exception ex)
@@ -479,6 +522,29 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         finally
         {
             IsFilesBusy = false;
+        }
+    }
+
+    private async Task RevokePreviewUrlAsync()
+    {
+        if (string.IsNullOrWhiteSpace(PreviewUrl))
+        {
+            PreviewFileName = null;
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("bidManage.revokeBlobUrl", PreviewUrl);
+        }
+        catch
+        {
+            // Ignore revoke failures during teardown.
+        }
+        finally
+        {
+            PreviewUrl = null;
+            PreviewFileName = null;
         }
     }
 

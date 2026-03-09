@@ -7,6 +7,7 @@ public class CreateBidModel
     public string? Category { get; set; }
     public string? Company { get; set; }
     public string? Summary { get; set; }
+    public string? KeyInformation { get; set; }
     public string? Budget { get; set; }
     public string? DeadlineForQualifying { get; set; }
     public string? DeadlineForSubmission { get; set; }

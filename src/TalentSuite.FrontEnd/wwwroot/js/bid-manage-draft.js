@@ -91,6 +91,30 @@ window.bidManage.downloadFileFromBase64 = function (fileName, contentType, base6
   URL.revokeObjectURL(url);
 };
 
+window.bidManage.createBlobUrlFromBase64 = function (contentType, base64Content) {
+  if (!base64Content) {
+    return "";
+  }
+
+  const binaryString = atob(base64Content);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  const blob = new Blob([bytes], { type: contentType || "application/octet-stream" });
+  return URL.createObjectURL(blob);
+};
+
+window.bidManage.revokeBlobUrl = function (url) {
+  if (!url) {
+    return;
+  }
+
+  URL.revokeObjectURL(url);
+};
+
 window.bidManage._hasUnsavedChanges = false;
 window.bidManage._beforeUnloadHandler = function (event) {
   if (!window.bidManage._hasUnsavedChanges) {

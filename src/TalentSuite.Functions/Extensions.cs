@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using TalentSuite.Functions.GoogleDriveSync;
 
 namespace TalentSuite.Functions;
 
@@ -68,6 +69,38 @@ public static class Extensions
                 $"{EmailOptions.SectionName}__SmtpPassword",
                 "Parameters:InviteSmtpPassword",
                 "Parameters__InviteSmtpPassword") ?? options.SmtpPassword;
+        });
+
+        return services;
+    }
+
+    public static IServiceCollection AddGoogleDriveSyncConfiguration(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<GoogleDriveSyncOptions>(options =>
+        {
+            var prefix = $"{GoogleDriveSyncOptions.SectionName}:";
+            var enabledValue = ResolveConfigValue(configuration,
+                $"{prefix}Enabled",
+                $"{GoogleDriveSyncOptions.SectionName}__Enabled");
+            options.Enabled = bool.TryParse(enabledValue, out var enabled) && enabled;
+
+            options.SourceContainerName = ResolveConfigValue(configuration,
+                $"{prefix}SourceContainerName",
+                $"{GoogleDriveSyncOptions.SectionName}__SourceContainerName")
+                ?? options.SourceContainerName;
+
+            options.DriveFolderId = ResolveConfigValue(configuration,
+                $"{prefix}DriveFolderId",
+                $"{GoogleDriveSyncOptions.SectionName}__DriveFolderId")
+                ?? options.DriveFolderId;
+
+            options.ServiceAccountJson = ResolveConfigValue(configuration,
+                $"{prefix}ServiceAccountJson",
+                $"{GoogleDriveSyncOptions.SectionName}__ServiceAccountJson");
+
+            options.ServiceAccountJsonBase64 = ResolveConfigValue(configuration,
+                $"{prefix}ServiceAccountJsonBase64",
+                $"{GoogleDriveSyncOptions.SectionName}__ServiceAccountJsonBase64");
         });
 
         return services;

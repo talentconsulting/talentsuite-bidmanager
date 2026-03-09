@@ -152,6 +152,23 @@ Behavior notes:
 - If `InviteEmail__Enabled` is `false`, no email is sent.
 - If `InviteEmail__SmtpHost` or `InviteEmail__FromEmail` is missing, sending is skipped and a warning is logged.
 
+## Timer Sync: Azure Blob to Google Drive
+`src/TalentSuite.Functions` now includes a timer-triggered function:
+- `SyncAzureFilesToGoogleDriveTimerFunction`
+- schedule: every 30 minutes (`0 */30 * * * *`)
+
+It performs one-way sync from Azure Blob container to a Google Drive folder:
+- uploads new blobs
+- updates changed blobs
+- skips unchanged blobs
+
+Function settings (in `local.settings.json` / app settings):
+- `GoogleDriveSync:Enabled`
+- `GoogleDriveSync:SourceContainerName` (default `bidlibrary`)
+- `GoogleDriveSync:DriveFolderId`
+- `GoogleDriveSync:ServiceAccountJson` or `GoogleDriveSync:ServiceAccountJsonBase64`
+- `ConnectionStrings:bidstorage`
+
 ## Azure AI Usage
 
 ### Azure OpenAI (direct in code)
@@ -235,6 +252,9 @@ Workflow: `.github/workflows/azure-deploy.yml`
 The workflow runs:
 - `azd provision`
 - `azd deploy`
+- `scripts/ci/tag-azure-resources.sh` (merges tags onto RG/resources):
+  - `project=TalentSuite`
+  - `owner=rgparkins`
 
 Deployment scope is defined by `TalentSuite.AppHost/AppHost.cs` and `TALENTSUITE_INFRA_MODE`.
 

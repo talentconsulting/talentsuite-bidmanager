@@ -150,7 +150,7 @@ public sealed class DocumentIngestionService : IDocumentIngestionservice
                 "You are a strict information extraction engine. Return ONLY valid JSON. No markdown, no commentary."
             ),
             new UserChatMessage($"""
-Extract bid questions (from {stage.ToString()} section of the document only) the document text below.
+Extract bid questions (from {stage.ToString()} section of the document only), without changing the text on the question, the document text below.
 
 Return a JSON payload which contains an array of objects on a field called questions with EXACTLY these fields:
   - category (string)
@@ -172,8 +172,10 @@ If the length of the response is not found please set the default length to '750
 - deadlineForQualifying (string), which contains any information about the deadline for qualifying questions
 - deadlineForSubmission (string, which contains any information about the deadline for submitting this bid
 - lengthOfContract (string), which contains any information about the length of the contract mentioned in the document
+- keyInformation (string), which contains any key information that could help us choose an example from the bid library, for example the problem to be solved and whjy its being done
 
 Rules:
+  - Do not change the text on a question
   - If a question is marked "mandatory", "must", "required" -> required=true, niceToHave=false.
   - If a question is marked "desirable", "optional", "nice to have" -> required=false, niceToHave=true.
   - If neither is clear -> required=false, niceToHave=false.

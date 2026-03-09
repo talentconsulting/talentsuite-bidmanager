@@ -17,6 +17,7 @@ public class BidDataModel
 
     public string? Company { get; set; }
     public string? Summary { get; set; }
+    public string? KeyInformation { get; set; }
     public string? Budget { get; set; }
     public string? DeadlineForQualifying { get; set; }
     public string? DeadlineForSubmission { get; set; }

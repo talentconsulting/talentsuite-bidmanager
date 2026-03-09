@@ -11,6 +11,7 @@ jobs:
     uses: ./.github/workflows/tests.yml
 
   deploy:
+    needs: tests
     permissions:
       id-token: write
       contents: read
@@ -195,3 +196,10 @@ jobs:
         run: |
           chmod +x scripts/ci/deploy-frontend-static.sh
           scripts/ci/deploy-frontend-static.sh
+
+      - name: Tag resource group and Azure resources
+        if: always()
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          chmod +x scripts/ci/tag-azure-resources.sh
+          scripts/ci/tag-azure-resources.sh
