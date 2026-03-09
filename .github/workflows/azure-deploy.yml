@@ -11,7 +11,6 @@ jobs:
     uses: ./.github/workflows/tests.yml
 
   deploy:
-    needs: tests
     permissions:
       id-token: write
       contents: read
@@ -52,6 +51,10 @@ jobs:
           test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
           test -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
           test -n "$AZD_INITIAL_ENVIRONMENT_CONFIG" || (echo "AZD_INITIAL_ENVIRONMENT_CONFIG missing" && exit 1)
+
+      - name: Print Azure subscription id
+        run: |
+          echo "AZURE_SUBSCRIPTION_ID=$AZURE_SUBSCRIPTION_ID"
 
       - name: Seed azd environment from initial config
         working-directory: ${{ env.AZD_WORKING_DIR }}
