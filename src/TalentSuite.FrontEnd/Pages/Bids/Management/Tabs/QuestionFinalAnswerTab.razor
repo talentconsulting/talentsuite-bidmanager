@@ -12,8 +12,8 @@
                 <textarea id="@GetTextareaId()"
                           class="form-control"
                           rows="12"
-                          @bind="Question.FinalAnswer"
-                          @bind:event="oninput"
+                          value="@Question.FinalAnswer"
+                          @oninput="OnFinalAnswerInputAsync"
                           @onmouseup="CaptureSelectionAsync"
                           @onkeyup="CaptureSelectionAsync"></textarea>
 
@@ -117,6 +117,7 @@
     [Parameter] public BidQuestionModel Question { get; set; } = default!;
     [Parameter] public bool IsBusy { get; set; }
     [Parameter] public IReadOnlyList<UserOption> MentionableUsers { get; set; } = Array.Empty<UserOption>();
+    [Parameter] public EventCallback OnFinalAnswerTextChanged { get; set; }
     [Parameter] public EventCallback OnSaveFinalAnswer { get; set; }
     [Parameter] public EventCallback<(string Comment, int? StartIndex, int? EndIndex, string SelectedText, List<string> MentionedUserIds)> OnAddInlineComment { get; set; }
     [Parameter] public EventCallback<(string QuestionId, string CommentId, bool IsComplete)> OnCommentCompletionChanged { get; set; }
@@ -179,6 +180,12 @@
     {
         Question.ReadyForSubmission = ParseCheckboxValue(e.Value);
         await OnSaveFinalAnswer.InvokeAsync();
+    }
+
+    private async Task OnFinalAnswerInputAsync(ChangeEventArgs e)
+    {
+        Question.FinalAnswer = e.Value?.ToString() ?? string.Empty;
+        await OnFinalAnswerTextChanged.InvokeAsync();
     }
 
     private Task OnCommentCompletionChangeAsync(string commentId, ChangeEventArgs e)

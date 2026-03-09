@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.JSInterop;
 using TalentSuite.FrontEnd.Pages.Bids.Management;
 using TalentSuite.FrontEnd.Pages.Bids.Management.Models;
@@ -12,7 +13,7 @@ using TalentSuite.Shared.Users;
 
 namespace TalentSuite.FrontEnd.Pages.Bids;
 
-public partial class BidManage : ComponentBase
+public partial class BidManage : ComponentBase, IAsyncDisposable
 {
     [Parameter] public string BidId { get; set; } = "";
 
@@ -99,6 +100,8 @@ public partial class BidManage : ComponentBase
     private string? _targetCommentId;
     private bool _targetApplied;
     private string? _pendingScrollElementId;
+    private readonly HashSet<string> _dirtySources = new(StringComparer.OrdinalIgnoreCase);
+    private bool _isBeforeUnloadEnabled;
 
     protected override async Task OnInitializedAsync()
     {
@@ -108,12 +111,21 @@ public partial class BidManage : ComponentBase
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+            await SyncBeforeUnloadAsync();
+
         if (string.IsNullOrWhiteSpace(_pendingScrollElementId))
             return;
 
         var target = _pendingScrollElementId;
         _pendingScrollElementId = null;
         await JS.InvokeVoidAsync("bidManage.scrollToElementById", target);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _dirtySources.Clear();
+        await SyncBeforeUnloadAsync(forceDisable: true);
     }
 
     protected async Task LoadBidAsync()
@@ -470,8 +482,11 @@ public partial class BidManage : ComponentBase
         }
     }
 
-    protected void SetLeftNav(LeftNavSection section)
+    protected async Task SetLeftNavAsync(LeftNavSection section)
     {
+        if (!await ConfirmDiscardUnsavedChangesIfNeededAsync())
+            return;
+
         LeftNav = section;
 
         if (section == LeftNavSection.Questions)
@@ -481,13 +496,16 @@ public partial class BidManage : ComponentBase
             {
                 var groups = CategoryGroups;
                 if (groups.Count > 0)
-                    SelectCategory(groups[0].Key);
+                    ActiveCategory = groups[0].Key;
             }
         }
     }
 
-    protected void SelectCategory(string category)
+    protected async Task SelectCategoryAsync(string category)
     {
+        if (!await ConfirmDiscardUnsavedChangesIfNeededAsync())
+            return;
+
         ActiveCategory = category;
 
         var first = QuestionsInCategory.FirstOrDefault();
@@ -498,8 +516,11 @@ public partial class BidManage : ComponentBase
         QuestionErrorText = null;
     }
 
-    protected void SelectQuestion(string? questionId)
+    protected async Task SelectQuestionAsync(string? questionId)
     {
+        if (!await ConfirmDiscardUnsavedChangesIfNeededAsync())
+            return;
+
         ActiveQuestionId = questionId;
         PendingQuestionUserRoles.Clear();
         ActiveInnerTab = CanManageQuestionUsers ? InnerTab.Users : InnerTab.Draft;
@@ -520,6 +541,14 @@ public partial class BidManage : ComponentBase
         if (question is null)
             return Task.CompletedTask;
 
+        return GoToFinalAnswerWithPromptAsync(question);
+    }
+
+    private async Task GoToFinalAnswerWithPromptAsync(BidQuestionModel question)
+    {
+        if (!await ConfirmDiscardUnsavedChangesIfNeededAsync())
+            return;
+
         LeftNav = LeftNavSection.Questions;
         ActiveCategory = NormaliseCategory(question.Category);
         ActiveQuestionId = question.Id;
@@ -530,8 +559,6 @@ public partial class BidManage : ComponentBase
         ShowNewDraft = false;
         NewDraftText = null;
         ChatQuestionText = null;
-
-        return Task.CompletedTask;
     }
 
     protected async Task UpdateBidStatusFromSummaryAsync(BidStatus status)
@@ -730,6 +757,9 @@ public partial class BidManage : ComponentBase
 
     protected async Task ShowRedReviewTabAsync()
     {
+        if (!await ConfirmDiscardUnsavedChangesIfNeededAsync())
+            return;
+
         ActiveInnerTab = InnerTab.RedReview;
         await LoadRedReviewAsync();
     }
@@ -805,6 +835,8 @@ public partial class BidManage : ComponentBase
 
             ActiveQuestion.ChatResponse = res?.Response ?? string.Empty;
             ActiveQuestion.ChatThreadId = res?.ThreadId;
+            ChatQuestionText = string.Empty;
+            ClearDirty("chat-question");
         }
         catch (Exception ex)
         {
@@ -865,6 +897,7 @@ public partial class BidManage : ComponentBase
             if (showSuccessBanner)
                 _ = BannerState.ShowAsync("Final answer saved.", "alert-success");
 
+            ClearDirty(GetFinalAnswerDirtyKey(ActiveQuestion.Id));
             return true;
         }
         catch (Exception ex)
@@ -944,10 +977,37 @@ public partial class BidManage : ComponentBase
 
     protected async Task ShowDraftTabAsync()
     {
+        if (!await ConfirmDiscardUnsavedChangesIfNeededAsync())
+            return;
+
         ActiveInnerTab = InnerTab.Draft;
         QuestionErrorText = null;
 
         await LoadQuestionDraftResponsesAsync();
+    }
+
+    protected async Task ShowUsersTabAsync()
+    {
+        if (!await ConfirmDiscardUnsavedChangesIfNeededAsync())
+            return;
+
+        ActiveInnerTab = InnerTab.Users;
+    }
+
+    protected async Task ShowChatTabAsync()
+    {
+        if (!await ConfirmDiscardUnsavedChangesIfNeededAsync())
+            return;
+
+        ActiveInnerTab = InnerTab.Chat;
+    }
+
+    protected async Task ShowFinalAnswerTabAsync()
+    {
+        if (!await ConfirmDiscardUnsavedChangesIfNeededAsync())
+            return;
+
+        ActiveInnerTab = InnerTab.FinalAnswer;
     }
 
     protected async Task LoadQuestionDraftResponsesAsync()
@@ -990,6 +1050,7 @@ public partial class BidManage : ComponentBase
     {
         ShowNewDraft = false;
         NewDraftText = null;
+        ClearDirty("new-draft");
     }
 
     protected async Task SubmitDraftResponseAsync()
@@ -1032,6 +1093,7 @@ public partial class BidManage : ComponentBase
 
             ShowNewDraft = false;
             NewDraftText = null;
+            ClearDirty("new-draft");
         }
         catch (Exception ex)
         {
@@ -1119,6 +1181,8 @@ public partial class BidManage : ComponentBase
             if (!httpResponse.IsSuccessStatusCode)
                 throw new InvalidOperationException(
                     $"Failed to update draft response: {(int)httpResponse.StatusCode} {httpResponse.ReasonPhrase}");
+
+            ClearDirty(GetDraftDirtyKey(draftId));
         }
         catch (Exception ex)
         {
@@ -1225,6 +1289,7 @@ public partial class BidManage : ComponentBase
             if (showSuccessBanner)
                 _ = BannerState.ShowAsync("Red review saved.", "alert-success");
 
+            ClearDirty(GetRedReviewDirtyKey(ActiveQuestion.Id));
             return true;
         }
         catch (Exception ex)
@@ -1535,6 +1600,11 @@ public partial class BidManage : ComponentBase
     protected Task OnNewDraftTextChangedAsync(string? text)
     {
         NewDraftText = text;
+        if (string.IsNullOrWhiteSpace(text))
+            ClearDirty("new-draft");
+        else
+            MarkDirty("new-draft");
+
         return Task.CompletedTask;
     }
 
@@ -1681,7 +1751,45 @@ public partial class BidManage : ComponentBase
     protected Task OnChatQuestionTextChangedAsync(string? text)
     {
         ChatQuestionText = text;
+        if (string.IsNullOrWhiteSpace(text))
+            ClearDirty("chat-question");
+        else
+            MarkDirty("chat-question");
+
         return Task.CompletedTask;
+    }
+
+    protected Task OnDraftEditedAsync(string draftId)
+    {
+        if (string.IsNullOrWhiteSpace(draftId))
+            return Task.CompletedTask;
+
+        MarkDirty(GetDraftDirtyKey(draftId));
+        return Task.CompletedTask;
+    }
+
+    protected Task OnRedReviewTextChangedAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(ActiveQuestion?.Id))
+            MarkDirty(GetRedReviewDirtyKey(ActiveQuestion.Id));
+
+        return Task.CompletedTask;
+    }
+
+    protected Task OnFinalAnswerTextChangedAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(ActiveQuestion?.Id))
+            MarkDirty(GetFinalAnswerDirtyKey(ActiveQuestion.Id));
+
+        return Task.CompletedTask;
+    }
+
+    protected async Task ConfirmInternalNavigationAsync(LocationChangingContext context)
+    {
+        if (!await ConfirmDiscardUnsavedChangesIfNeededAsync())
+        {
+            context.PreventNavigation();
+        }
     }
 
     protected Task SubmitChatForActiveQuestionAsync()
@@ -1969,6 +2077,52 @@ public partial class BidManage : ComponentBase
                 })
                 .ToList();
         }
+    }
+
+    private static string GetDraftDirtyKey(string draftId) => $"draft:{draftId}";
+    private static string GetRedReviewDirtyKey(string questionId) => $"red-review:{questionId}";
+    private static string GetFinalAnswerDirtyKey(string questionId) => $"final-answer:{questionId}";
+
+    private void MarkDirty(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return;
+
+        if (_dirtySources.Add(source))
+            _ = SyncBeforeUnloadAsync();
+    }
+
+    private void ClearDirty(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return;
+
+        if (_dirtySources.Remove(source))
+            _ = SyncBeforeUnloadAsync();
+    }
+
+    private async Task SyncBeforeUnloadAsync(bool forceDisable = false)
+    {
+        var shouldEnable = !forceDisable && _dirtySources.Count > 0;
+        if (_isBeforeUnloadEnabled == shouldEnable)
+            return;
+
+        _isBeforeUnloadEnabled = shouldEnable;
+        await JS.InvokeVoidAsync("bidManage.setUnsavedChangesGuard", shouldEnable);
+    }
+
+    private async Task<bool> ConfirmDiscardUnsavedChangesIfNeededAsync()
+    {
+        if (_dirtySources.Count == 0)
+            return true;
+
+        var proceed = await JS.InvokeAsync<bool>("bidManage.confirmDiscardUnsavedChanges");
+        if (!proceed)
+            return false;
+
+        _dirtySources.Clear();
+        await SyncBeforeUnloadAsync();
+        return true;
     }
     
     // ---- Types (replace with your real DTOs) ----

@@ -90,3 +90,33 @@ window.bidManage.downloadFileFromBase64 = function (fileName, contentType, base6
   document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
 };
+
+window.bidManage._hasUnsavedChanges = false;
+window.bidManage._beforeUnloadHandler = function (event) {
+  if (!window.bidManage._hasUnsavedChanges) {
+    return;
+  }
+
+  event.preventDefault();
+  event.returnValue = "";
+};
+
+window.bidManage.setUnsavedChangesGuard = function (enabled) {
+  const shouldEnable = !!enabled;
+  if (window.bidManage._hasUnsavedChanges === shouldEnable) {
+    return;
+  }
+
+  window.bidManage._hasUnsavedChanges = shouldEnable;
+
+  if (shouldEnable) {
+    window.addEventListener("beforeunload", window.bidManage._beforeUnloadHandler);
+    return;
+  }
+
+  window.removeEventListener("beforeunload", window.bidManage._beforeUnloadHandler);
+};
+
+window.bidManage.confirmDiscardUnsavedChanges = function () {
+  return window.confirm("You have unsaved changes. Leave this page and discard them?");
+};

@@ -13,8 +13,8 @@
                 <textarea id="@GetTextareaId()"
                           class="form-control"
                           rows="12"
-                          @bind="Question.RedReviewAnswer"
-                          @bind:event="oninput"
+                          value="@Question.RedReviewAnswer"
+                          @oninput="OnRedReviewInputAsync"
                           @onmouseup="CaptureSelectionAsync"
                           @onkeyup="CaptureSelectionAsync"></textarea>
 
@@ -127,6 +127,7 @@
     [Parameter] public bool IsBusy { get; set; }
     [Parameter] public List<RedReviewReviewerOption> Reviewers { get; set; } = new();
     [Parameter] public IReadOnlyList<UserOption> MentionableUsers { get; set; } = Array.Empty<UserOption>();
+    [Parameter] public EventCallback OnRedReviewTextChanged { get; set; }
     [Parameter] public EventCallback OnSaveRedReview { get; set; }
     [Parameter] public EventCallback OnPromoteToFinal { get; set; }
     [Parameter] public EventCallback<(string Comment, int? StartIndex, int? EndIndex, string SelectedText, List<string> MentionedUserIds)> OnAddInlineComment { get; set; }
@@ -193,6 +194,12 @@
         _showMentions = false;
         _mentionQuery = string.Empty;
         _mentionedUserIds.Clear();
+    }
+
+    private async Task OnRedReviewInputAsync(ChangeEventArgs e)
+    {
+        Question.RedReviewAnswer = e.Value?.ToString() ?? string.Empty;
+        await OnRedReviewTextChanged.InvokeAsync();
     }
 
     private Task OnCommentCompletionChangeAsync(string commentId, ChangeEventArgs e)

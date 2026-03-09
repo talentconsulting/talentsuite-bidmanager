@@ -1,4 +1,5 @@
 @using TalentSuite.FrontEnd.Pages.Bids.Management.Models
+@using TalentSuite.Shared.Bids
 @namespace TalentSuite.FrontEnd.Pages.Bids.Management.Tabs
 @inject IJSRuntime JS
 
@@ -37,8 +38,8 @@
                                 <textarea id="@GetDraftTextareaId(response.Id)"
                                           class="form-control mt-2"
                                           rows="8"
-                                          @bind="response.Response"
-                                          @bind:event="oninput"
+                                          value="@response.Response"
+                                          @oninput="e => OnDraftInputAsync(response, e)"
                                           @onmouseup="() => CaptureSelectionAsync(response.Id)"
                                           @onkeyup="() => CaptureSelectionAsync(response.Id)"></textarea>
                                 <div class="d-flex justify-content-end gap-2 mt-2 flex-wrap">
@@ -189,6 +190,7 @@
     [Parameter] public EventCallback<(string QuestionId, string DraftId, string DraftText)> OnUpdateDraft { get; set; }
     [Parameter] public EventCallback<(string QuestionId, string DraftId)> OnDeleteDraft { get; set; }
     [Parameter] public EventCallback<string?> OnPromoteDraftToReview { get; set; }
+    [Parameter] public EventCallback<string> OnDraftEdited { get; set; }
     [Parameter] public IReadOnlyDictionary<string, string?> DraftCommentTextsByDraftId { get; set; } =
         new Dictionary<string, string?>();
     [Parameter] public IReadOnlyList<UserOption> MentionableUsers { get; set; } = Array.Empty<UserOption>();
@@ -242,6 +244,12 @@
             hasSelection ? selection?.EndIndex : null,
             hasSelection ? selectedText : string.Empty,
             ExtractMentionedUserIds(draftId, text)));
+    }
+
+    private async Task OnDraftInputAsync(DraftResponse response, ChangeEventArgs e)
+    {
+        response.Response = e.Value?.ToString() ?? string.Empty;
+        await OnDraftEdited.InvokeAsync(response.Id);
     }
 
     private async Task OnCommentInputAsync(string draftId, ChangeEventArgs e)
