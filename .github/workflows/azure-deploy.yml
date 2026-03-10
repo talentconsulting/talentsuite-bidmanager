@@ -103,7 +103,13 @@ jobs:
             printf '%s' "$value"
           }
 
-          SqlPassword="$(normalize_secret "${SqlPassword:-}")"
+          sql_from_cfg="$(printf '%s' "${AZD_INITIAL_ENVIRONMENT_CONFIG:-}" | jq -r '.SqlPassword // empty | tostring' 2>/dev/null || true)"
+          if [ -n "$sql_from_cfg" ] && [ "$sql_from_cfg" != "null" ]; then
+            SqlPassword="$(normalize_secret "$sql_from_cfg")"
+          else
+            SqlPassword="$(normalize_secret "${SqlPassword:-}")"
+          fi
+          echo "SqlPassword source diagnostics: cfg_len=${#sql_from_cfg} normalized_len=${#SqlPassword}"
           KeycloakPassword="$(normalize_secret "${KeycloakPassword:-}")"
           KeycloakDbPassword="$(normalize_secret "${KeycloakDbPassword:-}")"
           InviteSmtpPassword="$(normalize_secret "${InviteSmtpPassword:-}")"
@@ -207,7 +213,13 @@ jobs:
             printf '%s' "$value"
           }
 
-          SqlPassword="$(normalize_secret "${SqlPassword:-}")"
+          sql_from_cfg="$(printf '%s' "${AZD_INITIAL_ENVIRONMENT_CONFIG:-}" | jq -r '.SqlPassword // empty | tostring' 2>/dev/null || true)"
+          if [ -n "$sql_from_cfg" ] && [ "$sql_from_cfg" != "null" ]; then
+            SqlPassword="$(normalize_secret "$sql_from_cfg")"
+          else
+            SqlPassword="$(normalize_secret "${SqlPassword:-}")"
+          fi
+          echo "SqlPassword source diagnostics (deploy): cfg_len=${#sql_from_cfg} normalized_len=${#SqlPassword}"
           KeycloakPassword="$(normalize_secret "${KeycloakPassword:-}")"
           KeycloakDbPassword="$(normalize_secret "${KeycloakDbPassword:-}")"
           InviteSmtpPassword="$(normalize_secret "${InviteSmtpPassword:-}")"
