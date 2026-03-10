@@ -69,6 +69,23 @@ var inviteSmtpPassword = builder.AddParameter(
                                 value: "unused",
                                 secret: false,
                                 publishValueAsDefault: true);
+var googleDriveSyncEnabled = builder.AddParameter(
+                                "GoogleDriveSyncEnabled",
+                                value: "false",
+                                publishValueAsDefault: true);
+var googleDriveSyncSourceContainerName = builder.AddParameter(
+                                "GoogleDriveSyncSourceContainerName",
+                                value: "bidlibrary",
+                                publishValueAsDefault: true);
+var googleDriveSyncDriveFolderId = builder.AddParameter(
+                                "GoogleDriveSyncDriveFolderId",
+                                value: "",
+                                publishValueAsDefault: true);
+var googleDriveSyncServiceAccountJsonBase64 = builder.AddParameter(
+                                "GoogleDriveSyncServiceAccountJsonBase64",
+                                value: "",
+                                secret: false,
+                                publishValueAsDefault: true);
 
 var keycloak = builder.AddKeycloak(
             "keycloak",
@@ -186,6 +203,10 @@ builder.AddProject<TalentSuite_Functions>("talentfunctions")
     .WithEnvironment("InviteEmail__SmtpEnableSsl", inviteSmtpEnableSsl)
     .WithEnvironment("InviteEmail__SmtpUsername", inviteSmtpUsername)
     .WithEnvironment("InviteEmail__SmtpPassword", inviteSmtpPassword)
+    .WithEnvironment("GoogleDriveSync__Enabled", googleDriveSyncEnabled)
+    .WithEnvironment("GoogleDriveSync__SourceContainerName", googleDriveSyncSourceContainerName)
+    .WithEnvironment("GoogleDriveSync__DriveFolderId", googleDriveSyncDriveFolderId)
+    .WithEnvironment("GoogleDriveSync__ServiceAccountJsonBase64", googleDriveSyncServiceAccountJsonBase64)
     .WaitFor(messaging)
     .WaitFor(server);
 

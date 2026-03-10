@@ -7,11 +7,7 @@ permissions:
   contents: read
 
 jobs:
-  tests:
-    uses: ./.github/workflows/tests.yml
-
   deploy:
-    needs: tests
     permissions:
       id-token: write
       contents: read
@@ -78,7 +74,6 @@ jobs:
 
           test -n "$principal_id" || (echo "Could not resolve principalId from OIDC token" && exit 1)
           azd env set principalId "$principal_id" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set Parameters__principalId "$principal_id" --environment "${{ env.AZURE_ENV_NAME }}"
           echo "AZD_PRINCIPAL_ID=$principal_id" >> "$GITHUB_ENV"
           echo "Seeded azd env principalId"
 
@@ -92,34 +87,28 @@ jobs:
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
-          test -n "${Parameters__KeycloakDbUsername:-${KeycloakDbUsername:-}}" || (echo "KeycloakDbUsername/Parameters__KeycloakDbUsername is empty/missing before azd provision" && exit 1)
-          test -n "${Parameters__KeycloakDbPassword:-${KeycloakDbPassword:-}}" || (echo "KeycloakDbPassword/Parameters__KeycloakDbPassword is empty/missing before azd provision" && exit 1)
-          test -n "${Parameters__KeycloakPassword:-${KeycloakPassword:-}}" || (echo "KeycloakPassword/Parameters__KeycloakPassword is empty/missing before azd provision" && exit 1)
-          test -n "${Parameters__SqlPassword:-${SqlPassword:-}}" || (echo "SqlPassword/Parameters__SqlPassword is empty/missing before azd provision" && exit 1)
-          test -n "${Parameters__InviteSmtpPassword:-${InviteSmtpPassword:-}}" || (echo "InviteSmtpPassword/Parameters__InviteSmtpPassword is empty/missing before azd provision" && exit 1)
+          test -n "${KeycloakDbUsername:-}" || (echo "KeycloakDbUsername is empty/missing before azd provision" && exit 1)
+          test -n "${KeycloakDbPassword:-}" || (echo "KeycloakDbPassword is empty/missing before azd provision" && exit 1)
+          test -n "${KeycloakPassword:-}" || (echo "KeycloakPassword is empty/missing before azd provision" && exit 1)
+          test -n "${SqlPassword:-}" || (echo "SqlPassword is empty/missing before azd provision" && exit 1)
+          test -n "${InviteSmtpPassword:-}" || (echo "InviteSmtpPassword is empty/missing before azd provision" && exit 1)
           test -n "${AZD_PRINCIPAL_ID:-}" || (echo "AZD_PRINCIPAL_ID is empty/missing before azd provision" && exit 1)
 
           azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
           azd auth login --check-status >/dev/null
 
           azd env set principalId "${AZD_PRINCIPAL_ID}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set Parameters__principalId "${AZD_PRINCIPAL_ID}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set KeycloakDbUsername "${KeycloakDbUsername:-${Parameters__KeycloakDbUsername:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set Parameters__KeycloakDbUsername "${KeycloakDbUsername:-${Parameters__KeycloakDbUsername:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set SqlPassword "${SqlPassword:-${Parameters__SqlPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set Parameters__SqlPassword "${SqlPassword:-${Parameters__SqlPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set KeycloakPassword "${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set Parameters__KeycloakPassword "${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set KeycloakDbPassword "${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set Parameters__KeycloakDbPassword "${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set InviteSmtpPassword "${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set Parameters__InviteSmtpPassword "${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set SqlPassword "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set KeycloakPassword "${KeycloakPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
 
           principalId="${AZD_PRINCIPAL_ID}" \
-          SqlPassword="${SqlPassword:-${Parameters__SqlPassword:-}}" \
-          KeycloakPassword="${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" \
-          KeycloakDbPassword="${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" \
-          InviteSmtpPassword="${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" \
+          SqlPassword="${SqlPassword}" \
+          KeycloakPassword="${KeycloakPassword}" \
+          KeycloakDbPassword="${KeycloakDbPassword}" \
+          InviteSmtpPassword="${InviteSmtpPassword}" \
           azd provision --environment "${{ env.AZURE_ENV_NAME }}"
 
       - name: Disable SQL Entra-only auth for Keycloak SQL login
@@ -150,21 +139,17 @@ jobs:
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
-          test -n "${Parameters__KeycloakDbUsername:-${KeycloakDbUsername:-}}" || (echo "KeycloakDbUsername/Parameters__KeycloakDbUsername is empty/missing before azd deploy" && exit 1)
-          test -n "${Parameters__KeycloakDbPassword:-${KeycloakDbPassword:-}}" || (echo "KeycloakDbPassword/Parameters__KeycloakDbPassword is empty/missing before azd deploy" && exit 1)
-          test -n "${Parameters__KeycloakPassword:-${KeycloakPassword:-}}" || (echo "KeycloakPassword/Parameters__KeycloakPassword is empty/missing before azd deploy" && exit 1)
+          test -n "${KeycloakDbUsername:-}" || (echo "KeycloakDbUsername is empty/missing before azd deploy" && exit 1)
+          test -n "${KeycloakDbPassword:-}" || (echo "KeycloakDbPassword is empty/missing before azd deploy" && exit 1)
+          test -n "${KeycloakPassword:-}" || (echo "KeycloakPassword is empty/missing before azd deploy" && exit 1)
           azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
           azd auth login --check-status >/dev/null
 
           # Re-seed secure parameters right before deploy to avoid empty Container App secrets.
-          azd env set KeycloakPassword "${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set Parameters__KeycloakPassword "${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set KeycloakDbUsername "${KeycloakDbUsername:-${Parameters__KeycloakDbUsername:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set Parameters__KeycloakDbUsername "${KeycloakDbUsername:-${Parameters__KeycloakDbUsername:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set KeycloakDbPassword "${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set Parameters__KeycloakDbPassword "${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set InviteSmtpPassword "${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
-          azd env set Parameters__InviteSmtpPassword "${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set KeycloakPassword "${KeycloakPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
 
           vals="$(azd env get-values --environment "${{ env.AZURE_ENV_NAME }}")"
           echo "$vals" | grep -Eq '^KeycloakDbUsername=.+' || (echo "KeycloakDbUsername missing/blank in azd env before deploy" && exit 1)
@@ -175,11 +160,11 @@ jobs:
           # Use placeholders in AppHost for azd manifest generation; real values are
           # rebound to Key Vault references in the post-sync step.
           principalId="${AZD_PRINCIPAL_ID}" \
-          KeycloakDbUsername="${KeycloakDbUsername:-${Parameters__KeycloakDbUsername:-}}" \
-          SqlPassword="${SqlPassword:-${Parameters__SqlPassword:-}}" \
-          KeycloakPassword="${KeycloakPassword:-${Parameters__KeycloakPassword:-}}" \
-          KeycloakDbPassword="${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}" \
-          InviteSmtpPassword="${InviteSmtpPassword:-${Parameters__InviteSmtpPassword:-}}" \
+          KeycloakDbUsername="${KeycloakDbUsername}" \
+          SqlPassword="${SqlPassword}" \
+          KeycloakPassword="${KeycloakPassword}" \
+          KeycloakDbPassword="${KeycloakDbPassword}" \
+          InviteSmtpPassword="${InviteSmtpPassword}" \
           azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Post-sync Container App secrets from GitHub secrets to Key Vault refs

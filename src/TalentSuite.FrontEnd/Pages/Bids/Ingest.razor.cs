@@ -78,10 +78,12 @@ public partial class Ingest : ComponentBase
         try
         {
             using var content = new MultipartFormDataContent();
-            
             await using var stream = File.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024);
+            await using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            var fileBytes = memory.ToArray();
 
-            var fileContent = new StreamContent(stream);
+            var fileContent = new ByteArrayContent(fileBytes);
             fileContent.Headers.ContentType =
                 new MediaTypeHeaderValue(File.ContentType);
 
@@ -108,6 +110,9 @@ public partial class Ingest : ComponentBase
 
             DraftState.LastUpload = upload;
             DraftState.SelectedStage = stage;
+            DraftState.SourceDocumentName = File.Name;
+            DraftState.SourceDocumentContentType = File.ContentType;
+            DraftState.SourceDocumentBytes = fileBytes;
 
             Nav.NavigateTo("/bids/ingestion-summary");
         }

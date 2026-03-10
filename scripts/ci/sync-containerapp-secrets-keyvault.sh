@@ -50,11 +50,11 @@ require_env "AZURE_ENV_NAME"
 require_env "AZURE_LOCATION"
 
 resource_group="rg-${AZURE_ENV_NAME}"
-keycloak_password="${KeycloakPassword:-${Parameters__KeycloakPassword:-}}"
-keycloak_db_password="${KeycloakDbPassword:-${Parameters__KeycloakDbPassword:-}}"
+keycloak_password="${KeycloakPassword:-}"
+keycloak_db_password="${KeycloakDbPassword:-}"
 
-test -n "$keycloak_password" || (echo "Missing KeycloakPassword/Parameters__KeycloakPassword" && exit 1)
-test -n "$keycloak_db_password" || (echo "Missing KeycloakDbPassword/Parameters__KeycloakDbPassword" && exit 1)
+test -n "$keycloak_password" || (echo "Missing KeycloakPassword" && exit 1)
+test -n "$keycloak_db_password" || (echo "Missing KeycloakDbPassword" && exit 1)
 
 echo "::add-mask::$keycloak_password"
 echo "::add-mask::$keycloak_db_password"

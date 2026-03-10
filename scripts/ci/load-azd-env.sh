@@ -42,8 +42,4 @@ while IFS= read -r line; do
   esac
 
   printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
-
-  if [ "${key#Parameters__}" = "$key" ] && ! grep -q "^Parameters__${key}=" "$azd_env_file"; then
-    printf 'Parameters__%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
-  fi
 done < "$azd_env_file"

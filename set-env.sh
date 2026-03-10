@@ -68,34 +68,15 @@ load_exports_from_json_object() {
   done < <(printf '%s' "$json" | jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"')
 }
 
-ensure_parameters_aliases() {
-  local key alias
-  while IFS='=' read -r key _; do
-    [ -n "$key" ] || continue
-    case "$key" in
-      Parameters__*) continue ;;
-      *)
-        if [ -z "${!key:-}" ]; then
-          continue
-        fi
-        alias="Parameters__${key}"
-        if [ -z "${!alias:-}" ]; then
-          export "$alias=${!key}"
-        fi
-        ;;
-    esac
-  done < <(env)
-}
-
 if [[ "$MODE" == "local" ]]; then
   load_local_env_file ".env.local"
   export TALENTSUITE_INFRA_MODE="local"
 
   # AppHost parameters (optional overrides)
-  export Parameters__AuthenticationEnabled="true"
-  export Parameters__UseInMemoryData="false"
-  export Parameters__SqlPassword="Your_strong_password123!"
-  export Parameters__KeycloakPassword="admin"
+  export AuthenticationEnabled="${AuthenticationEnabled:-true}"
+  export UseInMemoryData="${UseInMemoryData:-false}"
+  export SqlPassword="${SqlPassword:-Your_strong_password123!}"
+  export KeycloakPassword="${KeycloakPassword:-admin}"
 
   # Optional AI ingestion settings (leave blank to use in-memory ingestion fallback)
   export DocumentIntelligence__Endpoint="https://rgp-doc-intelligence.cognitiveservices.azure.com/"
@@ -129,23 +110,19 @@ elif [[ "$MODE" == "azure" ]]; then
     load_exports_from_azd_env_text < <(azd env get-values --environment "$AZURE_ENV_NAME")
   fi
 
-  ensure_parameters_aliases
-
   # Reasonable defaults if not present in supplied config.
-  export Parameters__AuthenticationEnabled="${Parameters__AuthenticationEnabled:-${AuthenticationEnabled:-true}}"
-  export Parameters__UseInMemoryData="${Parameters__UseInMemoryData:-${UseInMemoryData:-false}}"
-  export Parameters__SqlPassword="${Parameters__SqlPassword:-${SqlPassword:-}}"
-  export Parameters__KeycloakPassword="${Parameters__KeycloakPassword:-${KeycloakPassword:-}}"
-  export Parameters__InviteEmailEnabled="${Parameters__InviteEmailEnabled:-${InviteEmailEnabled:-false}}"
-  export Parameters__InviteFromEmail="${Parameters__InviteFromEmail:-${InviteFromEmail:-}}"
-  export Parameters__InviteSmtpHost="${Parameters__InviteSmtpHost:-${InviteSmtpHost:-}}"
-  export Parameters__InviteSmtpPort="${Parameters__InviteSmtpPort:-${InviteSmtpPort:-587}}"
-  export Parameters__InviteSmtpEnableSsl="${Parameters__InviteSmtpEnableSsl:-${InviteSmtpEnableSsl:-true}}"
-  export Parameters__InviteSmtpUsername="${Parameters__InviteSmtpUsername:-${InviteSmtpUsername:-}}"
-  export Parameters__InviteSmtpPassword="${Parameters__InviteSmtpPassword:-${InviteSmtpPassword:-}}"
+  export AuthenticationEnabled="${AuthenticationEnabled:-true}"
+  export UseInMemoryData="${UseInMemoryData:-false}"
+  export InviteEmailEnabled="${InviteEmailEnabled:-false}"
+  export InviteFromEmail="${InviteFromEmail:-}"
+  export InviteSmtpHost="${InviteSmtpHost:-}"
+  export InviteSmtpPort="${InviteSmtpPort:-587}"
+  export InviteSmtpEnableSsl="${InviteSmtpEnableSsl:-true}"
+  export InviteSmtpUsername="${InviteSmtpUsername:-}"
+  export InviteSmtpPassword="${InviteSmtpPassword:-}"
 
-  test -n "${Parameters__KeycloakDbUsername:-${KeycloakDbUsername:-}}" || fail "Missing Keycloak DB username (Parameters__KeycloakDbUsername or KeycloakDbUsername)."
-  test -n "${Parameters__KeycloakDbPassword:-${KeycloakDbPassword:-}}" || fail "Missing Keycloak DB password (Parameters__KeycloakDbPassword or KeycloakDbPassword)."
+  test -n "${KeycloakDbUsername:-}" || fail "Missing KeycloakDbUsername."
+  test -n "${KeycloakDbPassword:-}" || fail "Missing KeycloakDbPassword."
   test -n "${AZURE_SUBSCRIPTION_ID:-}" || fail "Missing AZURE_SUBSCRIPTION_ID. Set it in .env.azure.local or your shell environment."
 
   echo "Azure mode env vars set from configuration."

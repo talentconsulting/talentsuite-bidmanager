@@ -1,7 +1,9 @@
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using TalentSuite.FrontEnd.Mappers;
+using TalentSuite.FrontEnd.Services;
 using TalentSuite.Shared.Bids;
 
 namespace TalentSuite.FrontEnd.Pages.Bids;
@@ -11,6 +13,7 @@ public partial class IngestSummary : ComponentBase
     [Inject] public NavigationManager Nav { get; set; } = default!;
     [Inject] public HttpClient Http { get; set; } = default!;
     [Inject] public Services.BidState DraftState { get; set; } = default!;
+    [Inject] public GlobalBannerState BannerState { get; set; } = default!;
     [Inject] public IJSRuntime JS { get; set; } = default!;
 
     [Inject] public BidMapper Mapper { get; set; } = default!;
@@ -106,7 +109,16 @@ public partial class IngestSummary : ComponentBase
                 return;
             }
 
-            Nav.NavigateTo("/bids/manage/" + (await res.Content.ReadFromJsonAsync<CreatedId>()).Result);
+            var created = await res.Content.ReadFromJsonAsync<CreatedId>();
+            if (created is null || string.IsNullOrWhiteSpace(created.Result))
+            {
+                ErrorText = "Bid was created but no bid id was returned.";
+                return;
+            }
+
+            await TryUploadSourceDocumentAsync(created.Result);
+            DraftState.Clear();
+            Nav.NavigateTo("/bids/manage/" + created.Result);
         }
         catch (Exception ex)
         {
@@ -121,6 +133,34 @@ public partial class IngestSummary : ComponentBase
     private class CreatedId
     {
         public string Result { get; set; }
+    }
+
+    private async Task TryUploadSourceDocumentAsync(string bidId)
+    {
+        var fileBytes = DraftState.SourceDocumentBytes;
+        if (fileBytes is null || fileBytes.Length == 0)
+            return;
+
+        var fileName = string.IsNullOrWhiteSpace(DraftState.SourceDocumentName)
+            ? "source-document.docx"
+            : DraftState.SourceDocumentName!;
+        var contentType = string.IsNullOrWhiteSpace(DraftState.SourceDocumentContentType)
+            ? "application/octet-stream"
+            : DraftState.SourceDocumentContentType!;
+
+        using var content = new MultipartFormDataContent();
+        using var fileContent = new ByteArrayContent(fileBytes);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        content.Add(fileContent, "file", fileName);
+
+        var uploadResponse = await Http.PostAsync($"api/bids/{Uri.EscapeDataString(bidId)}/files", content);
+        if (!uploadResponse.IsSuccessStatusCode)
+        {
+            _ = BannerState.ShowAsync(
+                "Bid created, but the original uploaded file could not be attached automatically.",
+                "alert-warning",
+                durationMs: 5000);
+        }
     }
 
     private void ReindexQuestions()

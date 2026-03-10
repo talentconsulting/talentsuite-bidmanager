@@ -18,57 +18,41 @@ public static class Extensions
 
             options.FrontendBaseUrl = ResolveConfigValue(configuration,
                 $"{prefix}FrontendBaseUrl",
-                $"{EmailOptions.SectionName}__FrontendBaseUrl",
-                "Parameters:InviteFrontendBaseUrl",
-                "Parameters__InviteFrontendBaseUrl") ?? options.FrontendBaseUrl;
+                $"{EmailOptions.SectionName}__FrontendBaseUrl") ?? options.FrontendBaseUrl;
 
             options.FromEmail = ResolveConfigValue(configuration,
                 $"{prefix}FromEmail",
-                $"{EmailOptions.SectionName}__FromEmail",
-                "Parameters:InviteFromEmail",
-                "Parameters__InviteFromEmail") ?? options.FromEmail;
+                $"{EmailOptions.SectionName}__FromEmail") ?? options.FromEmail;
 
             options.FromDisplayName = ResolveConfigValue(configuration,
                 $"{prefix}FromDisplayName",
-                $"{EmailOptions.SectionName}__FromDisplayName",
-                "Parameters:InviteFromDisplayName",
-                "Parameters__InviteFromDisplayName") ?? options.FromDisplayName;
+                $"{EmailOptions.SectionName}__FromDisplayName") ?? options.FromDisplayName;
 
             options.SmtpHost = ResolveConfigValue(configuration,
                 $"{prefix}SmtpHost",
-                $"{EmailOptions.SectionName}__SmtpHost",
-                "Parameters:InviteSmtpHost",
-                "Parameters__InviteSmtpHost") ?? options.SmtpHost;
+                $"{EmailOptions.SectionName}__SmtpHost") ?? options.SmtpHost;
 
             var smtpPortValue = ResolveConfigValue(configuration,
                 $"{prefix}SmtpPort",
-                $"{EmailOptions.SectionName}__SmtpPort",
-                "Parameters:InviteSmtpPort",
-                "Parameters__InviteSmtpPort");
+                $"{EmailOptions.SectionName}__SmtpPort");
             options.SmtpPort = int.TryParse(smtpPortValue, out var port)
                 ? port
                 : options.SmtpPort;
 
             var smtpEnableSslValue = ResolveConfigValue(configuration,
                 $"{prefix}SmtpEnableSsl",
-                $"{EmailOptions.SectionName}__SmtpEnableSsl",
-                "Parameters:InviteSmtpEnableSsl",
-                "Parameters__InviteSmtpEnableSsl");
+                $"{EmailOptions.SectionName}__SmtpEnableSsl");
             options.SmtpEnableSsl = bool.TryParse(smtpEnableSslValue, out var ssl)
                 ? ssl
                 : options.SmtpEnableSsl;
 
             options.SmtpUsername = ResolveConfigValue(configuration,
                 $"{prefix}SmtpUsername",
-                $"{EmailOptions.SectionName}__SmtpUsername",
-                "Parameters:InviteSmtpUsername",
-                "Parameters__InviteSmtpUsername") ?? options.SmtpUsername;
+                $"{EmailOptions.SectionName}__SmtpUsername") ?? options.SmtpUsername;
 
             options.SmtpPassword = ResolveConfigValue(configuration,
                 $"{prefix}SmtpPassword",
-                $"{EmailOptions.SectionName}__SmtpPassword",
-                "Parameters:InviteSmtpPassword",
-                "Parameters__InviteSmtpPassword") ?? options.SmtpPassword;
+                $"{EmailOptions.SectionName}__SmtpPassword") ?? options.SmtpPassword;
         });
 
         return services;

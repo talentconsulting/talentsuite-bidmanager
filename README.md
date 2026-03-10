@@ -111,6 +111,37 @@ Propagated runtime env vars include:
 - `AzureServiceBus__InviteUserEntityName`
 - `AzureServiceBus__BidSubmittedEntityName`
 
+## Canonical Config Keys
+Use plain keys as the single config format across:
+- `AZD_INITIAL_ENVIRONMENT_CONFIG` (GitHub secret)
+- local `.env.azure.local` / `.env.local`
+- `dotnet user-secrets --project TalentSuite.AppHost`
+
+```json
+{
+  "AuthenticationEnabled": "true",
+  "UseInMemoryData": "false",
+
+  "SqlPassword": "your-sql-admin-password",
+  "KeycloakPassword": "your-keycloak-admin-password",
+  "KeycloakDbUsername": "keycloak_admin",
+  "KeycloakDbPassword": "your-keycloak-db-password",
+
+  "InviteEmailEnabled": "true",
+  "InviteFromEmail": "no-reply@talentconsulting.uk",
+  "InviteSmtpHost": "smtp.office365.com",
+  "InviteSmtpPort": "587",
+  "InviteSmtpEnableSsl": "true",
+  "InviteSmtpUsername": "smtp-user",
+  "InviteSmtpPassword": "your-smtp-password",
+
+  "GoogleDriveSyncEnabled": "true",
+  "GoogleDriveSyncSourceContainerName": "bidlibrary",
+  "GoogleDriveSyncDriveFolderId": "your-google-drive-folder-id",
+  "GoogleDriveSyncServiceAccountJsonBase64": "BASE64_OF_FULL_SERVICE_ACCOUNT_JSON"
+}
+```
+
 ## Email Setup (Invite Emails)
 Invite emails are sent by `src/TalentSuite.Functions` using SMTP.
 
@@ -130,13 +161,13 @@ Optional settings:
 Recommended local setup (Aspire + user secrets):
 
 ```bash
-dotnet user-secrets --project TalentSuite.AppHost set "Parameters:InviteEmailEnabled" "true"
-dotnet user-secrets --project TalentSuite.AppHost set "Parameters:InviteFromEmail" "no-reply@yourdomain.com"
-dotnet user-secrets --project TalentSuite.AppHost set "Parameters:InviteSmtpHost" "smtp.yourprovider.com"
-dotnet user-secrets --project TalentSuite.AppHost set "Parameters:InviteSmtpPort" "587"
-dotnet user-secrets --project TalentSuite.AppHost set "Parameters:InviteSmtpEnableSsl" "true"
-dotnet user-secrets --project TalentSuite.AppHost set "Parameters:InviteSmtpUsername" "smtp-username"
-dotnet user-secrets --project TalentSuite.AppHost set "Parameters:InviteSmtpPassword" "smtp-password"
+dotnet user-secrets --project TalentSuite.AppHost set "InviteEmailEnabled" "true"
+dotnet user-secrets --project TalentSuite.AppHost set "InviteFromEmail" "no-reply@yourdomain.com"
+dotnet user-secrets --project TalentSuite.AppHost set "InviteSmtpHost" "smtp.yourprovider.com"
+dotnet user-secrets --project TalentSuite.AppHost set "InviteSmtpPort" "587"
+dotnet user-secrets --project TalentSuite.AppHost set "InviteSmtpEnableSsl" "true"
+dotnet user-secrets --project TalentSuite.AppHost set "InviteSmtpUsername" "smtp-username"
+dotnet user-secrets --project TalentSuite.AppHost set "InviteSmtpPassword" "smtp-password"
 ```
 
 Then start locally:
