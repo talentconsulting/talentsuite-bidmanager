@@ -27,10 +27,6 @@ jobs:
       TALENTSUITE_INFRA_MODE: "azure"
 
     steps:
-      - name: Print Azure subscription id
-        run: |
-          echo "AZURE_SUBSCRIPTION_ID=$AZURE_SUBSCRIPTION_ID"
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -76,6 +72,10 @@ jobs:
           azd env set principalId "$principal_id" --environment "${{ env.AZURE_ENV_NAME }}"
           echo "AZD_PRINCIPAL_ID=$principal_id" >> "$GITHUB_ENV"
           echo "Seeded azd env principalId"
+
+      - name: Ensure required Azure resource providers are registered
+        run: |
+          az provider register --namespace Microsoft.KeyVault --wait
 
       - name: Export azd environment values for later steps
         working-directory: ${{ env.AZD_WORKING_DIR }}

@@ -35,11 +35,8 @@ while IFS= read -r line; do
 
   [ -n "$key" ] || continue
 
-  case "$key" in
-    *Password*|*Secret*|*Token*|*PASSWORD*|*SECRET*|*TOKEN*)
-      [ -n "$value" ] && echo "::add-mask::$value"
-      ;;
-  esac
+  # Mask every imported value to avoid accidental exposure in later step env dumps.
+  [ -n "$value" ] && echo "::add-mask::$value"
 
   printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
 done < "$azd_env_file"

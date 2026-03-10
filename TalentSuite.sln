@@ -27,6 +27,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ops", "ops", "{546A8A4D-408
 		scripts\ci\load-azd-env.sh = scripts\ci\load-azd-env.sh
 		scripts\run-local-all.sh = scripts\run-local-all.sh
 		.github\workflows\tests.yml = .github\workflows\tests.yml
+		scripts\ci\bootstrap-rbac.sh = scripts\ci\bootstrap-rbac.sh
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.Server.Tests", "src\TalentSuite.Server.Tests\TalentSuite.Server.Tests.csproj", "{4E49D6B9-7833-4E61-B4F2-DFBA519CF702}"
