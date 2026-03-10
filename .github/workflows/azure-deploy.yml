@@ -88,6 +88,25 @@ jobs:
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
+          normalize_secret() {
+            local value="$1"
+            value="$(printf '%s' "$value" | tr -d '\r')"
+            value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+            if [ "${#value}" -ge 2 ] && [ "${value#\"}" != "$value" ] && [ "${value%\"}" != "$value" ]; then
+              value="${value#\"}"; value="${value%\"}"
+            elif [ "${#value}" -ge 2 ] && [ "${value#\'}" != "$value" ] && [ "${value%\'}" != "$value" ]; then
+              value="${value#\'}"; value="${value%\'}"
+            fi
+            if [ "${#value}" -ge 4 ] && [ "${value#\\\"}" != "$value" ] && [ "${value%\\\"}" != "$value" ]; then
+              value="${value#\\\"}"; value="${value%\\\"}"
+            fi
+            printf '%s' "$value"
+          }
+
+          SqlPassword="$(normalize_secret "${SqlPassword:-}")"
+          KeycloakPassword="$(normalize_secret "${KeycloakPassword:-}")"
+          KeycloakDbPassword="$(normalize_secret "${KeycloakDbPassword:-}")"
+          InviteSmtpPassword="$(normalize_secret "${InviteSmtpPassword:-}")"
           test -n "${KeycloakDbUsername:-}" || (echo "KeycloakDbUsername is empty/missing before azd provision" && exit 1)
           test -n "${KeycloakDbPassword:-}" || (echo "KeycloakDbPassword is empty/missing before azd provision" && exit 1)
           test -n "${KeycloakPassword:-}" || (echo "KeycloakPassword is empty/missing before azd provision" && exit 1)
@@ -173,6 +192,25 @@ jobs:
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
+          normalize_secret() {
+            local value="$1"
+            value="$(printf '%s' "$value" | tr -d '\r')"
+            value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+            if [ "${#value}" -ge 2 ] && [ "${value#\"}" != "$value" ] && [ "${value%\"}" != "$value" ]; then
+              value="${value#\"}"; value="${value%\"}"
+            elif [ "${#value}" -ge 2 ] && [ "${value#\'}" != "$value" ] && [ "${value%\'}" != "$value" ]; then
+              value="${value#\'}"; value="${value%\'}"
+            fi
+            if [ "${#value}" -ge 4 ] && [ "${value#\\\"}" != "$value" ] && [ "${value%\\\"}" != "$value" ]; then
+              value="${value#\\\"}"; value="${value%\\\"}"
+            fi
+            printf '%s' "$value"
+          }
+
+          SqlPassword="$(normalize_secret "${SqlPassword:-}")"
+          KeycloakPassword="$(normalize_secret "${KeycloakPassword:-}")"
+          KeycloakDbPassword="$(normalize_secret "${KeycloakDbPassword:-}")"
+          InviteSmtpPassword="$(normalize_secret "${InviteSmtpPassword:-}")"
           test -n "${KeycloakDbUsername:-}" || (echo "KeycloakDbUsername is empty/missing before azd deploy" && exit 1)
           test -n "${KeycloakDbPassword:-}" || (echo "KeycloakDbPassword is empty/missing before azd deploy" && exit 1)
           test -n "${KeycloakPassword:-}" || (echo "KeycloakPassword is empty/missing before azd deploy" && exit 1)
