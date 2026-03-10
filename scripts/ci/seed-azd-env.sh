@@ -62,6 +62,12 @@ normalize_secret_value() {
     value="${value%\'}"
   fi
 
+  # Handle escaped-quote wrappers like \"secret\".
+  if [ "${#value}" -ge 4 ] && [ "${value#\\\"}" != "$value" ] && [ "${value%\\\"}" != "$value" ]; then
+    value="${value#\\\"}"
+    value="${value%\\\"}"
+  fi
+
   echo "$value"
 }
 

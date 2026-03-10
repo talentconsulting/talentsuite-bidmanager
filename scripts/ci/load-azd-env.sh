@@ -13,6 +13,29 @@ require_env() {
 require_env "AZURE_ENV_NAME"
 require_env "GITHUB_ENV"
 
+normalize_env_value() {
+  local value="$1"
+
+  value="$(printf '%s' "$value" | tr -d '\r')"
+
+  # Strip one pair of matching surrounding quotes.
+  if [ "${#value}" -ge 2 ] && [ "${value#\"}" != "$value" ] && [ "${value%\"}" != "$value" ]; then
+    value="${value#\"}"
+    value="${value%\"}"
+  elif [ "${#value}" -ge 2 ] && [ "${value#\'}" != "$value" ] && [ "${value%\'}" != "$value" ]; then
+    value="${value#\'}"
+    value="${value%\'}"
+  fi
+
+  # Handle escaped-quote wrappers like \"secret\".
+  if [ "${#value}" -ge 4 ] && [ "${value#\\\"}" != "$value" ] && [ "${value%\\\"}" != "$value" ]; then
+    value="${value#\\\"}"
+    value="${value%\\\"}"
+  fi
+
+  echo "$value"
+}
+
 azd_env_file="$(mktemp)"
 azd env get-values --environment "$AZURE_ENV_NAME" > "$azd_env_file"
 
@@ -27,11 +50,7 @@ while IFS= read -r line; do
 
   key="$(printf '%s' "$key" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
   value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-
-  if [ "${#value}" -ge 2 ] && [ "${value#\"}" != "$value" ] && [ "${value%\"}" != "$value" ]; then
-    value="${value#\"}"
-    value="${value%\"}"
-  fi
+  value="$(normalize_env_value "$value")"
 
   [ -n "$key" ] || continue
 
