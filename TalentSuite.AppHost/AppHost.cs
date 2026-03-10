@@ -158,7 +158,8 @@ else
         {
             var sqlServer = infra.GetProvisionableResources().OfType<SqlServer>().Single();
             // Use a deterministic SQL admin login to avoid invalid auto-generated values.
-            sqlServer.AdministratorLogin = "sqladminrgp";
+            // Keep it neutral so common passwords are less likely to include login-derived fragments.
+            sqlServer.AdministratorLogin = "tsinfrausr";
             if (sqlServer.Administrators is not null)
             {
                 sqlServer.Administrators.IsAzureADOnlyAuthenticationEnabled = false;

@@ -40,7 +40,7 @@ jobs:
       - name: Setup azd
         uses: Azure/setup-azd@v2
         with:
-          version: 1.23.6
+          version: 1.23.8
 
       - name: Validate Azure login inputs
         run: |
@@ -109,12 +109,24 @@ jobs:
           vals_for_diag="$(azd env get-values --environment "${{ env.AZURE_ENV_NAME }}")"
           sql_pw_env="$(printf '%s\n' "$vals_for_diag" | sed -n 's/^SqlPassword=//p' | head -n 1)"
           pw_env="$(printf '%s\n' "$vals_for_diag" | sed -n 's/^Password=//p' | head -n 1)"
+          if [ "${#sql_pw_env}" -ge 2 ] && [ "${sql_pw_env#\"}" != "$sql_pw_env" ] && [ "${sql_pw_env%\"}" != "$sql_pw_env" ]; then
+            sql_pw_env="${sql_pw_env#\"}"; sql_pw_env="${sql_pw_env%\"}"
+          fi
+          if [ "${#pw_env}" -ge 2 ] && [ "${pw_env#\"}" != "$pw_env" ] && [ "${pw_env%\"}" != "$pw_env" ]; then
+            pw_env="${pw_env#\"}"; pw_env="${pw_env%\"}"
+          fi
           sql_pw_len="${#sql_pw_env}"
           pw_len_env="${#pw_env}"
           sql_pw_sha="$(printf '%s' "$sql_pw_env" | sha256sum | awk '{print $1}')"
           pw_sha="$(printf '%s' "$pw_env" | sha256sum | awk '{print $1}')"
+          input_pw_sha="$(printf '%s' "${SqlPassword}" | sha256sum | awk '{print $1}')"
           echo "SqlPassword env diagnostics: len=${sql_pw_len} sha256=${sql_pw_sha}"
           echo "Password env diagnostics: len=${pw_len_env} sha256=${pw_sha}"
+          echo "Input SqlPassword diagnostics: len=${#SqlPassword} sha256=${input_pw_sha}"
+          if [ "$sql_pw_sha" != "$input_pw_sha" ] || [ "$pw_sha" != "$input_pw_sha" ]; then
+            echo "SqlPassword value differs between pipeline input and azd environment."
+            exit 1
+          fi
           if [ "$sql_pw_sha" != "$pw_sha" ]; then
             echo "SqlPassword and Password in azd env do not match."
             exit 1
@@ -127,7 +139,7 @@ jobs:
           has_number="false"; [[ "$password_to_use" =~ [0-9] ]] && has_number="true"
           has_special="false"; [[ "$password_to_use" =~ [^A-Za-z0-9] ]] && has_special="true"
           has_whitespace="false"; [[ "$password_to_use" =~ [[:space:]] ]] && has_whitespace="true"
-          contains_login="false"; [[ "${password_to_use,,}" == *"sqladminrgp"* ]] && contains_login="true"
+          contains_login="false"; [[ "${password_to_use,,}" == *"tsinfrausr"* ]] && contains_login="true"
           contains_word_password="false"; [[ "${password_to_use,,}" == *"password"* ]] && contains_word_password="true"
           echo "SqlPassword diagnostics: length=${pw_len}, upper=${has_upper}, lower=${has_lower}, number=${has_number}, special=${has_special}, whitespace=${has_whitespace}, contains_login=${contains_login}, contains_word_password=${contains_word_password}"
 
@@ -188,12 +200,24 @@ jobs:
 
           sql_pw_env="$(printf '%s\n' "$vals" | sed -n 's/^SqlPassword=//p' | head -n 1)"
           pw_env="$(printf '%s\n' "$vals" | sed -n 's/^Password=//p' | head -n 1)"
+          if [ "${#sql_pw_env}" -ge 2 ] && [ "${sql_pw_env#\"}" != "$sql_pw_env" ] && [ "${sql_pw_env%\"}" != "$sql_pw_env" ]; then
+            sql_pw_env="${sql_pw_env#\"}"; sql_pw_env="${sql_pw_env%\"}"
+          fi
+          if [ "${#pw_env}" -ge 2 ] && [ "${pw_env#\"}" != "$pw_env" ] && [ "${pw_env%\"}" != "$pw_env" ]; then
+            pw_env="${pw_env#\"}"; pw_env="${pw_env%\"}"
+          fi
           sql_pw_len="${#sql_pw_env}"
           pw_len_env="${#pw_env}"
           sql_pw_sha="$(printf '%s' "$sql_pw_env" | sha256sum | awk '{print $1}')"
           pw_sha="$(printf '%s' "$pw_env" | sha256sum | awk '{print $1}')"
+          input_pw_sha="$(printf '%s' "${SqlPassword}" | sha256sum | awk '{print $1}')"
           echo "SqlPassword env diagnostics (deploy): len=${sql_pw_len} sha256=${sql_pw_sha}"
           echo "Password env diagnostics (deploy): len=${pw_len_env} sha256=${pw_sha}"
+          echo "Input SqlPassword diagnostics (deploy): len=${#SqlPassword} sha256=${input_pw_sha}"
+          if [ "$sql_pw_sha" != "$input_pw_sha" ] || [ "$pw_sha" != "$input_pw_sha" ]; then
+            echo "SqlPassword value differs between pipeline input and azd environment before deploy."
+            exit 1
+          fi
           if [ "$sql_pw_sha" != "$pw_sha" ]; then
             echo "SqlPassword and Password in azd env do not match before deploy."
             exit 1
@@ -206,7 +230,7 @@ jobs:
           has_number="false"; [[ "$password_to_use" =~ [0-9] ]] && has_number="true"
           has_special="false"; [[ "$password_to_use" =~ [^A-Za-z0-9] ]] && has_special="true"
           has_whitespace="false"; [[ "$password_to_use" =~ [[:space:]] ]] && has_whitespace="true"
-          contains_login="false"; [[ "${password_to_use,,}" == *"sqladminrgp"* ]] && contains_login="true"
+          contains_login="false"; [[ "${password_to_use,,}" == *"tsinfrausr"* ]] && contains_login="true"
           contains_word_password="false"; [[ "${password_to_use,,}" == *"password"* ]] && contains_word_password="true"
           echo "SqlPassword diagnostics (deploy): length=${pw_len}, upper=${has_upper}, lower=${has_lower}, number=${has_number}, special=${has_special}, whitespace=${has_whitespace}, contains_login=${contains_login}, contains_word_password=${contains_word_password}"
 
