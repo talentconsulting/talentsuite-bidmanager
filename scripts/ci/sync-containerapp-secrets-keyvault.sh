@@ -52,6 +52,7 @@ require_env "AZURE_LOCATION"
 resource_group="rg-${AZURE_ENV_NAME}"
 keycloak_password="${KeycloakPassword:-}"
 keycloak_db_password="${KeycloakDbPassword:-}"
+configured_key_vault_name="${KeyVaultName:-}"
 
 test -n "$keycloak_password" || (echo "Missing KeycloakPassword" && exit 1)
 test -n "$keycloak_db_password" || (echo "Missing KeycloakDbPassword" && exit 1)
@@ -59,20 +60,41 @@ test -n "$keycloak_db_password" || (echo "Missing KeycloakDbPassword" && exit 1)
 echo "::add-mask::$keycloak_password"
 echo "::add-mask::$keycloak_db_password"
 
-key_vault_name="$(az keyvault list --resource-group "$resource_group" --query '[0].name' -o tsv 2>/dev/null || true)"
+if [ -n "$configured_key_vault_name" ]; then
+  key_vault_name="$configured_key_vault_name"
+  if ! [[ "$key_vault_name" =~ ^[a-z0-9-]{3,24}$ ]]; then
+    echo "KeyVaultName must be 3-24 chars and contain only lowercase letters, numbers, or hyphens."
+    exit 1
+  fi
 
-if [ -z "$key_vault_name" ]; then
-  rg_hash="$(printf '%s' "$resource_group" | sha256sum | cut -c1-8)"
-  key_vault_name="$(printf 'kv%s%s' "$AZURE_ENV_NAME" "$rg_hash" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9' | cut -c1-24)"
-  az keyvault create \
-    --name "$key_vault_name" \
-    --resource-group "$resource_group" \
-    --location "$AZURE_LOCATION" \
-    --enable-rbac-authorization true >/dev/null
+  existing_kv_rg="$(az keyvault show --name "$key_vault_name" --query resourceGroup -o tsv 2>/dev/null || true)"
+  if [ -z "$existing_kv_rg" ]; then
+    az keyvault create \
+      --name "$key_vault_name" \
+      --resource-group "$resource_group" \
+      --location "$AZURE_LOCATION" \
+      --enable-rbac-authorization true >/dev/null
+  elif [ "$existing_kv_rg" != "$resource_group" ]; then
+    echo "Configured KeyVaultName '$key_vault_name' already exists in resource group '$existing_kv_rg'."
+    echo "Use a unique name or a vault in '$resource_group'."
+    exit 1
+  fi
+else
+  key_vault_name="$(az keyvault list --resource-group "$resource_group" --query '[0].name' -o tsv 2>/dev/null || true)"
+
+  if [ -z "$key_vault_name" ]; then
+    rg_hash="$(printf '%s' "$resource_group" | sha256sum | cut -c1-8)"
+    key_vault_name="$(printf 'kv%s%s' "$AZURE_ENV_NAME" "$rg_hash" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9' | cut -c1-24)"
+    az keyvault create \
+      --name "$key_vault_name" \
+      --resource-group "$resource_group" \
+      --location "$AZURE_LOCATION" \
+      --enable-rbac-authorization true >/dev/null
+  fi
 fi
 
-key_vault_id="$(az keyvault show --name "$key_vault_name" --resource-group "$resource_group" --query id -o tsv)"
-key_vault_uri="$(az keyvault show --name "$key_vault_name" --resource-group "$resource_group" --query properties.vaultUri -o tsv)"
+key_vault_id="$(az keyvault show --name "$key_vault_name" --query id -o tsv)"
+key_vault_uri="$(az keyvault show --name "$key_vault_name" --query properties.vaultUri -o tsv)"
 
 # Ensure the current deployment principal has data-plane permission to write Key Vault secrets.
 deployer_principal_id="${AZD_PRINCIPAL_ID:-}"

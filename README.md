@@ -138,9 +138,12 @@ Use plain keys as the single config format across:
   "GoogleDriveSyncEnabled": "true",
   "GoogleDriveSyncSourceContainerName": "bidlibrary",
   "GoogleDriveSyncDriveFolderId": "your-google-drive-folder-id",
-  "GoogleDriveSyncServiceAccountJsonBase64": "BASE64_OF_FULL_SERVICE_ACCOUNT_JSON"
+  "GoogleDriveSyncServiceAccountJsonBase64": "BASE64_OF_FULL_SERVICE_ACCOUNT_JSON",
+  "KeyVaultName": "kv-talentsuite-dev"
 }
 ```
+
+`KeyVaultName` is optional. If set, CI uses that exact vault name (must be 3-24 chars, lowercase letters/numbers/hyphens).
 
 ## Email Setup (Invite Emails)
 Invite emails are sent by `src/TalentSuite.Functions` using SMTP.
