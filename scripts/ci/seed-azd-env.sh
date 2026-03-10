@@ -80,6 +80,7 @@ test -n "$use_in_memory_data" || (echo "UseInMemoryData missing in AZD_INITIAL_E
 test -n "$keycloak_client_id" || (echo "KeycloakClientId missing in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
 test -n "$keycloak_db_username" || (echo "KeycloakDbUsername missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
 [ "$keycloak_db_username" != "sa" ] || (echo "KeycloakDbUsername must not be 'sa' for Azure SQL" && exit 1)
+[[ ! "$keycloak_db_username" =~ ^[Cc]loud[Ss][Aa] ]] || (echo "KeycloakDbUsername must not start with 'CloudSA' (invalid for Azure SQL login)." && exit 1)
 is_placeholder_value "$keycloak_db_username" && (echo "KeycloakDbUsername appears to be a placeholder value" && exit 1)
 is_placeholder_value "$keycloak_client_id" && (echo "KeycloakClientId appears to be a placeholder value" && exit 1)
 

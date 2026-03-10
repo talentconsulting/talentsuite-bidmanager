@@ -23,7 +23,10 @@ az group update \
   --set "tags.project=$project_tag" "tags.owner=$owner_tag" \
   >/dev/null
 
-resource_ids="$(az resource list --resource-group "$resource_group" --query '[].id' -o tsv)"
+resource_ids="$(az resource list \
+  --resource-group "$resource_group" \
+  --query "[?starts_with(id, '/subscriptions/') && !contains(type, 'operationResults')].id" \
+  -o tsv)"
 if [ -z "$resource_ids" ]; then
   echo "No resources found in $resource_group"
   exit 0
@@ -32,11 +35,13 @@ fi
 echo "Applying tags to resources in $resource_group"
 while IFS= read -r resource_id; do
   [ -n "$resource_id" ] || continue
-  az tag update \
+  if ! az tag update \
     --resource-id "$resource_id" \
     --operation Merge \
     --tags project="$project_tag" owner="$owner_tag" \
-    >/dev/null
+    >/dev/null 2>&1; then
+    echo "Warning: could not tag resource '$resource_id'; continuing."
+  fi
 done <<< "$resource_ids"
 
 echo "Tagging complete."
