@@ -106,10 +106,21 @@ if [[ "$sql_password" =~ [[:space:]] ]]; then
   echo "SqlPassword must not contain whitespace."
   exit 1
 fi
+if [[ "$sql_password" =~ ^\".*\"$ ]] || [[ "$sql_password" =~ ^\'.*\'$ ]]; then
+  echo "SqlPassword appears to be wrapped in quotes. Remove surrounding quotes from the value."
+  exit 1
+fi
 if [[ "${sql_password,,}" == *"${sql_admin_login,,}"* ]]; then
   echo "SqlPassword must not contain the SQL admin login name ('$sql_admin_login')."
   exit 1
 fi
+# SQL password validation can reject passwords containing fragments of the login name.
+for login_fragment in "sql" "admin" "rgp"; do
+  if [[ "${sql_password,,}" == *"${login_fragment}"* ]]; then
+    echo "SqlPassword must not contain login-derived fragment '${login_fragment}'."
+    exit 1
+  fi
+done
 
 test -n "$invite_smtp_username" || (echo "InviteSmtpUsername missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
 test -n "$invite_smtp_password" || (echo "InviteSmtpPassword missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
