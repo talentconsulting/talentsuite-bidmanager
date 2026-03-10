@@ -106,6 +106,20 @@ jobs:
           azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
 
+          vals_for_diag="$(azd env get-values --environment "${{ env.AZURE_ENV_NAME }}")"
+          sql_pw_env="$(printf '%s\n' "$vals_for_diag" | sed -n 's/^SqlPassword=//p' | head -n 1)"
+          pw_env="$(printf '%s\n' "$vals_for_diag" | sed -n 's/^Password=//p' | head -n 1)"
+          sql_pw_len="${#sql_pw_env}"
+          pw_len_env="${#pw_env}"
+          sql_pw_sha="$(printf '%s' "$sql_pw_env" | sha256sum | awk '{print $1}')"
+          pw_sha="$(printf '%s' "$pw_env" | sha256sum | awk '{print $1}')"
+          echo "SqlPassword env diagnostics: len=${sql_pw_len} sha256=${sql_pw_sha}"
+          echo "Password env diagnostics: len=${pw_len_env} sha256=${pw_sha}"
+          if [ "$sql_pw_sha" != "$pw_sha" ]; then
+            echo "SqlPassword and Password in azd env do not match."
+            exit 1
+          fi
+
           password_to_use="${SqlPassword}"
           pw_len="${#password_to_use}"
           has_upper="false"; [[ "$password_to_use" =~ [A-Z] ]] && has_upper="true"
@@ -171,6 +185,19 @@ jobs:
           echo "$vals" | grep -Eq '^KeycloakPassword=.+' || (echo "KeycloakPassword missing/blank in azd env before deploy" && exit 1)
           echo "$vals" | grep -Eq '^KeycloakDbPassword=.+' || (echo "KeycloakDbPassword missing/blank in azd env before deploy" && exit 1)
           echo "$vals" | grep -Eq '^InviteSmtpPassword=.+' || (echo "InviteSmtpPassword missing/blank in azd env before deploy" && exit 1)
+
+          sql_pw_env="$(printf '%s\n' "$vals" | sed -n 's/^SqlPassword=//p' | head -n 1)"
+          pw_env="$(printf '%s\n' "$vals" | sed -n 's/^Password=//p' | head -n 1)"
+          sql_pw_len="${#sql_pw_env}"
+          pw_len_env="${#pw_env}"
+          sql_pw_sha="$(printf '%s' "$sql_pw_env" | sha256sum | awk '{print $1}')"
+          pw_sha="$(printf '%s' "$pw_env" | sha256sum | awk '{print $1}')"
+          echo "SqlPassword env diagnostics (deploy): len=${sql_pw_len} sha256=${sql_pw_sha}"
+          echo "Password env diagnostics (deploy): len=${pw_len_env} sha256=${pw_sha}"
+          if [ "$sql_pw_sha" != "$pw_sha" ]; then
+            echo "SqlPassword and Password in azd env do not match before deploy."
+            exit 1
+          fi
 
           password_to_use="${SqlPassword}"
           pw_len="${#password_to_use}"
