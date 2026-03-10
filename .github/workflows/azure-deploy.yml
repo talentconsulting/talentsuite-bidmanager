@@ -237,7 +237,7 @@ jobs:
           scripts/ci/deploy-frontend-static.sh
 
       - name: Tag resource group and Azure resources
-        if: always()
+        if: success()
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           chmod +x scripts/ci/tag-azure-resources.sh
