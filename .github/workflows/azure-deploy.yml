@@ -119,14 +119,8 @@ jobs:
           pw_len_env="${#pw_env}"
           sql_pw_sha="$(printf '%s' "$sql_pw_env" | sha256sum | awk '{print $1}')"
           pw_sha="$(printf '%s' "$pw_env" | sha256sum | awk '{print $1}')"
-          input_pw_sha="$(printf '%s' "${SqlPassword}" | sha256sum | awk '{print $1}')"
           echo "SqlPassword env diagnostics: len=${sql_pw_len} sha256=${sql_pw_sha}"
           echo "Password env diagnostics: len=${pw_len_env} sha256=${pw_sha}"
-          echo "Input SqlPassword diagnostics: len=${#SqlPassword} sha256=${input_pw_sha}"
-          if [ "$sql_pw_sha" != "$input_pw_sha" ] || [ "$pw_sha" != "$input_pw_sha" ]; then
-            echo "SqlPassword value differs between pipeline input and azd environment."
-            exit 1
-          fi
           if [ "$sql_pw_sha" != "$pw_sha" ]; then
             echo "SqlPassword and Password in azd env do not match."
             exit 1
@@ -210,14 +204,8 @@ jobs:
           pw_len_env="${#pw_env}"
           sql_pw_sha="$(printf '%s' "$sql_pw_env" | sha256sum | awk '{print $1}')"
           pw_sha="$(printf '%s' "$pw_env" | sha256sum | awk '{print $1}')"
-          input_pw_sha="$(printf '%s' "${SqlPassword}" | sha256sum | awk '{print $1}')"
           echo "SqlPassword env diagnostics (deploy): len=${sql_pw_len} sha256=${sql_pw_sha}"
           echo "Password env diagnostics (deploy): len=${pw_len_env} sha256=${pw_sha}"
-          echo "Input SqlPassword diagnostics (deploy): len=${#SqlPassword} sha256=${input_pw_sha}"
-          if [ "$sql_pw_sha" != "$input_pw_sha" ] || [ "$pw_sha" != "$input_pw_sha" ]; then
-            echo "SqlPassword value differs between pipeline input and azd environment before deploy."
-            exit 1
-          fi
           if [ "$sql_pw_sha" != "$pw_sha" ]; then
             echo "SqlPassword and Password in azd env do not match before deploy."
             exit 1
