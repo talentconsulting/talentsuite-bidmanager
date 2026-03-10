@@ -75,6 +75,7 @@ jobs:
 
       - name: Ensure required Azure resource providers are registered
         run: |
+          az provider register --namespace Microsoft.App --wait
           az provider register --namespace Microsoft.KeyVault --wait
 
       - name: Export azd environment values for later steps
