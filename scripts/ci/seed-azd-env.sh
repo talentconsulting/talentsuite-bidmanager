@@ -100,6 +100,17 @@ validate_strong_password() {
 validate_strong_password "$sql_password" "SqlPassword"
 validate_strong_password "$keycloak_db_password" "KeycloakDbPassword"
 
+# Azure SQL admin password rules: must not contain the admin login name and should not include whitespace.
+sql_admin_login="sqladminrgp"
+if [[ "$sql_password" =~ [[:space:]] ]]; then
+  echo "SqlPassword must not contain whitespace."
+  exit 1
+fi
+if [[ "${sql_password,,}" == *"${sql_admin_login,,}"* ]]; then
+  echo "SqlPassword must not contain the SQL admin login name ('$sql_admin_login')."
+  exit 1
+fi
+
 test -n "$invite_smtp_username" || (echo "InviteSmtpUsername missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
 test -n "$invite_smtp_password" || (echo "InviteSmtpPassword missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
 is_placeholder_value "$invite_smtp_username" && (echo "InviteSmtpUsername appears to be a placeholder value" && exit 1)
