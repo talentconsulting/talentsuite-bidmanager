@@ -47,6 +47,24 @@ read_value_or_default() {
   echo "$value"
 }
 
+normalize_secret_value() {
+  local value="$1"
+
+  # Remove Windows carriage returns if present.
+  value="$(printf '%s' "$value" | tr -d '\r')"
+
+  # Strip one pair of matching surrounding quotes.
+  if [ "${#value}" -ge 2 ] && [ "${value#\"}" != "$value" ] && [ "${value%\"}" != "$value" ]; then
+    value="${value#\"}"
+    value="${value%\"}"
+  elif [ "${#value}" -ge 2 ] && [ "${value#\'}" != "$value" ] && [ "${value%\'}" != "$value" ]; then
+    value="${value#\'}"
+    value="${value%\'}"
+  fi
+
+  echo "$value"
+}
+
 authentication_enabled="$(read_required_value "AuthenticationEnabled")"
 use_in_memory_data="$(read_required_value "UseInMemoryData")"
 sql_password="$(read_required_value "SqlPassword")"
@@ -61,6 +79,11 @@ invite_smtp_port="$(read_value_or_default "InviteSmtpPort" "587")"
 invite_smtp_enable_ssl="$(read_value_or_default "InviteSmtpEnableSsl" "true")"
 invite_smtp_username="$(read_required_value "InviteSmtpUsername")"
 invite_smtp_password="$(read_required_value "InviteSmtpPassword")"
+
+sql_password="$(normalize_secret_value "$sql_password")"
+keycloak_password="$(normalize_secret_value "$keycloak_password")"
+keycloak_db_password="$(normalize_secret_value "$keycloak_db_password")"
+invite_smtp_password="$(normalize_secret_value "$invite_smtp_password")"
 
 # Mask secrets in GitHub logs to reduce accidental exposure.
 echo "::add-mask::$sql_password"
