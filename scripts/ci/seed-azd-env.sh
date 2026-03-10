@@ -118,9 +118,9 @@ if [[ "${sql_password,,}" == *"password"* ]]; then
   echo "SqlPassword must not contain the word 'password'."
   exit 1
 fi
-# Keep SQL admin passwords in a conservative ASCII-safe set to avoid shell/ARM escaping issues.
-if [[ ! "$sql_password" =~ ^[A-Za-z0-9!@#%^*()_+=.,:-]+$ ]]; then
-  echo "SqlPassword contains unsupported characters. Use only letters, numbers, and !@#%^*()_+=.,:-"
+# Disallow control characters; printable punctuation is allowed.
+if printf '%s' "$sql_password" | LC_ALL=C grep -q '[[:cntrl:]]'; then
+  echo "SqlPassword must not contain control characters."
   exit 1
 fi
 
