@@ -35,8 +35,18 @@ while IFS= read -r line; do
 
   [ -n "$key" ] || continue
 
-  # Mask every imported value to avoid accidental exposure in later step env dumps.
-  [ -n "$value" ] && echo "::add-mask::$value"
+  # Mask only sensitive values; masking everything hides useful diagnostics
+  # (for example booleans such as true/false).
+  if [ -n "$value" ]; then
+    case "$key" in
+      SqlPassword|Password|KeycloakPassword|KeycloakDbPassword|InviteSmtpPassword|GoogleDriveSyncServiceAccountJsonBase64)
+        echo "::add-mask::$value"
+        ;;
+      *ConnectionString*|*Secret*|*Token*|*ClientSecret*|*ApiKey*)
+        echo "::add-mask::$value"
+        ;;
+    esac
+  fi
 
   printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
 done < "$azd_env_file"

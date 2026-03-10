@@ -114,6 +114,15 @@ if [[ "${sql_password,,}" == *"${sql_admin_login,,}"* ]]; then
   echo "SqlPassword must not contain the SQL admin login name ('$sql_admin_login')."
   exit 1
 fi
+if [[ "${sql_password,,}" == *"password"* ]]; then
+  echo "SqlPassword must not contain the word 'password'."
+  exit 1
+fi
+# Keep SQL admin passwords in a conservative ASCII-safe set to avoid shell/ARM escaping issues.
+if [[ ! "$sql_password" =~ ^[A-Za-z0-9!@#%^*()_+=.,:-]+$ ]]; then
+  echo "SqlPassword contains unsupported characters. Use only letters, numbers, and !@#%^*()_+=.,:-"
+  exit 1
+fi
 
 test -n "$invite_smtp_username" || (echo "InviteSmtpUsername missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
 test -n "$invite_smtp_password" || (echo "InviteSmtpPassword missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
