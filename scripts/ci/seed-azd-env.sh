@@ -119,6 +119,7 @@ is_placeholder_value "$invite_smtp_password" && (echo "InviteSmtpPassword appear
 azd env set --environment "$AZURE_ENV_NAME" AuthenticationEnabled "$authentication_enabled" --no-prompt
 azd env set --environment "$AZURE_ENV_NAME" UseInMemoryData "$use_in_memory_data" --no-prompt
 azd env set --environment "$AZURE_ENV_NAME" SqlPassword "$sql_password" --no-prompt
+azd env set --environment "$AZURE_ENV_NAME" Password "$sql_password" --no-prompt
 azd env set --environment "$AZURE_ENV_NAME" KeycloakPassword "$keycloak_password" --no-prompt
 azd env set --environment "$AZURE_ENV_NAME" KeycloakDbUsername "$keycloak_db_username" --no-prompt
 azd env set --environment "$AZURE_ENV_NAME" KeycloakDbPassword "$keycloak_db_password" --no-prompt

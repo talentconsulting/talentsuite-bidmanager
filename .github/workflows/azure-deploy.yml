@@ -101,12 +101,14 @@ jobs:
           azd env set principalId "${AZD_PRINCIPAL_ID}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set SqlPassword "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set Password "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set KeycloakPassword "${KeycloakPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
 
           principalId="${AZD_PRINCIPAL_ID}" \
           SqlPassword="${SqlPassword}" \
+          Password="${SqlPassword}" \
           KeycloakPassword="${KeycloakPassword}" \
           KeycloakDbPassword="${KeycloakDbPassword}" \
           InviteSmtpPassword="${InviteSmtpPassword}" \
@@ -150,6 +152,7 @@ jobs:
           azd env set KeycloakPassword "${KeycloakPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set Password "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
 
           vals="$(azd env get-values --environment "${{ env.AZURE_ENV_NAME }}")"
@@ -163,6 +166,7 @@ jobs:
           principalId="${AZD_PRINCIPAL_ID}" \
           KeycloakDbUsername="${KeycloakDbUsername}" \
           SqlPassword="${SqlPassword}" \
+          Password="${SqlPassword}" \
           KeycloakPassword="${KeycloakPassword}" \
           KeycloakDbPassword="${KeycloakDbPassword}" \
           InviteSmtpPassword="${InviteSmtpPassword}" \
