@@ -200,19 +200,19 @@ jobs:
             -o jsonc || true
 
           echo "SQL operation details:"
-          az deployment sub operation list \
+          az deployment operation sub list \
             --name "$dep_name" \
             --query "[?contains(properties.targetResource.resourceType, 'Microsoft.Sql/servers')].{resource:properties.targetResource.resourceName,type:properties.targetResource.resourceType,state:properties.provisioningState,status:properties.statusMessage}" \
             -o jsonc || true
 
           echo "Failed operations (all resources):"
-          az deployment sub operation list \
+          az deployment operation sub list \
             --name "$dep_name" \
             --query "[?properties.provisioningState!='Succeeded'].{resource:properties.targetResource.resourceName,type:properties.targetResource.resourceType,state:properties.provisioningState,status:properties.statusMessage}" \
             -o jsonc || true
 
           echo "Failed operation status messages (compact):"
-          az deployment sub operation list \
+          az deployment operation sub list \
             --name "$dep_name" \
             --query "[?properties.provisioningState!='Succeeded'].properties.statusMessage" \
             -o jsonc || true
