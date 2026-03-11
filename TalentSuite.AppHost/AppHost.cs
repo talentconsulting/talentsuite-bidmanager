@@ -166,15 +166,8 @@ if (useLocalInfrastructure)
 else
 {
 
-    var sqlPassword = builder.AddParameter("sql-password", secret: true);
-
-    var sql = builder.AddAzureSqlServer("sql")
-        .WithPassword(sqlPassword);
-    
-    
-    var sql = builder.AddAzureSqlServer("sql")
-        .WithPassword("YourStrongPassword123!");
-
+    var sql = builder.AddAzureSqlServer("sql");
+        
     var appDb = sql.AddDatabase("talentconsultingdb");
     var keycloakDb = sql.AddDatabase("keycloakdb");
 
