@@ -16,75 +16,87 @@ var useLocalInfrastructure = !forceAzureInfrastructure
 var keycloakPassword = builder.AddParameter(
                                 "KeycloakPassword",
                                 value: "admin",
-                                secret: false,
+                                secret: true,
                                 publishValueAsDefault: true);
 var sqlPassword = builder.AddParameter(
                                 "SqlPassword",
                                 value: "Your_strong_password123!",
-                                secret: false,
+                                secret: true,
                                 publishValueAsDefault: true);
 var keycloakDbUsername = builder.AddParameter(
                                 "KeycloakDbUsername",
+                                secret: false,
                                 value: "",
                                 publishValueAsDefault: true);
 var keycloakDbPassword = builder.AddParameter(
                                 "KeycloakDbPassword",
                                 value: "unused",
-                                secret: false,
+                                secret: true,
                                 publishValueAsDefault: true);
 var authenticationEnabled = builder.AddParameter(
                                 "AuthenticationEnabled",
                                 value: "true",
+                                secret: false,
                                 publishValueAsDefault: true);
 var useInMemoryData = builder.AddParameter(
                                 "UseInMemoryData",
                                 value: "false",
+                                secret: false,
                                 publishValueAsDefault: true);
 var inviteEmailEnabled = builder.AddParameter(
                                 "InviteEmailEnabled",
                                 value: "false",
+                                secret: false,
                                 publishValueAsDefault: true);
 var inviteFromEmail = builder.AddParameter(
                                 "InviteFromEmail",
                                 value: "",
+                                secret: false,
                                 publishValueAsDefault: true);
 var inviteSmtpHost = builder.AddParameter(
                                 "InviteSmtpHost",
                                 value: "",
+                                secret: false,
                                 publishValueAsDefault: true);
 var inviteSmtpPort = builder.AddParameter(
                                 "InviteSmtpPort",
                                 value: "587",
+                                secret: false,
                                 publishValueAsDefault: true);
 var inviteSmtpEnableSsl = builder.AddParameter(
                                 "InviteSmtpEnableSsl",
                                 value: "true",
+                                secret: false,
                                 publishValueAsDefault: true);
 var inviteSmtpUsername = builder.AddParameter(
                                 "InviteSmtpUsername",
                                 value: "",
+                                secret: false,
                                 publishValueAsDefault: true);
 var inviteSmtpPassword = builder.AddParameter(
                                 "InviteSmtpPassword",
                                 value: "unused",
-                                secret: false,
+                                secret: true,
                                 publishValueAsDefault: true);
 var googleDriveSyncEnabled = builder.AddParameter(
                                 "GoogleDriveSyncEnabled",
                                 value: "false",
+                                secret: false,
                                 publishValueAsDefault: true);
 var googleDriveSyncSourceContainerName = builder.AddParameter(
                                 "GoogleDriveSyncSourceContainerName",
                                 value: "bidlibrary",
+                                secret: false,
                                 publishValueAsDefault: true);
 var googleDriveSyncDriveFolderId = builder.AddParameter(
                                 "GoogleDriveSyncDriveFolderId",
                                 value: "",
+                                secret: false,
                                 publishValueAsDefault: true);
 var googleDriveSyncServiceAccountJsonBase64 = builder.AddParameter(
                                 "GoogleDriveSyncServiceAccountJsonBase64",
                                 value: "",
-                                secret: false,
+                                secret: true,
                                 publishValueAsDefault: true);
 
 var keycloak = builder.AddKeycloak(
@@ -153,18 +165,16 @@ if (useLocalInfrastructure)
 }
 else
 {
+
+    var sqlPassword = builder.AddParameter("sql-password", secret: true);
+
     var sql = builder.AddAzureSqlServer("sql")
-        .ConfigureInfrastructure(infra =>
-        {
-            var sqlServer = infra.GetProvisionableResources().OfType<SqlServer>().Single();
-            // Use a deterministic SQL admin login to avoid invalid auto-generated values.
-            // Keep it neutral so common passwords are less likely to include login-derived fragments.
-            sqlServer.AdministratorLogin = "tsinfrausr";
-            if (sqlServer.Administrators is not null)
-            {
-                sqlServer.Administrators.IsAzureADOnlyAuthenticationEnabled = false;
-            }
-        });
+        .WithPassword(sqlPassword);
+    
+    
+    var sql = builder.AddAzureSqlServer("sql")
+        .WithPassword("YourStrongPassword123!");
+
     var appDb = sql.AddDatabase("talentconsultingdb");
     var keycloakDb = sql.AddDatabase("keycloakdb");
 
