@@ -85,6 +85,8 @@ jobs:
           scripts/ci/load-azd-env.sh
 
       - name: Provision
+        id: provision
+        continue-on-error: true
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -170,6 +172,57 @@ jobs:
           InviteSmtpPassword="${InviteSmtpPassword}" \
           azd provision --environment "${{ env.AZURE_ENV_NAME }}"
 
+      - name: Dump ARM Deployment Errors (Provision)
+        if: steps.provision.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          echo "Azure account context:"
+          az account show --query "{subscriptionId:id,subscriptionName:name,tenantId:tenantId,user:user.name}" -o jsonc || true
+
+          dep_name="$(az deployment sub list \
+            --query "[?starts_with(name, '${AZURE_ENV_NAME}-')]|sort_by(@,&properties.timestamp)[-1].name" \
+            -o tsv)"
+
+          if [ -z "$dep_name" ]; then
+            echo "Could not determine latest subscription deployment name for environment ${AZURE_ENV_NAME}."
+            exit 0
+          fi
+
+          echo "Latest deployment: $dep_name"
+          echo "Deployment summary:"
+          az deployment sub show --name "$dep_name" \
+            --query "{name:name,state:properties.provisioningState,timestamp:properties.timestamp,location:location,error:properties.error}" \
+            -o jsonc || true
+
+          echo "Top-level deployment errors:"
+          az deployment sub show --name "$dep_name" \
+            --query "properties.error.details[].{code:code,target:target,message:message}" \
+            -o jsonc || true
+
+          echo "SQL operation details:"
+          az deployment sub operation list \
+            --name "$dep_name" \
+            --query "[?contains(properties.targetResource.resourceType, 'Microsoft.Sql/servers')].{resource:properties.targetResource.resourceName,type:properties.targetResource.resourceType,state:properties.provisioningState,status:properties.statusMessage}" \
+            -o jsonc || true
+
+          echo "Failed operations (all resources):"
+          az deployment sub operation list \
+            --name "$dep_name" \
+            --query "[?properties.provisioningState!='Succeeded'].{resource:properties.targetResource.resourceName,type:properties.targetResource.resourceType,state:properties.provisioningState,status:properties.statusMessage}" \
+            -o jsonc || true
+
+          echo "Failed operation status messages (compact):"
+          az deployment sub operation list \
+            --name "$dep_name" \
+            --query "[?properties.provisioningState!='Succeeded'].properties.statusMessage" \
+            -o jsonc || true
+
+      - name: Fail If Provision Failed
+        if: steps.provision.outcome == 'failure'
+        run: |
+          echo "Provision step failed. See deployment operation diagnostics above."
+          exit 1
+
       - name: Disable SQL Entra-only auth for Keycloak SQL login
         run: |
           resource_group="rg-${AZURE_ENV_NAME}"
@@ -189,6 +242,7 @@ jobs:
           fi
 
       - name: Pre-sync Container App secrets from GitHub secrets to Key Vault refs
+        if: success()
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
