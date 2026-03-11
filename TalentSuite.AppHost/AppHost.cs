@@ -153,7 +153,7 @@ if (useLocalInfrastructure)
 }
 else
 {
-    var sql = builder.AddAzureSqlServer("sql", password: sqlPassword)
+    var sql = builder.AddAzureSqlServer("sql")
         .ConfigureInfrastructure(infra =>
         {
             var sqlServer = infra.GetProvisionableResources().OfType<SqlServer>().Single();

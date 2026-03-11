@@ -156,6 +156,10 @@ if printf '%s' "$sql_password" | LC_ALL=C grep -q '[[:cntrl:]]'; then
   echo "SqlPassword must not contain control characters."
   exit 1
 fi
+if [[ ! "$sql_password" =~ ^[A-Za-z0-9\!@\#%\^\*\(\)_\+=\.,:-]+$ ]]; then
+  echo "SqlPassword contains unsupported characters. Use only letters, numbers, and !@#%^*()_+=.,:-"
+  exit 1
+fi
 
 test -n "$invite_smtp_username" || (echo "InviteSmtpUsername missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
 test -n "$invite_smtp_password" || (echo "InviteSmtpPassword missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)

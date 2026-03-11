@@ -19,12 +19,34 @@ jobs:
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AZD_WORKING_DIR: "."
-      AZD_INITIAL_ENVIRONMENT_CONFIG: ${{ secrets.AZD_INITIAL_ENVIRONMENT_CONFIG }}
       DOTNET_LAUNCH_PROFILE: "https-azure"
       TALENTSUITE_FORCE_AZURE_INFRA: "true"
 
       # ---- AppHost mode switch ----
       TALENTSUITE_INFRA_MODE: "azure"
+
+      # ---- App configuration (non-secret) ----
+      AuthenticationEnabled: ${{ vars.AUTHENTICATION_ENABLED }}
+      UseInMemoryData: ${{ vars.USE_IN_MEMORY_DATA }}
+      KeycloakClientId: ${{ vars.KEYCLOAK_CLIENT_ID }}
+      KeycloakDbUsername: ${{ vars.KEYCLOAK_DB_USERNAME }}
+      KeyVaultName: ${{ vars.KEY_VAULT_NAME }}
+      InviteEmailEnabled: ${{ vars.INVITE_EMAIL_ENABLED }}
+      InviteFromEmail: ${{ vars.INVITE_FROM_EMAIL }}
+      InviteSmtpHost: ${{ vars.INVITE_SMTP_HOST }}
+      InviteSmtpPort: ${{ vars.INVITE_SMTP_PORT }}
+      InviteSmtpEnableSsl: ${{ vars.INVITE_SMTP_ENABLE_SSL }}
+      InviteSmtpUsername: ${{ vars.INVITE_SMTP_USERNAME }}
+      GoogleDriveSyncEnabled: ${{ vars.GOOGLE_DRIVE_SYNC_ENABLED }}
+      GoogleDriveSyncSourceContainerName: ${{ vars.GOOGLE_DRIVE_SYNC_SOURCE_CONTAINER_NAME }}
+      GoogleDriveSyncDriveFolderId: ${{ vars.GOOGLE_DRIVE_SYNC_DRIVE_FOLDER_ID }}
+
+      # ---- App configuration (secret) ----
+      SqlPassword: ${{ secrets.SQL_PASSWORD }}
+      KeycloakPassword: ${{ secrets.KEYCLOAK_PASSWORD }}
+      KeycloakDbPassword: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
+      InviteSmtpPassword: ${{ secrets.INVITE_SMTP_PASSWORD }}
+      GoogleDriveSyncServiceAccountJsonBase64: ${{ secrets.GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64 }}
 
     steps:
       - name: Checkout
@@ -47,13 +69,15 @@ jobs:
           test -n "${{ secrets.AZURE_CLIENT_ID }}" || (echo "AZURE_CLIENT_ID missing" && exit 1)
           test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
           test -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
-          test -n "$AZD_INITIAL_ENVIRONMENT_CONFIG" || (echo "AZD_INITIAL_ENVIRONMENT_CONFIG missing" && exit 1)
-
-      - name: Seed azd environment from initial config
-        working-directory: ${{ env.AZD_WORKING_DIR }}
-        run: |
-          chmod +x scripts/ci/seed-azd-env.sh
-          scripts/ci/seed-azd-env.sh
+          test -n "${AuthenticationEnabled:-}" || (echo "AUTHENTICATION_ENABLED var missing" && exit 1)
+          test -n "${UseInMemoryData:-}" || (echo "USE_IN_MEMORY_DATA var missing" && exit 1)
+          test -n "${KeycloakClientId:-}" || (echo "KEYCLOAK_CLIENT_ID var missing" && exit 1)
+          test -n "${KeycloakDbUsername:-}" || (echo "KEYCLOAK_DB_USERNAME var missing" && exit 1)
+          test -n "${InviteSmtpUsername:-}" || (echo "INVITE_SMTP_USERNAME var missing" && exit 1)
+          test -n "${SqlPassword:-}" || (echo "SQL_PASSWORD secret missing" && exit 1)
+          test -n "${KeycloakPassword:-}" || (echo "KEYCLOAK_PASSWORD secret missing" && exit 1)
+          test -n "${KeycloakDbPassword:-}" || (echo "KEYCLOAK_DB_PASSWORD secret missing" && exit 1)
+          test -n "${InviteSmtpPassword:-}" || (echo "INVITE_SMTP_PASSWORD secret missing" && exit 1)
 
       - name: Seed azd principalId from OIDC token
         working-directory: ${{ env.AZD_WORKING_DIR }}
@@ -78,11 +102,35 @@ jobs:
           az provider register --namespace Microsoft.App --wait
           az provider register --namespace Microsoft.KeyVault --wait
 
-      - name: Export azd environment values for later steps
+      - name: Seed azd environment from explicit vars and secrets
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
-          chmod +x scripts/ci/load-azd-env.sh
-          scripts/ci/load-azd-env.sh
+          set -euo pipefail
+
+          azd env new "${AZURE_ENV_NAME}" --no-prompt || true
+          azd env set principalId "${AZD_PRINCIPAL_ID}" --environment "${AZURE_ENV_NAME}"
+          azd env set AuthenticationEnabled "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set AUTHENTICATION_ENABLED "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set UseInMemoryData "${UseInMemoryData}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakClientId "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set KEYCLOAK_CLIENT_ID "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakPassword "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set SqlPassword "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set Password "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteEmailEnabled "${InviteEmailEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteFromEmail "${InviteFromEmail}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpHost "${InviteSmtpHost}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpPort "${InviteSmtpPort}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpEnableSsl "${InviteSmtpEnableSsl}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpUsername "${InviteSmtpUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncEnabled "${GoogleDriveSyncEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncSourceContainerName "${GoogleDriveSyncSourceContainerName}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncDriveFolderId "${GoogleDriveSyncDriveFolderId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncServiceAccountJsonBase64 "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeyVaultName "${KeyVaultName}" --environment "${AZURE_ENV_NAME}"
 
       - name: Provision
         id: provision
@@ -105,13 +153,8 @@ jobs:
             printf '%s' "$value"
           }
 
-          sql_from_cfg="$(printf '%s' "${AZD_INITIAL_ENVIRONMENT_CONFIG:-}" | jq -r '.SqlPassword // empty | tostring' 2>/dev/null || true)"
-          if [ -n "$sql_from_cfg" ] && [ "$sql_from_cfg" != "null" ]; then
-            SqlPassword="$(normalize_secret "$sql_from_cfg")"
-          else
-            SqlPassword="$(normalize_secret "${SqlPassword:-}")"
-          fi
-          echo "SqlPassword source diagnostics: cfg_len=${#sql_from_cfg} normalized_len=${#SqlPassword}"
+          SqlPassword="$(normalize_secret "${SqlPassword:-}")"
+          echo "SqlPassword source diagnostics: normalized_len=${#SqlPassword}"
           KeycloakPassword="$(normalize_secret "${KeycloakPassword:-}")"
           KeycloakDbPassword="$(normalize_secret "${KeycloakDbPassword:-}")"
           InviteSmtpPassword="$(normalize_secret "${InviteSmtpPassword:-}")"
@@ -144,6 +187,10 @@ jobs:
           contains_login="false"; [[ "${password_to_use,,}" == *"tsinfrausr"* ]] && contains_login="true"
           contains_word_password="false"; [[ "${password_to_use,,}" == *"password"* ]] && contains_word_password="true"
           echo "SqlPassword diagnostics: length=${pw_len}, upper=${has_upper}, lower=${has_lower}, number=${has_number}, special=${has_special}, whitespace=${has_whitespace}, contains_login=${contains_login}, contains_word_password=${contains_word_password}"
+          if [[ ! "$password_to_use" =~ ^[A-Za-z0-9\!@\#%\^\*\(\)_\+=\.,:-]+$ ]]; then
+            echo "SqlPassword contains unsupported characters. Use only letters, numbers, and !@#%^*()_+=.,:-"
+            exit 1
+          fi
 
           principalId="${AZD_PRINCIPAL_ID}" \
           SqlPassword="${SqlPassword}" \
@@ -264,13 +311,8 @@ jobs:
             printf '%s' "$value"
           }
 
-          sql_from_cfg="$(printf '%s' "${AZD_INITIAL_ENVIRONMENT_CONFIG:-}" | jq -r '.SqlPassword // empty | tostring' 2>/dev/null || true)"
-          if [ -n "$sql_from_cfg" ] && [ "$sql_from_cfg" != "null" ]; then
-            SqlPassword="$(normalize_secret "$sql_from_cfg")"
-          else
-            SqlPassword="$(normalize_secret "${SqlPassword:-}")"
-          fi
-          echo "SqlPassword source diagnostics (deploy): cfg_len=${#sql_from_cfg} normalized_len=${#SqlPassword}"
+          SqlPassword="$(normalize_secret "${SqlPassword:-}")"
+          echo "SqlPassword source diagnostics (deploy): normalized_len=${#SqlPassword}"
           KeycloakPassword="$(normalize_secret "${KeycloakPassword:-}")"
           KeycloakDbPassword="$(normalize_secret "${KeycloakDbPassword:-}")"
           InviteSmtpPassword="$(normalize_secret "${InviteSmtpPassword:-}")"
@@ -305,6 +347,10 @@ jobs:
           contains_login="false"; [[ "${password_to_use,,}" == *"tsinfrausr"* ]] && contains_login="true"
           contains_word_password="false"; [[ "${password_to_use,,}" == *"password"* ]] && contains_word_password="true"
           echo "SqlPassword diagnostics (deploy): length=${pw_len}, upper=${has_upper}, lower=${has_lower}, number=${has_number}, special=${has_special}, whitespace=${has_whitespace}, contains_login=${contains_login}, contains_word_password=${contains_word_password}"
+          if [[ ! "$password_to_use" =~ ^[A-Za-z0-9\!@\#%\^\*\(\)_\+=\.,:-]+$ ]]; then
+            echo "SqlPassword contains unsupported characters. Use only letters, numbers, and !@#%^*()_+=.,:-"
+            exit 1
+          fi
 
           # Use placeholders in AppHost for azd manifest generation; real values are
           # rebound to Key Vault references in the post-sync step.

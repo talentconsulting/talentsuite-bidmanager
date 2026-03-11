@@ -57,17 +57,6 @@ load_local_env_file() {
   load_exports_from_azd_env_text < "$file_path"
 }
 
-load_exports_from_json_object() {
-  local json="$1"
-  if ! command -v jq >/dev/null 2>&1; then
-    fail "jq is required to parse AZD_INITIAL_ENVIRONMENT_CONFIG in azure mode."
-  fi
-
-  while IFS='=' read -r key value; do
-    export_pair "$key" "$value"
-  done < <(printf '%s' "$json" | jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"')
-}
-
 if [[ "$MODE" == "local" ]]; then
   load_local_env_file ".env.local"
   export TALENTSUITE_INFRA_MODE="local"
@@ -93,20 +82,13 @@ elif [[ "$MODE" == "azure" ]]; then
   load_local_env_file ".env.azure.local"
   export TALENTSUITE_INFRA_MODE="azure"
 
-  if [ -n "${AZD_INITIAL_ENVIRONMENT_CONFIG:-}" ]; then
-    load_exports_from_json_object "$AZD_INITIAL_ENVIRONMENT_CONFIG"
-  else
-    if ! command -v azd >/dev/null 2>&1; then
-      fail "azd is required in azure mode unless AZD_INITIAL_ENVIRONMENT_CONFIG is provided."
-    fi
+  if [ -n "${AZURE_ENV_NAME:-}" ]; then
+    :
+  elif [ -f ".azure/config.json" ] && command -v jq >/dev/null 2>&1; then
+    AZURE_ENV_NAME="$(jq -r '.defaultEnvironment // empty' .azure/config.json)"
+  fi
 
-    if [ -n "${AZURE_ENV_NAME:-}" ]; then
-      :
-    elif [ -f ".azure/config.json" ] && command -v jq >/dev/null 2>&1; then
-      AZURE_ENV_NAME="$(jq -r '.defaultEnvironment // empty' .azure/config.json)"
-    fi
-
-    [ -n "${AZURE_ENV_NAME:-}" ] || fail "Set AZURE_ENV_NAME or AZD_INITIAL_ENVIRONMENT_CONFIG before sourcing set-env.sh azure."
+  if [ -n "${AZURE_ENV_NAME:-}" ] && command -v azd >/dev/null 2>&1; then
     load_exports_from_azd_env_text < <(azd env get-values --environment "$AZURE_ENV_NAME")
   fi
 

@@ -112,35 +112,32 @@ Propagated runtime env vars include:
 - `AzureServiceBus__BidSubmittedEntityName`
 
 ## Canonical Config Keys
-Use plain keys as the single config format across:
-- `AZD_INITIAL_ENVIRONMENT_CONFIG` (GitHub secret)
-- local `.env.azure.local` / `.env.local`
-- `dotnet user-secrets --project TalentSuite.AppHost`
+Use plain keys in local `.env.azure.local` / `.env.local` and in GitHub Actions `vars`/`secrets`.
 
-```json
-{
-  "AuthenticationEnabled": "true",
-  "UseInMemoryData": "false",
+Example `.env.azure.local`:
+```bash
+AuthenticationEnabled=true
+UseInMemoryData=false
 
-  "SqlPassword": "your-sql-admin-password",
-  "KeycloakPassword": "your-keycloak-admin-password",
-  "KeycloakDbUsername": "keycloak_admin",
-  "KeycloakDbPassword": "your-keycloak-db-password",
+SqlPassword=your-sql-admin-password
+KeycloakPassword=your-keycloak-admin-password
+KeycloakDbUsername=keycloak_admin
+KeycloakDbPassword=your-keycloak-db-password
+KeycloakClientId=talentsuite-frontend
 
-  "InviteEmailEnabled": "true",
-  "InviteFromEmail": "no-reply@talentconsulting.uk",
-  "InviteSmtpHost": "smtp.office365.com",
-  "InviteSmtpPort": "587",
-  "InviteSmtpEnableSsl": "true",
-  "InviteSmtpUsername": "smtp-user",
-  "InviteSmtpPassword": "your-smtp-password",
+InviteEmailEnabled=true
+InviteFromEmail=no-reply@talentconsulting.uk
+InviteSmtpHost=smtp.office365.com
+InviteSmtpPort=587
+InviteSmtpEnableSsl=true
+InviteSmtpUsername=smtp-user
+InviteSmtpPassword=your-smtp-password
 
-  "GoogleDriveSyncEnabled": "true",
-  "GoogleDriveSyncSourceContainerName": "bidlibrary",
-  "GoogleDriveSyncDriveFolderId": "your-google-drive-folder-id",
-  "GoogleDriveSyncServiceAccountJsonBase64": "BASE64_OF_FULL_SERVICE_ACCOUNT_JSON",
-  "KeyVaultName": "kv-talentsuite-dev"
-}
+GoogleDriveSyncEnabled=true
+GoogleDriveSyncSourceContainerName=bidlibrary
+GoogleDriveSyncDriveFolderId=your-google-drive-folder-id
+GoogleDriveSyncServiceAccountJsonBase64=BASE64_OF_FULL_SERVICE_ACCOUNT_JSON
+KeyVaultName=kv-talentsuite-dev
 ```
 
 `KeyVaultName` is optional. If set, CI uses that exact vault name (must be 3-24 chars, lowercase letters/numbers/hyphens).
@@ -292,6 +289,38 @@ The workflow runs:
 
 Deployment scope is defined by `TalentSuite.AppHost/AppHost.cs` and `TALENTSUITE_INFRA_MODE`.
 
+Required GitHub Actions configuration for environment `dev`:
+
+`vars`:
+- `AZURE_ENV_NAME`
+- `AZURE_LOCATION`
+- `AUTHENTICATION_ENABLED`
+- `USE_IN_MEMORY_DATA`
+- `KEYCLOAK_CLIENT_ID`
+- `KEYCLOAK_DB_USERNAME`
+- `KEY_VAULT_NAME` (optional but recommended)
+- `INVITE_EMAIL_ENABLED`
+- `INVITE_FROM_EMAIL`
+- `INVITE_SMTP_HOST`
+- `INVITE_SMTP_PORT`
+- `INVITE_SMTP_ENABLE_SSL`
+- `INVITE_SMTP_USERNAME`
+- `GOOGLE_DRIVE_SYNC_ENABLED`
+- `GOOGLE_DRIVE_SYNC_SOURCE_CONTAINER_NAME`
+- `GOOGLE_DRIVE_SYNC_DRIVE_FOLDER_ID`
+
+`secrets`:
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+- `SQL_PASSWORD`
+- `KEYCLOAK_PASSWORD`
+- `KEYCLOAK_DB_PASSWORD`
+- `INVITE_SMTP_PASSWORD`
+- `GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64`
+
+No JSON secret is required. `AZD_INITIAL_ENVIRONMENT_CONFIG` is no longer used.
+
 When `TALENTSUITE_INFRA_MODE=azure`, deploy includes:
 - App services:
   - `talentserver` (`src/TalentSuite.Server`)
@@ -315,21 +344,16 @@ When `TALENTSUITE_INFRA_MODE=local`, AppHost runs local emulators/containers for
 - Service Bus
 - Azurite (Blob storage)
 
-### Azure Secret Handling (CI Baseline)
-The working CI baseline (commit `39319ad`) uses this pattern:
+### Azure Secret Handling (CI)
+The workflow uses explicit GitHub `vars` and `secrets` (no JSON blob). It:
 
-1. Keep real secrets in GitHub Secrets.
-2. Seed `azd` env values in CI (`seed-azd-env.sh` / `load-azd-env.sh`).
-3. Use placeholder parameter defaults in `TalentSuite.AppHost/AppHost.cs` for values that become Container App secrets:
-   - `KeycloakPassword`
-   - `KeycloakDbPassword`
-   - `SqlPassword`
-   - `InviteSmtpPassword`
-4. Run `azd provision` and `azd deploy`.
-5. Post-process Container Apps with `scripts/ci/sync-containerapp-secrets-keyvault.sh`:
-   - write real secret values to Key Vault
-   - assign managed identity access
-   - map Container App secret refs to `keyvaultref:... ,identityref:system`
+1. Logs in with OIDC.
+2. Seeds azd env from explicit per-key values.
+3. Runs `azd provision` and `azd deploy`.
+4. Post-processes Container Apps with `scripts/ci/sync-containerapp-secrets-keyvault.sh`:
+   - writes real secret values to Key Vault
+   - assigns managed identity access
+   - maps Container App secret refs to `keyvaultref:... ,identityref:system`
 
 Why this is required:
 - Marking those AppHost parameters as Aspire `secret: true` caused `ContainerAppSecretInvalid` failures in CI for secret names like:
