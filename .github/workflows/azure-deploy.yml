@@ -340,7 +340,7 @@ jobs:
           echo "KeycloakPassword length via azd env get-value: ${kc_pw_len}"
           echo "KeycloakDbPassword length via azd env get-value: ${kc_db_pw_len}"
           azd env get-value KeycloakDbUsername --environment "${AZURE_ENV_NAME}" || true
-          azd env get-values --environment "${AZURE_ENV_NAME}" | rg -n "KeycloakPassword|KeycloakDbPassword|KeycloakDbUsername" || true
+          azd env get-values --environment "${AZURE_ENV_NAME}" | grep -En "KeycloakPassword|KeycloakDbPassword|KeycloakDbUsername" || true
           if [ "${kc_pw_len}" -le 1 ]; then
             echo "KeycloakPassword is blank in azd env ${AZURE_ENV_NAME}"
             exit 1
