@@ -334,6 +334,22 @@ jobs:
           azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
 
+          echo "AZURE_ENV_NAME=${AZURE_ENV_NAME}"
+          kc_pw_len="$(azd env get-value KeycloakPassword --environment "${AZURE_ENV_NAME}" | wc -c | tr -d ' ')"
+          kc_db_pw_len="$(azd env get-value KeycloakDbPassword --environment "${AZURE_ENV_NAME}" | wc -c | tr -d ' ')"
+          echo "KeycloakPassword length via azd env get-value: ${kc_pw_len}"
+          echo "KeycloakDbPassword length via azd env get-value: ${kc_db_pw_len}"
+          azd env get-value KeycloakDbUsername --environment "${AZURE_ENV_NAME}" || true
+          azd env get-values --environment "${AZURE_ENV_NAME}" | rg -n "KeycloakPassword|KeycloakDbPassword|KeycloakDbUsername" || true
+          if [ "${kc_pw_len}" -le 1 ]; then
+            echo "KeycloakPassword is blank in azd env ${AZURE_ENV_NAME}"
+            exit 1
+          fi
+          if [ "${kc_db_pw_len}" -le 1 ]; then
+            echo "KeycloakDbPassword is blank in azd env ${AZURE_ENV_NAME}"
+            exit 1
+          fi
+
           vals="$(azd env get-values --environment "${{ env.AZURE_ENV_NAME }}")"
           echo "$vals" | grep -Eq '^KeycloakDbUsername=.+' || (echo "KeycloakDbUsername missing/blank in azd env before deploy" && exit 1)
           echo "$vals" | grep -Eq '^KeycloakPassword=.+' || (echo "KeycloakPassword missing/blank in azd env before deploy" && exit 1)

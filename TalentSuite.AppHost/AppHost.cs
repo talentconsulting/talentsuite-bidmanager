@@ -176,7 +176,7 @@ else
         .WithEnvironment("KC_DB_USERNAME", keycloakDbUsername)
         .WithEnvironment("KC_DB_PASSWORD", keycloakDbPassword)
         .WaitFor(keycloakDb);
-
+    
     server = builder.AddProject<TalentSuite_Server>("talentserver")
         .WithReference(appDb)
         .WithReference(keycloak)
