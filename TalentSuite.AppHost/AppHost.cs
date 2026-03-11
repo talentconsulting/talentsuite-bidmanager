@@ -10,23 +10,19 @@ var forceAzureInfrastructure = string.Equals(
     Environment.GetEnvironmentVariable(ForceAzureInfrastructureVariable),
     "true",
     StringComparison.OrdinalIgnoreCase);
-var markSecretParameters = string.Equals(
-    Environment.GetEnvironmentVariable("TALENTSUITE_SECRET_PARAMS"),
-    "true",
-    StringComparison.OrdinalIgnoreCase);
 var useLocalInfrastructure = !forceAzureInfrastructure
     && string.Equals(infrastructureMode, "local", StringComparison.OrdinalIgnoreCase);
 
 var keycloakPassword = builder.AddParameter(
                                 "KeycloakPassword",
                                 value: "admin",
-                                secret: markSecretParameters,
-                                publishValueAsDefault: !markSecretParameters);
+                                secret: true,
+                                publishValueAsDefault: false);
 var sqlPassword = builder.AddParameter(
                                 "SqlPassword",
                                 value: "Your_strong_password123!",
-                                secret: markSecretParameters,
-                                publishValueAsDefault: !markSecretParameters);
+                                secret: true,
+                                publishValueAsDefault: false);
 var keycloakDbUsername = builder.AddParameter(
                                 "KeycloakDbUsername",
                                 secret: false,
@@ -35,8 +31,8 @@ var keycloakDbUsername = builder.AddParameter(
 var keycloakDbPassword = builder.AddParameter(
                                 "KeycloakDbPassword",
                                 value: "unused",
-                                secret: markSecretParameters,
-                                publishValueAsDefault: !markSecretParameters);
+                                secret: true,
+                                publishValueAsDefault: false);
 var authenticationEnabled = builder.AddParameter(
                                 "AuthenticationEnabled",
                                 value: "true",
@@ -80,8 +76,8 @@ var inviteSmtpUsername = builder.AddParameter(
 var inviteSmtpPassword = builder.AddParameter(
                                 "InviteSmtpPassword",
                                 value: "unused",
-                                secret: markSecretParameters,
-                                publishValueAsDefault: !markSecretParameters);
+                                secret: true,
+                                publishValueAsDefault: false);
 var googleDriveSyncEnabled = builder.AddParameter(
                                 "GoogleDriveSyncEnabled",
                                 value: "false",
@@ -100,8 +96,8 @@ var googleDriveSyncDriveFolderId = builder.AddParameter(
 var googleDriveSyncServiceAccountJsonBase64 = builder.AddParameter(
                                 "GoogleDriveSyncServiceAccountJsonBase64",
                                 value: "",
-                                secret: markSecretParameters,
-                                publishValueAsDefault: !markSecretParameters);
+                                secret: true,
+                                publishValueAsDefault: false);
 
 var keycloak = builder.AddKeycloak(
             "keycloak",
