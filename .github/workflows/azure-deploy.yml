@@ -82,6 +82,8 @@ jobs:
       - name: Seed azd principalId from OIDC token
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
+          azd env new "${AZURE_ENV_NAME}" --no-prompt || true
+
           arm_token="$(az account get-access-token --resource-type arm --query accessToken -o tsv)"
           payload="$(printf '%s' "$arm_token" | cut -d'.' -f2 | tr '_-' '/+')"
           padding=$(( (4 - ${#payload} % 4) % 4 ))
