@@ -82,7 +82,8 @@ jobs:
       - name: Seed azd principalId from OIDC token
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
-          azd env new "${AZURE_ENV_NAME}" --no-prompt || true
+          azd env get-values --environment "${AZURE_ENV_NAME}" >/dev/null 2>&1 \
+            || azd env new "${AZURE_ENV_NAME}" --no-prompt
 
           arm_token="$(az account get-access-token --resource-type arm --query accessToken -o tsv)"
           payload="$(printf '%s' "$arm_token" | cut -d'.' -f2 | tr '_-' '/+')"
@@ -109,7 +110,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          azd env new "${AZURE_ENV_NAME}" --no-prompt || true
+          azd env get-values --environment "${AZURE_ENV_NAME}" >/dev/null 2>&1 \
+            || azd env new "${AZURE_ENV_NAME}" --no-prompt
           azd env set principalId "${AZD_PRINCIPAL_ID}" --environment "${AZURE_ENV_NAME}"
           azd env set AuthenticationEnabled "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
           azd env set AUTHENTICATION_ENABLED "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
