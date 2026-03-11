@@ -18,7 +18,11 @@ jq -e . /tmp/azd-initial.json >/dev/null || (echo "AZD_INITIAL_ENVIRONMENT_CONFI
 
 azd env new "$AZURE_ENV_NAME" --no-prompt || true
 
-jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' /tmp/azd-initial.json > /tmp/azd-initial.env
+# Seed non-SQL-password values first. SQL password is handled separately in workflow
+# to avoid accidental quote wrapping in azd environment storage.
+jq -r 'to_entries[]
+  | select(.key != "SqlPassword" and .key != "Password")
+  | "\(.key)=\(.value|tostring)"' /tmp/azd-initial.json > /tmp/azd-initial.env
 azd env set --environment "$AZURE_ENV_NAME" --file /tmp/azd-initial.env --no-prompt || (echo "Failed to seed azd env from /tmp/azd-initial.env" && exit 1)
 
 read_required_value() {
@@ -160,8 +164,6 @@ is_placeholder_value "$invite_smtp_password" && (echo "InviteSmtpPassword appear
 
 azd env set --environment "$AZURE_ENV_NAME" AuthenticationEnabled "$authentication_enabled" --no-prompt
 azd env set --environment "$AZURE_ENV_NAME" UseInMemoryData "$use_in_memory_data" --no-prompt
-azd env set --environment "$AZURE_ENV_NAME" SqlPassword "$sql_password" --no-prompt
-azd env set --environment "$AZURE_ENV_NAME" Password "$sql_password" --no-prompt
 azd env set --environment "$AZURE_ENV_NAME" KeycloakPassword "$keycloak_password" --no-prompt
 azd env set --environment "$AZURE_ENV_NAME" KeycloakDbUsername "$keycloak_db_username" --no-prompt
 azd env set --environment "$AZURE_ENV_NAME" KeycloakDbPassword "$keycloak_db_password" --no-prompt
