@@ -217,6 +217,22 @@ jobs:
             --query "[?properties.provisioningState!='Succeeded'].properties.statusMessage" \
             -o jsonc || true
 
+          rg_name="rg-${AZURE_ENV_NAME}"
+          echo "Nested deployment diagnostics (resource group scope):"
+          echo "Resource group: $rg_name, deployment: sql"
+          az deployment group show \
+            --resource-group "$rg_name" \
+            --name "sql" \
+            --query "{name:name,state:properties.provisioningState,error:properties.error}" \
+            -o jsonc || true
+
+          echo "Nested deployment failed operation status messages:"
+          az deployment operation group list \
+            --resource-group "$rg_name" \
+            --name "sql" \
+            --query "[?properties.provisioningState!='Succeeded'].properties.statusMessage" \
+            -o jsonc || true
+
       - name: Fail If Provision Failed
         if: steps.provision.outcome == 'failure'
         run: |
