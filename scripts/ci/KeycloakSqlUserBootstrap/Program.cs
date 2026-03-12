@@ -69,18 +69,21 @@ static async Task EnsureLoginAsync(
     const string sql = """
         DECLARE @loginName sysname = @appUser;
         DECLARE @loginPassword nvarchar(256) = @appPassword;
+        DECLARE @escapedPassword nvarchar(514) = REPLACE(@loginPassword, '''', '''''');
 
         IF NOT EXISTS (SELECT 1 FROM sys.sql_logins WHERE name = @loginName)
         BEGIN
             DECLARE @createSql nvarchar(max) =
-                N'CREATE LOGIN ' + QUOTENAME(@loginName) + N' WITH PASSWORD = @p;';
-            EXEC sp_executesql @createSql, N'@p nvarchar(256)', @p = @loginPassword;
+                N'CREATE LOGIN ' + QUOTENAME(@loginName) + N' WITH PASSWORD = '''
+                + @escapedPassword + N''';';
+            EXEC (@createSql);
         END
         ELSE
         BEGIN
             DECLARE @alterSql nvarchar(max) =
-                N'ALTER LOGIN ' + QUOTENAME(@loginName) + N' WITH PASSWORD = @p;';
-            EXEC sp_executesql @alterSql, N'@p nvarchar(256)', @p = @loginPassword;
+                N'ALTER LOGIN ' + QUOTENAME(@loginName) + N' WITH PASSWORD = '''
+                + @escapedPassword + N''';';
+            EXEC (@alterSql);
         END
         """;
 
