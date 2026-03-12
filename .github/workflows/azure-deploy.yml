@@ -158,10 +158,10 @@ jobs:
           fi
 
           echo "Password-related lines in main.bicep:"
-          rg -n "SqlPassword|Password|sql" "$main_bicep" || true
+          grep -nE "SqlPassword|Password|sql" "$main_bicep" || true
 
           echo "Password-related lines in sql.module.bicep:"
-          rg -n "AdministratorLogin|AdministratorLoginPassword|Password|parameters\\(|param " "$sql_module" || true
+          grep -nE "AdministratorLogin|AdministratorLoginPassword|Password|parameters\\(|param " "$sql_module" || true
 
           echo "SQL module excerpt:"
           sed -n '1,220p' "$sql_module"
@@ -302,6 +302,7 @@ jobs:
           exit 1
 
       - name: Disable SQL Entra-only auth for Keycloak SQL login
+        if: success()
         run: |
           resource_group="rg-${AZURE_ENV_NAME}"
           sql_server_name="$(az sql server list --resource-group "$resource_group" --query '[0].name' -o tsv)"
@@ -422,6 +423,7 @@ jobs:
           scripts/ci/sync-containerapp-secrets-keyvault.sh
 
       - name: Deploy frontend as static website
+        if: success()
         working-directory: ${{ env.AZD_WORKING_DIR }}
         env:
           DEPLOYER_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
