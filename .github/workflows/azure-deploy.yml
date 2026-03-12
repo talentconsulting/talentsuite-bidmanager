@@ -121,6 +121,7 @@ jobs:
           azd env set KeycloakClientId "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
           azd env set KEYCLOAK_CLIENT_ID "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
           azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakDbUsername" "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
           azd env set KeycloakPassword "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
           azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
           azd env set SqlPassword "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
@@ -280,6 +281,7 @@ jobs:
           fi
 
           principalId="${AZD_PRINCIPAL_ID}" \
+          AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
           AZURE_GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64="${GoogleDriveSyncServiceAccountJsonBase64}" \
           AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
           AZURE_KEYCLOAK_DB_PASSWORD="${KeycloakDbPassword}" \
@@ -419,6 +421,7 @@ jobs:
           azd env set KeycloakPassword "${KeycloakPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env config set "infra.parameters.KeycloakDbUsername" "${KeycloakDbUsername}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env config set "infra.parameters.KeycloakPassword" "${KeycloakPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env config set "infra.parameters.InviteSmtpPassword" "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
@@ -470,6 +473,7 @@ jobs:
           # rebound to Key Vault references in the post-sync step.
           principalId="${AZD_PRINCIPAL_ID}" \
           KeycloakDbUsername="${KeycloakDbUsername}" \
+          AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
           AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
           AZURE_KEYCLOAK_DB_PASSWORD="${KeycloakDbPassword}" \
           AZURE_KEYCLOAK_PASSWORD="${KeycloakPassword}" \

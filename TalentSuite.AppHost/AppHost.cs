@@ -108,12 +108,8 @@ var googleDriveSyncServiceAccountJsonBase64 = builder.AddParameter(
                                 value: "",
                                 secret: true,
                                 publishValueAsDefault: false);
-var keycloakContainerAdminPassword = useLocalInfrastructure
-    ? keycloakPassword
-    : keycloakPasswordPlaceholder;
-var keycloakContainerDbPassword = useLocalInfrastructure
-    ? keycloakDbPassword
-    : keycloakDbPasswordPlaceholder;
+var keycloakContainerAdminPassword = keycloakPassword;
+var keycloakContainerDbPassword = keycloakDbPassword;
 
 var keycloak = builder.AddKeycloak(
             "keycloak",
