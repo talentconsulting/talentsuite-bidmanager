@@ -144,14 +144,18 @@ jobs:
           set -euo pipefail
           azd infra gen --environment "${AZURE_ENV_NAME}"
 
-          echo "Generated SQL module files:"
-          find . -path '*/.azure/*' \( -name 'sql.module.bicep' -o -name 'main.bicep' \)
+          echo "Recent Bicep files in workspace:"
+          find . -type f \( -name '*.bicep' -o -name '*.json' \) -mmin -5 | sort
 
-          sql_module="$(find . -path '*/.azure/*' -name 'sql.module.bicep' | head -n 1)"
-          main_bicep="$(find . -path '*/.azure/*' -name 'main.bicep' | head -n 1)"
+          sql_module="$(find . -type f -name 'sql.module.bicep' -mmin -5 | head -n 1)"
+          main_bicep="$(find . -type f -name 'main.bicep' -mmin -5 | head -n 1)"
 
-          test -n "$sql_module" || (echo "sql.module.bicep not found under .azure" && exit 1)
-          test -n "$main_bicep" || (echo "main.bicep not found under .azure" && exit 1)
+          if [ -z "$sql_module" ] || [ -z "$main_bicep" ]; then
+            echo "Could not locate freshly generated Bicep files."
+            echo "Listing likely azd output directories:"
+            find . -maxdepth 4 \( -type d -name '.azure' -o -type d -name 'infra' -o -type d -name '.azd' \) | sort
+            exit 1
+          fi
 
           echo "Password-related lines in main.bicep:"
           rg -n "SqlPassword|Password|sql" "$main_bicep" || true
