@@ -17,8 +17,10 @@ resource_group="rg-${AZURE_ENV_NAME}"
 realm_name="TalentConsulting"
 realm_file="TalentSuite.AppHost/keycloak/realms/TalentConsulting-realm.json"
 admin_user="admin"
+frontend_client_id="$(jq -r '.clients[] | select(.clientId == "talentsuite-frontend") | .clientId' "$realm_file")"
 
 test -f "$realm_file" || (echo "Realm file not found: $realm_file" && exit 1)
+test -n "$frontend_client_id" || (echo "Realm file does not define the talentsuite-frontend client" && exit 1)
 
 keycloak_fqdn="$(az containerapp show \
   --name "keycloak" \
@@ -56,7 +58,37 @@ realm_status="$(curl -sS -o /tmp/keycloak-realm-check.json -w "%{http_code}" \
   "$realm_admin_url")"
 
 if [ "$realm_status" = "200" ]; then
-  echo "Keycloak realm '${realm_name}' already exists."
+  client_status="$(curl -sS -o /tmp/keycloak-client-check.json -w "%{http_code}" \
+    -H "Authorization: Bearer ${access_token}" \
+    "${keycloak_base_url}/admin/realms/${realm_name}/clients?clientId=${frontend_client_id}")"
+
+  if [ "$client_status" != "200" ]; then
+    echo "Unexpected response checking Keycloak client '${frontend_client_id}': HTTP ${client_status}"
+    cat /tmp/keycloak-client-check.json || true
+    exit 1
+  fi
+
+  client_count="$(jq 'length' /tmp/keycloak-client-check.json)"
+  if [ "$client_count" -gt 0 ]; then
+    echo "Keycloak realm '${realm_name}' and client '${frontend_client_id}' already exist."
+    exit 0
+  fi
+
+  echo "Keycloak realm '${realm_name}' exists but client '${frontend_client_id}' is missing. Creating client."
+  create_client_status="$(jq -c '.clients[] | select(.clientId == "talentsuite-frontend")' "$realm_file" \
+    | curl -sS -o /tmp/keycloak-client-create.json -w "%{http_code}" \
+        -X POST "${keycloak_base_url}/admin/realms/${realm_name}/clients" \
+        -H "Authorization: Bearer ${access_token}" \
+        -H "Content-Type: application/json" \
+        --data-binary @-)"
+
+  if [ "$create_client_status" != "201" ] && [ "$create_client_status" != "409" ]; then
+    echo "Failed to create Keycloak client '${frontend_client_id}': HTTP ${create_client_status}"
+    cat /tmp/keycloak-client-create.json || true
+    exit 1
+  fi
+
+  echo "Created Keycloak client '${frontend_client_id}'."
   exit 0
 fi
 

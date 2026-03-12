@@ -41,12 +41,21 @@ dotnet publish src/TalentSuite.FrontEnd/TalentSuite.FrontEnd.csproj -c Release -
 
 azd_values="$(azd env get-values --environment "$AZURE_ENV_NAME")"
 
+normalize_env_value() {
+  local value="$1"
+  if [ "${#value}" -ge 2 ] && [ "${value#\"}" != "$value" ] && [ "${value%\"}" != "$value" ]; then
+    value="${value#\"}"
+    value="${value%\"}"
+  fi
+  printf '%s' "$value"
+}
+
 find_env_value() {
   local key value
   for key in "$@"; do
     value="$(echo "$azd_values" | sed -n "s/^${key}=//p" | head -n1)"
     if [ -n "$value" ]; then
-      echo "$value"
+      normalize_env_value "$value"
       return 0
     fi
   done
