@@ -187,7 +187,7 @@ else
     {
         foreach (var server in infra.GetProvisionableResources().OfType<SqlServer>())
         {
-            server.AdministratorLogin = "rgparkins";
+            server.AdministratorLogin = "tsinfrausr";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
 
             if (server.Administrators is ServerExternalAdministrator admin)
