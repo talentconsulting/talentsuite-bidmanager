@@ -18,6 +18,11 @@ var keycloakPassword = builder.AddParameter(
                                 value: "admin",
                                 secret: true,
                                 publishValueAsDefault: false);
+var keycloakPasswordPlaceholder = builder.AddParameter(
+                                "KeycloakPasswordPlaceholder",
+                                value: "placeholder-keycloak-admin-password",
+                                secret: false,
+                                publishValueAsDefault: true);
 var sqlPassword = builder.AddParameter(
                                 "SqlPassword",
                                 value: "Your_strong_password123!",
@@ -33,6 +38,11 @@ var keycloakDbPassword = builder.AddParameter(
                                 value: "unused",
                                 secret: true,
                                 publishValueAsDefault: false);
+var keycloakDbPasswordPlaceholder = builder.AddParameter(
+                                "KeycloakDbPasswordPlaceholder",
+                                value: "placeholder-keycloak-db-password",
+                                secret: false,
+                                publishValueAsDefault: true);
 var authenticationEnabled = builder.AddParameter(
                                 "AuthenticationEnabled",
                                 value: "true",
@@ -98,10 +108,16 @@ var googleDriveSyncServiceAccountJsonBase64 = builder.AddParameter(
                                 value: "",
                                 secret: true,
                                 publishValueAsDefault: false);
+var keycloakContainerAdminPassword = useLocalInfrastructure
+    ? keycloakPassword
+    : keycloakPasswordPlaceholder;
+var keycloakContainerDbPassword = useLocalInfrastructure
+    ? keycloakDbPassword
+    : keycloakDbPasswordPlaceholder;
 
 var keycloak = builder.AddKeycloak(
             "keycloak",
-            adminPassword: keycloakPassword,
+            adminPassword: keycloakContainerAdminPassword,
             port: 8080)
     .WithEnvironment("KC_DB", "mssql")
     .WithRealmImport("./keycloak/realms");
@@ -174,8 +190,8 @@ else
     keycloak
         .WithEnvironment("KC_DB_URL", keycloakDb.Resource.JdbcConnectionString)
         .WithEnvironment("KC_DB_USERNAME", keycloakDbUsername)
-        .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", keycloakPassword)
-        .WithEnvironment("KC_DB_PASSWORD", keycloakDbPassword)
+        .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", keycloakContainerAdminPassword)
+        .WithEnvironment("KC_DB_PASSWORD", keycloakContainerDbPassword)
         .WaitFor(keycloakDb);
     
     server = builder.AddProject<TalentSuite_Server>("talentserver")
