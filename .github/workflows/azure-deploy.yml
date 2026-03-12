@@ -149,8 +149,9 @@ jobs:
 
           sql_module="$(find . -type f -name 'sql.module.bicep' -mmin -5 | head -n 1)"
           main_bicep="$(find . -type f -name 'main.bicep' -mmin -5 | head -n 1)"
+          main_parameters="$(find . -type f -name 'main.parameters.json' -mmin -5 | head -n 1)"
 
-          if [ -z "$sql_module" ] || [ -z "$main_bicep" ]; then
+          if [ -z "$sql_module" ] || [ -z "$main_bicep" ] || [ -z "$main_parameters" ]; then
             echo "Could not locate freshly generated Bicep files."
             echo "Listing likely azd output directories:"
             find . -maxdepth 4 \( -type d -name '.azure' -o -type d -name 'infra' -o -type d -name '.azd' \) | sort
@@ -162,6 +163,29 @@ jobs:
 
           echo "Password-related lines in sql.module.bicep:"
           grep -nE "AdministratorLogin|AdministratorLoginPassword|Password|parameters\\(|param " "$sql_module" || true
+
+          echo "Password-related lines in main.parameters.json:"
+          grep -nE "SqlPassword|Password|secureString|keyVault|placeholder" "$main_parameters" || true
+
+          echo "azd environment secure value diagnostics:"
+          env_dump_file="$(mktemp)"
+          azd env get-values --environment "${AZURE_ENV_NAME}" > "$env_dump_file"
+          for key in SqlPassword Password KeycloakPassword KeycloakDbPassword InviteSmtpPassword GoogleDriveSyncServiceAccountJsonBase64; do
+            raw_line="$(grep -E "^(export[[:space:]]+)?${key}=" "$env_dump_file" | tail -n 1 || true)"
+            if [ -z "$raw_line" ]; then
+              echo "${key}: missing from azd env"
+              continue
+            fi
+
+            raw_value="${raw_line#*=}"
+            if [ "${#raw_value}" -ge 2 ] && [ "${raw_value#\"}" != "$raw_value" ] && [ "${raw_value%\"}" != "$raw_value" ]; then
+              raw_value="${raw_value#\"}"
+              raw_value="${raw_value%\"}"
+            fi
+
+            value_sha="$(printf '%s' "$raw_value" | sha256sum | awk '{print $1}')"
+            echo "${key}: present len=${#raw_value} sha256=${value_sha}"
+          done
 
           echo "SQL module excerpt:"
           sed -n '1,220p' "$sql_module"
@@ -206,10 +230,31 @@ jobs:
           azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set KeycloakPassword "${KeycloakPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set SqlPassword "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env set Password "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
 
           sql_pw_sha="$(printf '%s' "$SqlPassword" | sha256sum | awk '{print $1}')"
           echo "SqlPassword input diagnostics: len=${#SqlPassword} sha256=${sql_pw_sha}"
+
+          env_dump_file="$(mktemp)"
+          azd env get-values --environment "${{ env.AZURE_ENV_NAME }}" > "$env_dump_file"
+          for key in SqlPassword Password; do
+            raw_line="$(grep -E "^(export[[:space:]]+)?${key}=" "$env_dump_file" | tail -n 1 || true)"
+            if [ -z "$raw_line" ]; then
+              echo "${key} diagnostics after azd env set: missing"
+              continue
+            fi
+
+            raw_value="${raw_line#*=}"
+            if [ "${#raw_value}" -ge 2 ] && [ "${raw_value#\"}" != "$raw_value" ] && [ "${raw_value%\"}" != "$raw_value" ]; then
+              raw_value="${raw_value#\"}"
+              raw_value="${raw_value%\"}"
+            fi
+
+            value_sha="$(printf '%s' "$raw_value" | sha256sum | awk '{print $1}')"
+            echo "${key} diagnostics after azd env set: len=${#raw_value} sha256=${value_sha}"
+          done
 
           password_to_use="${SqlPassword}"
           pw_len="${#password_to_use}"
