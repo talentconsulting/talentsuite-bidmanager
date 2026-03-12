@@ -181,9 +181,21 @@ if (useLocalInfrastructure)
 }
 else
 {
-
     var sql = builder.AddAzureSqlServer("sql");
-        
+    
+    sql.ConfigureInfrastructure(infra =>
+    {
+        foreach (var server in infra.GetProvisionableResources().OfType<SqlServer>())
+        {
+            server.AdministratorLogin = "admin";
+            //server.AdministratorLoginPassword = sqlPassword;
+
+            if (server.Administrators is ServerExternalAdministrator admin)
+            {
+                admin.IsAzureADOnlyAuthenticationEnabled = false;
+            }
+        }
+    });
     var appDb = sql.AddDatabase("talentconsultingdb");
     var keycloakDb = sql.AddDatabase("keycloakdb");
 
