@@ -167,6 +167,9 @@ jobs:
           echo "Password-related lines in main.parameters.json:"
           grep -nE "SqlPassword|Password|secureString|keyVault|placeholder" "$main_parameters" || true
 
+          echo "main.parameters.json SqlPassword entry:"
+          jq -c '.parameters.SqlPassword // "<missing>"' "$main_parameters" || true
+
           echo "azd environment secure value diagnostics:"
           env_dump_file="$(mktemp)"
           azd env get-values --environment "${AZURE_ENV_NAME}" > "$env_dump_file"
@@ -263,7 +266,7 @@ jobs:
           has_number="false"; [[ "$password_to_use" =~ [0-9] ]] && has_number="true"
           has_special="false"; [[ "$password_to_use" =~ [^A-Za-z0-9] ]] && has_special="true"
           has_whitespace="false"; [[ "$password_to_use" =~ [[:space:]] ]] && has_whitespace="true"
-          contains_login="false"; [[ "${password_to_use,,}" == *"tsinfrausr"* ]] && contains_login="true"
+          contains_login="false"; [[ "${password_to_use,,}" == *"sqladm72"* ]] && contains_login="true"
           contains_word_password="false"; [[ "${password_to_use,,}" == *"password"* ]] && contains_word_password="true"
           echo "SqlPassword diagnostics: length=${pw_len}, upper=${has_upper}, lower=${has_lower}, number=${has_number}, special=${has_special}, whitespace=${has_whitespace}, contains_login=${contains_login}, contains_word_password=${contains_word_password}"
           if [[ ! "$password_to_use" =~ ^[A-Za-z0-9\!@\#%\^\*\(\)_\+=\.,:-]+$ ]]; then
@@ -277,7 +280,7 @@ jobs:
           KeycloakPassword="${KeycloakPassword}" \
           KeycloakDbPassword="${KeycloakDbPassword}" \
           InviteSmtpPassword="${InviteSmtpPassword}" \
-          azd provision --environment "${{ env.AZURE_ENV_NAME }}"
+          azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Dump ARM Deployment Errors (Provision)
         if: steps.provision.outcome == 'failure'
@@ -441,7 +444,7 @@ jobs:
           has_number="false"; [[ "$password_to_use" =~ [0-9] ]] && has_number="true"
           has_special="false"; [[ "$password_to_use" =~ [^A-Za-z0-9] ]] && has_special="true"
           has_whitespace="false"; [[ "$password_to_use" =~ [[:space:]] ]] && has_whitespace="true"
-          contains_login="false"; [[ "${password_to_use,,}" == *"tsinfrausr"* ]] && contains_login="true"
+          contains_login="false"; [[ "${password_to_use,,}" == *"sqladm72"* ]] && contains_login="true"
           contains_word_password="false"; [[ "${password_to_use,,}" == *"password"* ]] && contains_word_password="true"
           echo "SqlPassword diagnostics (deploy): length=${pw_len}, upper=${has_upper}, lower=${has_lower}, number=${has_number}, special=${has_special}, whitespace=${has_whitespace}, contains_login=${contains_login}, contains_word_password=${contains_word_password}"
           if [[ ! "$password_to_use" =~ ^[A-Za-z0-9\!@\#%\^\*\(\)_\+=\.,:-]+$ ]]; then
