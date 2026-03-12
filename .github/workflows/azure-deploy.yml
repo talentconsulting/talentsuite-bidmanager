@@ -138,6 +138,31 @@ jobs:
           azd env set GoogleDriveSyncServiceAccountJsonBase64 "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
           azd env set KeyVaultName "${KeyVaultName}" --environment "${AZURE_ENV_NAME}"
 
+      - name: Dump Generated SQL Infra Bindings
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+          rm -rf .azure/infra-debug
+          azd infra gen --environment "${AZURE_ENV_NAME}" --output-path .azure/infra-debug
+
+          echo "Generated SQL module files:"
+          find .azure/infra-debug -name 'sql.module.bicep' -o -name 'main.bicep'
+
+          sql_module="$(find .azure/infra-debug -name 'sql.module.bicep' | head -n 1)"
+          main_bicep="$(find .azure/infra-debug -name 'main.bicep' | head -n 1)"
+
+          test -n "$sql_module" || (echo "sql.module.bicep not found under .azure/infra-debug" && exit 1)
+          test -n "$main_bicep" || (echo "main.bicep not found under .azure/infra-debug" && exit 1)
+
+          echo "Password-related lines in main.bicep:"
+          rg -n "SqlPassword|Password|sql" "$main_bicep" || true
+
+          echo "Password-related lines in sql.module.bicep:"
+          rg -n "AdministratorLogin|AdministratorLoginPassword|Password|parameters\\(|param " "$sql_module" || true
+
+          echo "SQL module excerpt:"
+          sed -n '1,220p' "$sql_module"
+
       - name: Provision
         id: provision
         continue-on-error: true
