@@ -11,6 +11,7 @@ require_env() {
 
 require_env "AZURE_ENV_NAME"
 require_env "DEPLOYER_CLIENT_ID"
+require_env "KeycloakPassword"
 
 blob_endpoint="$(azd env get-value STORAGE_BLOBENDPOINT --environment "$AZURE_ENV_NAME")"
 storage_account="$(echo "$blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
@@ -134,4 +135,46 @@ az storage blob update \
   --name index.html \
   --content-cache-control "no-cache, no-store, must-revalidate" >/dev/null
 
-echo "Frontend URL: https://${storage_account}.z33.web.core.windows.net/"
+frontend_url="https://${storage_account}.z33.web.core.windows.net"
+keycloak_token_url="${keycloak_base_url%/}/realms/master/protocol/openid-connect/token"
+keycloak_client_query_url="${keycloak_base_url%/}/admin/realms/TalentConsulting/clients?clientId=${keycloak_client_id}"
+
+access_token="$(curl -fsS \
+  -X POST "$keycloak_token_url" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "client_id=admin-cli" \
+  --data-urlencode "username=admin" \
+  --data-urlencode "password=${KeycloakPassword}" \
+  --data-urlencode "grant_type=password" \
+  | jq -r '.access_token // empty')"
+
+test -n "$access_token" || (echo "Failed to obtain Keycloak admin token during frontend deploy" && exit 1)
+
+client_payload="$(curl -fsS \
+  -H "Authorization: Bearer ${access_token}" \
+  "$keycloak_client_query_url")"
+
+client_id_internal="$(printf '%s' "$client_payload" | jq -r '.[0].id // empty')"
+test -n "$client_id_internal" || (echo "Could not resolve Keycloak client ${keycloak_client_id}" && exit 1)
+
+client_update_url="${keycloak_base_url%/}/admin/realms/TalentConsulting/clients/${client_id_internal}"
+printf '%s' "$client_payload" \
+  | jq \
+      --arg frontendUrl "$frontend_url" \
+      '.[0]
+       | .redirectUris = (((.redirectUris // []) + [
+            ($frontendUrl + "/*"),
+            ($frontendUrl + "/authentication/login-callback"),
+            ($frontendUrl + "/authentication/logout-callback"),
+            ($frontendUrl + "/authentication/logged-out")
+         ]) | unique)
+       | .webOrigins = (((.webOrigins // []) + [
+            $frontendUrl
+         ]) | unique)' \
+  | curl -fsS \
+      -X PUT "$client_update_url" \
+      -H "Authorization: Bearer ${access_token}" \
+      -H "Content-Type: application/json" \
+      --data-binary @-
+
+echo "Frontend URL: ${frontend_url}/"
