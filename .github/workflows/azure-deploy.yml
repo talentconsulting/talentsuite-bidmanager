@@ -380,6 +380,30 @@ jobs:
               --name "$sql_server_name"
           fi
 
+      - name: Ensure dedicated Keycloak SQL login exists
+        if: success()
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          SqlPassword="$(printf '%s' "${SqlPassword:-}" | tr -d '\r' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+          KeycloakDbPassword="$(printf '%s' "${KeycloakDbPassword:-}" | tr -d '\r' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+
+          test -n "${KeycloakDbUsername:-}" || (echo "KeycloakDbUsername missing" && exit 1)
+          test -n "${KeycloakDbPassword:-}" || (echo "KeycloakDbPassword missing" && exit 1)
+          test -n "${SqlPassword:-}" || (echo "SqlPassword missing" && exit 1)
+
+          sql_server_fqdn="$(az sql server list --resource-group "rg-${AZURE_ENV_NAME}" --query '[0].fullyQualifiedDomainName' -o tsv)"
+          test -n "$sql_server_fqdn" || (echo "Could not resolve SQL server FQDN" && exit 1)
+
+          dotnet run --project scripts/ci/KeycloakSqlUserBootstrap/KeycloakSqlUserBootstrap.csproj -- \
+            --server "$sql_server_fqdn" \
+            --admin-user "sqladm72" \
+            --admin-password "$SqlPassword" \
+            --app-user "$KeycloakDbUsername" \
+            --app-password "$KeycloakDbPassword" \
+            --database "keycloakdb"
+
       - name: Pre-sync Container App secrets from GitHub secrets to Key Vault refs
         if: success()
         working-directory: ${{ env.AZD_WORKING_DIR }}
