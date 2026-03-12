@@ -185,16 +185,17 @@ else
     
     sql.ConfigureInfrastructure(infra =>
     {
-        foreach (var server in infra.GetProvisionableResources().OfType<SqlServer>())
-        {
-            server.AdministratorLogin = "tsinfrausr";
-            server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
+        var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
+        server.AdministratorLogin = "tsinfrausr";
+        server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
 
-            if (server.Administrators is ServerExternalAdministrator admin)
-            {
-                admin.IsAzureADOnlyAuthenticationEnabled = false;
-            }
-        }
+        infra.Add(new SqlServerAzureADOnlyAuthentication(
+            "sqlAzureAdOnlyAuthentication",
+            SqlServerAzureADOnlyAuthentication.ResourceVersions.V2023_08_01)
+        {
+            Parent = server,
+            IsAzureADOnlyAuthenticationEnabled = false
+        });
     });
     var appDb = sql.AddDatabase("talentconsultingdb");
     var keycloakDb = sql.AddDatabase("keycloakdb");
