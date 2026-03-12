@@ -172,7 +172,7 @@ for app_name in "${app_names[@]}"; do
       kc-db-password)
         secret_updates+=("${secret_ref}=keyvaultref:${key_vault_uri}secrets/keycloak-db-password,identityref:system")
         ;;
-      kc-bootstrap-*-password|keycloak-*-password)
+      kc-bootstrap-admin-password|keycloak-admin-password|kc-bootstrap-*-password|keycloak-*-password)
         secret_updates+=("${secret_ref}=keyvaultref:${key_vault_uri}secrets/keycloak-admin-password,identityref:system")
         ;;
     esac

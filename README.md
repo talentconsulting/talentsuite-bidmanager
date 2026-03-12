@@ -362,6 +362,7 @@ Why this is required:
   - `keycloak-***-password`
   - `inviteemail--smtppassword`
 - The placeholder + Key Vault ref sync approach avoids invalid empty inline secrets during `azd deploy`.
+- In Azure, Keycloak bootstrap/admin and DB password env vars are both sourced from the same seeded secret values first, then rebound to Key Vault refs after deploy.
 
 ## Troubleshooting
 - If authentication UI loops or role-based UI seems wrong, verify token claims (`roles`, `realm_access`, `resource_access`) and `/api/users/me-identity-debug`.

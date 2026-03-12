@@ -174,6 +174,7 @@ else
     keycloak
         .WithEnvironment("KC_DB_URL", keycloakDb.Resource.JdbcConnectionString)
         .WithEnvironment("KC_DB_USERNAME", keycloakDbUsername)
+        .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", keycloakPassword)
         .WithEnvironment("KC_DB_PASSWORD", keycloakDbPassword)
         .WaitFor(keycloakDb);
     
