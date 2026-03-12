@@ -125,6 +125,11 @@ jobs:
           azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
           azd env set SqlPassword "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
           azd env set Password "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.GoogleDriveSyncServiceAccountJsonBase64" "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.InviteSmtpPassword" "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakPassword" "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.SqlPassword" "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
           azd env set InviteEmailEnabled "${InviteEmailEnabled}" --environment "${AZURE_ENV_NAME}"
           azd env set InviteFromEmail "${InviteFromEmail}" --environment "${AZURE_ENV_NAME}"
           azd env set InviteSmtpHost "${InviteSmtpHost}" --environment "${AZURE_ENV_NAME}"
@@ -275,6 +280,11 @@ jobs:
           fi
 
           principalId="${AZD_PRINCIPAL_ID}" \
+          AZURE_GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64="${GoogleDriveSyncServiceAccountJsonBase64}" \
+          AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
+          AZURE_KEYCLOAK_DB_PASSWORD="${KeycloakDbPassword}" \
+          AZURE_KEYCLOAK_PASSWORD="${KeycloakPassword}" \
+          AZURE_SQL_PASSWORD="${SqlPassword}" \
           SqlPassword="${SqlPassword}" \
           Password="${SqlPassword}" \
           KeycloakPassword="${KeycloakPassword}" \
@@ -409,6 +419,10 @@ jobs:
           azd env set KeycloakPassword "${KeycloakPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env config set "infra.parameters.KeycloakPassword" "${KeycloakPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env config set "infra.parameters.InviteSmtpPassword" "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env config set "infra.parameters.SqlPassword" "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
 
           echo "AZURE_ENV_NAME=${AZURE_ENV_NAME}"
@@ -456,6 +470,10 @@ jobs:
           # rebound to Key Vault references in the post-sync step.
           principalId="${AZD_PRINCIPAL_ID}" \
           KeycloakDbUsername="${KeycloakDbUsername}" \
+          AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
+          AZURE_KEYCLOAK_DB_PASSWORD="${KeycloakDbPassword}" \
+          AZURE_KEYCLOAK_PASSWORD="${KeycloakPassword}" \
+          AZURE_SQL_PASSWORD="${SqlPassword}" \
           SqlPassword="${SqlPassword}" \
           Password="${SqlPassword}" \
           KeycloakPassword="${KeycloakPassword}" \
