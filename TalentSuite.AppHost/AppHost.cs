@@ -184,18 +184,10 @@ else
     var sql = builder.AddAzureSqlServer("sql")
         .ConfigureInfrastructure(infra =>
         {
-            foreach (var server in infra.GetProvisionableResources()
-                         .OfType<SqlServer>())
-            {
-                server.AdministratorLogin = "rgparkins";
-                server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
-            }
-
-            foreach (var adOnly in infra.GetProvisionableResources()
-                         .OfType<SqlServerAzureADOnlyAuthentication>())
-            {
-                adOnly.IsAzureADOnlyAuthenticationEnabled = false;
-            }
+            var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
+            server.AdministratorLogin = "tsinfrausr";
+            server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
+            server.Administrators = null;
         });
     
     var appDb = sql.AddDatabase("talentconsultingdb");
