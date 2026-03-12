@@ -187,7 +187,18 @@ else
             var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
             server.AdministratorLogin = "tsinfrausr";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
-            server.Administrators = null;
+
+            if (server.Administrators is { } admin)
+            {
+                server.Administrators = new ServerExternalAdministrator
+                {
+                    AdministratorType = admin.AdministratorType,
+                    Login = admin.Login,
+                    Sid = admin.Sid,
+                    TenantId = admin.TenantId,
+                    IsAzureADOnlyAuthenticationEnabled = false
+                };
+            }
         });
     
     var appDb = sql.AddDatabase("talentconsultingdb");
