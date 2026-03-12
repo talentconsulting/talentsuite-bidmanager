@@ -138,6 +138,7 @@ set_secret_with_retry "keycloak-admin-password" "$keycloak_password"
 set_secret_with_retry "keycloak-db-password" "$keycloak_db_password"
 
 mapfile -t app_names < <(az containerapp list --resource-group "$resource_group" --query '[].name' -o tsv)
+restarted_any="false"
 
 if [ "${#app_names[@]}" -eq 0 ]; then
   echo "No Container Apps found in $resource_group; skipping Key Vault secret sync."
@@ -184,7 +185,28 @@ for app_name in "${app_names[@]}"; do
       --resource-group "$resource_group" \
       --secrets "${secret_updates[@]}" >/dev/null
     echo "Patched Key Vault secret refs for $app_name"
+
+    mapfile -t active_revisions < <(
+      az containerapp revision list \
+        --name "$app_name" \
+        --resource-group "$resource_group" \
+        --query "[?properties.active].name" \
+        -o tsv
+    )
+
+    for revision_name in "${active_revisions[@]}"; do
+      [ -n "$revision_name" ] || continue
+      az containerapp revision restart \
+        --name "$app_name" \
+        --resource-group "$resource_group" \
+        --revision "$revision_name" >/dev/null
+      echo "Restarted $app_name revision $revision_name so updated secrets take effect"
+      restarted_any="true"
+    done
   fi
 done
 
 echo "Container App secret refs are backed by Key Vault ($key_vault_name)."
+if [ "$restarted_any" = "true" ]; then
+  echo "Restarted active Container App revisions after secret sync."
+fi
