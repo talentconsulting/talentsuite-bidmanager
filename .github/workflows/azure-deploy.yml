@@ -516,6 +516,13 @@ jobs:
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
 
+      - name: Import Keycloak realm if missing
+        if: success()
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          chmod +x scripts/ci/import-keycloak-realm.sh
+          scripts/ci/import-keycloak-realm.sh
+
       - name: Refresh Azure Login (OIDC) before frontend deploy
         if: success()
         uses: azure/login@v2

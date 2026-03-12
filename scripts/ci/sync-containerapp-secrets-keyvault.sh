@@ -167,6 +167,11 @@ for app_name in "${app_names[@]}"; do
     exit 1
   fi
 
+  # Container Apps can continue using a stale managed-identity token briefly after
+  # identity assignment / RBAC changes. Give Entra + Key Vault access propagation
+  # time to settle before switching secrets to Key Vault refs.
+  sleep 60
+
   secret_updates=()
   for secret_ref in "${secret_refs[@]}"; do
     case "$secret_ref" in
