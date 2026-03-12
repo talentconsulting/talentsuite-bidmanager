@@ -181,22 +181,14 @@ if (useLocalInfrastructure)
 }
 else
 {
-    var sql = builder.AddAzureSqlServer("sql");
-    
-    sql.ConfigureInfrastructure(infra =>
-    {
-        var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
-        server.AdministratorLogin = "tsinfrausr";
-        server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
-
-        infra.Add(new SqlServerAzureADOnlyAuthentication(
-            "sqlAzureAdOnlyAuthentication",
-            SqlServerAzureADOnlyAuthentication.ResourceVersions.V2023_08_01)
+    var sql = builder.AddAzureSqlServer("sql")
+        .ConfigureInfrastructure(infra =>
         {
-            Parent = server,
-            IsAzureADOnlyAuthenticationEnabled = false
+            var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
+            server.AdministratorLogin = "tsinfrausr";
+            server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
         });
-    });
+    
     var appDb = sql.AddDatabase("talentconsultingdb");
     var keycloakDb = sql.AddDatabase("keycloakdb");
 
