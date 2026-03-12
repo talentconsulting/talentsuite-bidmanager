@@ -185,7 +185,7 @@ else
         .ConfigureInfrastructure(infra =>
         {
             var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
-            server.AdministratorLogin = "tsinfrausr";
+            server.AdministratorLogin = "sqladm72";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
 
             if (server.Administrators is { } admin)
