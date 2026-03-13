@@ -164,6 +164,14 @@ jobs:
           azd env set GoogleDriveSyncServiceAccountJsonBase64 "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
           azd env set KeyVaultName "${KeyVaultName}" --environment "${AZURE_ENV_NAME}"
 
+      - name: Refresh azd environment outputs from existing provisioned infra
+        if: ${{ github.event.inputs.deployment_mode == 'apps-only' }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+          azd env refresh --environment "${AZURE_ENV_NAME}" --no-prompt
+          echo "Refreshed azd environment outputs for apps-only deploy."
+
       - name: Dump Generated SQL Infra Bindings
         if: ${{ github.event.inputs.deployment_mode != 'apps-only' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
