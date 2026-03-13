@@ -169,6 +169,8 @@ jobs:
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
+          azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
+          azd auth login --check-status >/dev/null
           azd env refresh --environment "${AZURE_ENV_NAME}" --no-prompt
           echo "Refreshed azd environment outputs for apps-only deploy."
 
