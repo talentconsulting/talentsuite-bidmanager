@@ -2,6 +2,26 @@ name: Azure Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      deployment_mode:
+        description: "Choose whether to provision infrastructure first or only deploy application code."
+        required: true
+        default: "infra-and-apps"
+        type: choice
+        options:
+          - infra-and-apps
+          - apps-only
+      deploy_target:
+        description: "Choose which application component to deploy."
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - keycloak
+          - talentserver
+          - talentfunctions
+          - frontend
 
 permissions:
   contents: read
@@ -145,6 +165,7 @@ jobs:
           azd env set KeyVaultName "${KeyVaultName}" --environment "${AZURE_ENV_NAME}"
 
       - name: Dump Generated SQL Infra Bindings
+        if: ${{ github.event.inputs.deployment_mode != 'apps-only' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -200,6 +221,7 @@ jobs:
           sed -n '1,220p' "$sql_module"
 
       - name: Provision
+        if: ${{ github.event.inputs.deployment_mode != 'apps-only' }}
         id: provision
         continue-on-error: true
         working-directory: ${{ env.AZD_WORKING_DIR }}
@@ -295,7 +317,7 @@ jobs:
           azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Dump ARM Deployment Errors (Provision)
-        if: steps.provision.outcome == 'failure'
+        if: ${{ github.event.inputs.deployment_mode != 'apps-only' && steps.provision.outcome == 'failure' }}
         run: |
           set -euo pipefail
           echo "Azure account context:"
@@ -356,13 +378,13 @@ jobs:
             -o jsonc || true
 
       - name: Fail If Provision Failed
-        if: steps.provision.outcome == 'failure'
+        if: ${{ github.event.inputs.deployment_mode != 'apps-only' && steps.provision.outcome == 'failure' }}
         run: |
           echo "Provision step failed. See deployment operation diagnostics above."
           exit 1
 
       - name: Disable SQL Entra-only auth for Keycloak SQL login
-        if: success()
+        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' }}
         run: |
           resource_group="rg-${AZURE_ENV_NAME}"
           sql_server_name="$(az sql server list --resource-group "$resource_group" --query '[0].name' -o tsv)"
@@ -381,7 +403,7 @@ jobs:
           fi
 
       - name: Ensure dedicated Keycloak SQL login exists
-        if: success()
+        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -405,13 +427,14 @@ jobs:
             --database "keycloakdb"
 
       - name: Pre-sync Container App secrets from GitHub secrets to Key Vault refs
-        if: success()
+        if: ${{ success() && github.event.inputs.deploy_target != 'frontend' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
 
       - name: Deploy
+        if: ${{ github.event.inputs.deploy_target != 'frontend' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -495,36 +518,55 @@ jobs:
 
           # Use placeholders in AppHost for azd manifest generation; real values are
           # rebound to Key Vault references in the post-sync step.
-          principalId="${AZD_PRINCIPAL_ID}" \
-          KeycloakDbUsername="${KeycloakDbUsername}" \
-          AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
-          AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
-          AZURE_KEYCLOAK_DB_PASSWORD="${KeycloakDbPassword}" \
-          AZURE_KEYCLOAK_PASSWORD="${KeycloakPassword}" \
-          AZURE_SQL_PASSWORD="${SqlPassword}" \
-          SqlPassword="${SqlPassword}" \
-          Password="${SqlPassword}" \
-          KeycloakPassword="${KeycloakPassword}" \
-          KeycloakDbPassword="${KeycloakDbPassword}" \
-          InviteSmtpPassword="${InviteSmtpPassword}" \
-          azd deploy --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
+          deploy_target="${{ github.event.inputs.deploy_target }}"
+          if [ "$deploy_target" = "all" ]; then
+            env \
+              principalId="${AZD_PRINCIPAL_ID}" \
+              KeycloakDbUsername="${KeycloakDbUsername}" \
+              AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
+              AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
+              AZURE_KEYCLOAK_DB_PASSWORD="${KeycloakDbPassword}" \
+              AZURE_KEYCLOAK_PASSWORD="${KeycloakPassword}" \
+              AZURE_SQL_PASSWORD="${SqlPassword}" \
+              SqlPassword="${SqlPassword}" \
+              Password="${SqlPassword}" \
+              KeycloakPassword="${KeycloakPassword}" \
+              KeycloakDbPassword="${KeycloakDbPassword}" \
+              InviteSmtpPassword="${InviteSmtpPassword}" \
+              azd deploy --all --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
+          else
+            env \
+              principalId="${AZD_PRINCIPAL_ID}" \
+              KeycloakDbUsername="${KeycloakDbUsername}" \
+              AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
+              AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
+              AZURE_KEYCLOAK_DB_PASSWORD="${KeycloakDbPassword}" \
+              AZURE_KEYCLOAK_PASSWORD="${KeycloakPassword}" \
+              AZURE_SQL_PASSWORD="${SqlPassword}" \
+              SqlPassword="${SqlPassword}" \
+              Password="${SqlPassword}" \
+              KeycloakPassword="${KeycloakPassword}" \
+              KeycloakDbPassword="${KeycloakDbPassword}" \
+              InviteSmtpPassword="${InviteSmtpPassword}" \
+              azd deploy "$deploy_target" --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
+          fi
 
       - name: Post-sync Container App secrets from GitHub secrets to Key Vault refs
-        if: always()
+        if: ${{ always() && github.event.inputs.deploy_target != 'frontend' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
 
       - name: Import Keycloak realm if missing
-        if: success()
+        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           chmod +x scripts/ci/import-keycloak-realm.sh
           scripts/ci/import-keycloak-realm.sh
 
       - name: Refresh Azure Login (OIDC) before frontend deploy
-        if: success()
+        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'frontend') }}
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -532,7 +574,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy frontend as static website
-        if: success()
+        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'frontend') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         env:
           DEPLOYER_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -541,7 +583,7 @@ jobs:
           scripts/ci/deploy-frontend-static.sh
 
       - name: Tag resource group and Azure resources
-        if: success()
+        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           chmod +x scripts/ci/tag-azure-resources.sh
