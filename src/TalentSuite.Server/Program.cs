@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using TalentSuite.Server.Bids;
+using TalentSuite.Server.Health;
 using TalentSuite.Server.Messaging;
 using TalentSuite.Server.Security;
 using TalentSuite.Server.Users;
@@ -25,6 +26,7 @@ builder.Services.AddRazorPages();
 builder.Services.AddBidServices(builder.Configuration);
 builder.Services.AddUserServices(builder.Configuration);
 builder.Services.AddAzureServiceBusMessaging(builder.Configuration);
+builder.Services.AddScoped<IHealthCheckProbe, SqlDatabaseHealthCheckProbe>();
 
 var keycloakAuthority = Environment.GetEnvironmentVariable("KEYCLOAK_AUTHORITY")
     ?? BuildKeycloakAuthorityFromEndpointVariables()
@@ -108,11 +110,14 @@ builder.Services.AddScoped<IAuthorizationHandler, BidAccessAuthorizationHandler>
 var apiBaseAddress = Environment.GetEnvironmentVariable("TALENTFRONTEND_HTTPS")
                                                          ?? builder.Configuration["TALENTFRONTEND_HTTPS"]
                                                          ?? "https+http://talentfrontend";
+var additionalFrontendOrigin = Environment.GetEnvironmentVariable("FRONTEND_PUBLIC_ORIGIN")
+                               ?? builder.Configuration["FRONTEND_PUBLIC_ORIGIN"];
 // CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("BlazorDev", policy =>
-        policy.WithOrigins(apiBaseAddress) // your client origin
+        policy.SetIsOriginAllowed(origin =>
+            IsAllowedFrontendOrigin(origin, apiBaseAddress, additionalFrontendOrigin))
             .AllowAnyHeader()
             .AllowAnyMethod()
     );
@@ -215,6 +220,27 @@ static void AddRoleClaim(ClaimsIdentity identity, string? role)
         return;
 
     identity.AddClaim(new Claim(ClaimTypes.Role, role));
+}
+
+static bool IsAllowedFrontendOrigin(string? origin, string configuredOrigin, string? additionalOrigin)
+{
+    if (string.IsNullOrWhiteSpace(origin))
+        return false;
+
+    if (string.Equals(origin, configuredOrigin, StringComparison.OrdinalIgnoreCase))
+        return true;
+
+    if (!string.IsNullOrWhiteSpace(additionalOrigin)
+        && string.Equals(origin, additionalOrigin, StringComparison.OrdinalIgnoreCase))
+    {
+        return true;
+    }
+
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri))
+        return false;
+
+    return originUri.Scheme == Uri.UriSchemeHttps
+           && originUri.Host.EndsWith(".z33.web.core.windows.net", StringComparison.OrdinalIgnoreCase);
 }
 
 namespace TalentSuite.Server
