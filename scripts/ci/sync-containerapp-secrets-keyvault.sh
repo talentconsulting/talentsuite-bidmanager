@@ -50,6 +50,7 @@ require_env "AZURE_ENV_NAME"
 require_env "AZURE_LOCATION"
 
 resource_group="rg-${AZURE_ENV_NAME}"
+excluded_apps_raw="${EXCLUDE_CONTAINERAPPS:-}"
 keycloak_password="${KeycloakPassword:-}"
 keycloak_db_password="${KeycloakDbPassword:-}"
 configured_key_vault_name="${KeyVaultName:-}"
@@ -146,6 +147,11 @@ if [ "${#app_names[@]}" -eq 0 ]; then
 fi
 
 for app_name in "${app_names[@]}"; do
+  if [ -n "$excluded_apps_raw" ] && printf ',%s,' "$excluded_apps_raw" | grep -Fq ",${app_name},"; then
+    echo "Skipping Key Vault secret sync restart for excluded app $app_name"
+    continue
+  fi
+
   mapfile -t secret_refs < <(
     az containerapp show --name "$app_name" --resource-group "$resource_group" -o json \
       | jq -r '.properties.template.containers[]?.env[]? | select(.secretRef != null) | .secretRef' \

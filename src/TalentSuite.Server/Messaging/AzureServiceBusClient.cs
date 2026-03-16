@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.Options;
 using TalentSuite.Shared;
@@ -63,14 +64,21 @@ public sealed class AzureServiceBusClient(IOptions<AzureServiceBusOptions> optio
         if (_client is not null)
             return _client;
 
-        if (string.IsNullOrWhiteSpace(_options.ConnectionString))
+        if (!string.IsNullOrWhiteSpace(_options.ConnectionString))
         {
-            throw new InvalidOperationException(
-                $"Azure Service Bus is not configured. Set '{AzureServiceBusOptions.SectionName}:ConnectionString' or the 'AZURESERVICEBUS__CONNECTIONSTRING' environment variable.");
+            _client = new ServiceBusClient(_options.ConnectionString);
+            return _client;
         }
 
-        _client = new ServiceBusClient(_options.ConnectionString);
-        return _client;
+        var fullyQualifiedNamespace = _options.FullyQualifiedNamespace;
+        if (!string.IsNullOrWhiteSpace(fullyQualifiedNamespace))
+        {
+            _client = new ServiceBusClient(fullyQualifiedNamespace, new DefaultAzureCredential());
+            return _client;
+        }
+
+        throw new InvalidOperationException(
+            $"Azure Service Bus is not configured. Set '{AzureServiceBusOptions.SectionName}:ConnectionString', '{AzureServiceBusOptions.SectionName}:FullyQualifiedNamespace', or the related environment variables.");
     }
 
     private static string ResolveMessageKind(Type payloadType)

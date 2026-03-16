@@ -143,6 +143,8 @@ jobs:
 
       - name: Pre-sync Container App secrets from GitHub secrets to Key Vault refs
         working-directory: ${{ env.AZD_WORKING_DIR }}
+        env:
+          EXCLUDE_CONTAINERAPPS: "keycloak"
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
@@ -202,6 +204,8 @@ jobs:
       - name: Post-sync Container App secrets from GitHub secrets to Key Vault refs
         if: ${{ always() }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
+        env:
+          EXCLUDE_CONTAINERAPPS: "keycloak"
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
