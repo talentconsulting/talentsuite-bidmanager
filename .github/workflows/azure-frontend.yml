@@ -1,0 +1,142 @@
+name: Azure Frontend
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-frontend:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZD_WORKING_DIR: "."
+      DOTNET_LAUNCH_PROFILE: "https-azure"
+      TALENTSUITE_FORCE_AZURE_INFRA: "true"
+      TALENTSUITE_INFRA_MODE: "azure"
+
+      AuthenticationEnabled: ${{ vars.AUTHENTICATION_ENABLED }}
+      UseInMemoryData: ${{ vars.USE_IN_MEMORY_DATA }}
+      KeycloakClientId: ${{ vars.KEYCLOAK_CLIENT_ID }}
+      KeycloakDbUsername: ${{ vars.KEYCLOAK_DB_USERNAME }}
+      KeyVaultName: ${{ vars.KEY_VAULT_NAME }}
+      InviteEmailEnabled: ${{ vars.INVITE_EMAIL_ENABLED }}
+      InviteFromEmail: ${{ vars.INVITE_FROM_EMAIL }}
+      InviteSmtpHost: ${{ vars.INVITE_SMTP_HOST }}
+      InviteSmtpPort: ${{ vars.INVITE_SMTP_PORT }}
+      InviteSmtpEnableSsl: ${{ vars.INVITE_SMTP_ENABLE_SSL }}
+      InviteSmtpUsername: ${{ vars.INVITE_SMTP_USERNAME }}
+      GoogleDriveSyncEnabled: ${{ vars.GOOGLE_DRIVE_SYNC_ENABLED }}
+      GoogleDriveSyncSourceContainerName: ${{ vars.GOOGLE_DRIVE_SYNC_SOURCE_CONTAINER_NAME }}
+      GoogleDriveSyncDriveFolderId: ${{ vars.GOOGLE_DRIVE_SYNC_DRIVE_FOLDER_ID }}
+
+      SqlPassword: ${{ secrets.SQL_PASSWORD }}
+      KeycloakPassword: ${{ secrets.KEYCLOAK_PASSWORD }}
+      KeycloakDbPassword: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
+      InviteSmtpPassword: ${{ secrets.INVITE_SMTP_PASSWORD }}
+      GoogleDriveSyncServiceAccountJsonBase64: ${{ secrets.GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64 }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup azd
+        uses: Azure/setup-azd@v2
+        with:
+          version: 1.23.9
+
+      - name: Validate required inputs
+        run: |
+          test -n "${{ secrets.AZURE_CLIENT_ID }}" || (echo "AZURE_CLIENT_ID missing" && exit 1)
+          test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
+          test -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
+          test -n "${AuthenticationEnabled:-}" || (echo "AUTHENTICATION_ENABLED var missing" && exit 1)
+          test -n "${UseInMemoryData:-}" || (echo "USE_IN_MEMORY_DATA var missing" && exit 1)
+          test -n "${KeycloakClientId:-}" || (echo "KEYCLOAK_CLIENT_ID var missing" && exit 1)
+          test -n "${KeycloakDbUsername:-}" || (echo "KEYCLOAK_DB_USERNAME var missing" && exit 1)
+          test -n "${SqlPassword:-}" || (echo "SQL_PASSWORD secret missing" && exit 1)
+          test -n "${KeycloakPassword:-}" || (echo "KEYCLOAK_PASSWORD secret missing" && exit 1)
+          test -n "${KeycloakDbPassword:-}" || (echo "KEYCLOAK_DB_PASSWORD secret missing" && exit 1)
+
+      - name: Seed azd principalId from OIDC token
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          azd env get-values --environment "${AZURE_ENV_NAME}" >/dev/null 2>&1 || azd env new "${AZURE_ENV_NAME}" --no-prompt
+
+          arm_token="$(az account get-access-token --resource-type arm --query accessToken -o tsv)"
+          payload="$(printf '%s' "$arm_token" | cut -d'.' -f2 | tr '_-' '/+')"
+          padding=$(( (4 - ${#payload} % 4) % 4 ))
+          payload="${payload}$(printf '=%.0s' $(seq 1 "$padding"))"
+          principal_id="$(printf '%s' "$payload" | base64 --decode --ignore-garbage 2>/dev/null | jq -r '.oid // empty')"
+
+          if [ -z "$principal_id" ]; then
+            principal_id="$(az ad sp show --id "${{ secrets.AZURE_CLIENT_ID }}" --query id -o tsv 2>/dev/null || true)"
+          fi
+
+          test -n "$principal_id" || (echo "Could not resolve principalId from OIDC token" && exit 1)
+          azd env set principalId "$principal_id" --environment "${AZURE_ENV_NAME}"
+          echo "AZD_PRINCIPAL_ID=$principal_id" >> "$GITHUB_ENV"
+
+      - name: Seed azd environment from explicit vars and secrets
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          azd env get-values --environment "${AZURE_ENV_NAME}" >/dev/null 2>&1 || azd env new "${AZURE_ENV_NAME}" --no-prompt
+          azd env set principalId "${AZD_PRINCIPAL_ID}" --environment "${AZURE_ENV_NAME}"
+          azd env set AuthenticationEnabled "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set AUTHENTICATION_ENABLED "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set UseInMemoryData "${UseInMemoryData}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakClientId "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set KEYCLOAK_CLIENT_ID "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakPassword "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set SqlPassword "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set Password "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteEmailEnabled "${InviteEmailEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteFromEmail "${InviteFromEmail}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpHost "${InviteSmtpHost}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpPort "${InviteSmtpPort}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpEnableSsl "${InviteSmtpEnableSsl}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpUsername "${InviteSmtpUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncEnabled "${GoogleDriveSyncEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncSourceContainerName "${GoogleDriveSyncSourceContainerName}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncDriveFolderId "${GoogleDriveSyncDriveFolderId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncServiceAccountJsonBase64 "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeyVaultName "${KeyVaultName}" --environment "${AZURE_ENV_NAME}"
+
+      - name: Refresh azd environment outputs from provisioned infra
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+          azd auth login \
+            --client-id "${{ secrets.AZURE_CLIENT_ID }}" \
+            --tenant-id "${{ secrets.AZURE_TENANT_ID }}" \
+            --federated-credential-provider "github" \
+            --no-prompt
+          azd auth login --check-status >/dev/null
+          azd env refresh --environment "${AZURE_ENV_NAME}" --no-prompt
+
+      - name: Deploy frontend as static website
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        env:
+          DEPLOYER_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        run: |
+          chmod +x scripts/ci/deploy-frontend-static.sh
+          scripts/ci/deploy-frontend-static.sh

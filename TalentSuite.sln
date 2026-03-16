@@ -16,23 +16,31 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.AppHost", "Tale
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.ServiceDefaults", "TalentSuite.ServiceDefaults\TalentSuite.ServiceDefaults.csproj", "{285ACC83-DA24-4768-A298-A9B1E5D4654E}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ops", "ops", "{546A8A4D-408D-4EC2-A420-0A1C28A06130}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ci-cd", "ci-cd", "{546A8A4D-408D-4EC2-A420-0A1C28A06130}"
 	ProjectSection(SolutionItems) = preProject
-		.github\workflows\azure-deploy.yml = .github\workflows\azure-deploy.yml
-		set-env.sh = set-env.sh
-		azure.yaml = azure.yaml
-		scripts\ci\seed-azd-env.sh = scripts\ci\seed-azd-env.sh
-		scripts\ci\deploy-frontend-static.sh = scripts\ci\deploy-frontend-static.sh
-		scripts\ci\sync-containerapp-secrets-keyvault.sh = scripts\ci\sync-containerapp-secrets-keyvault.sh
-		scripts\ci\load-azd-env.sh = scripts\ci\load-azd-env.sh
-		scripts\run-local-all.sh = scripts\run-local-all.sh
-		.github\workflows\tests.yml = .github\workflows\tests.yml
-		scripts\ci\bootstrap-rbac.sh = scripts\ci\bootstrap-rbac.sh
 		scripts\ci\KeycloakSqlUserBootstrap\Program.cs = scripts\ci\KeycloakSqlUserBootstrap\Program.cs
-		scripts\ci\import-keycloak-realm.sh = scripts\ci\import-keycloak-realm.sh
+		azure.yaml = azure.yaml
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.Server.Tests", "src\TalentSuite.Server.Tests\TalentSuite.Server.Tests.csproj", "{4E49D6B9-7833-4E61-B4F2-DFBA519CF702}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{59338DA4-ED9D-4501-B3B8-5DB4C4A2FB20}"
+	ProjectSection(SolutionItems) = preProject
+		.github\workflows\tests.yml = .github\workflows\tests.yml
+		.github\workflows\azure-deploy.yml = .github\workflows\azure-deploy.yml
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripts", "scripts", "{2ED1E2F7-9FF9-474D-B0C5-34AA2C8F3C3B}"
+	ProjectSection(SolutionItems) = preProject
+		scripts\run-local-all.sh = scripts\run-local-all.sh
+		scripts\ci\seed-azd-env.sh = scripts\ci\seed-azd-env.sh
+		set-env.sh = set-env.sh
+		scripts\ci\load-azd-env.sh = scripts\ci\load-azd-env.sh
+		scripts\ci\import-keycloak-realm.sh = scripts\ci\import-keycloak-realm.sh
+		scripts\ci\deploy-frontend-static.sh = scripts\ci\deploy-frontend-static.sh
+		scripts\ci\bootstrap-rbac.sh = scripts\ci\bootstrap-rbac.sh
+		scripts\ci\sync-containerapp-secrets-keyvault.sh = scripts\ci\sync-containerapp-secrets-keyvault.sh
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -75,5 +83,9 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{59338DA4-ED9D-4501-B3B8-5DB4C4A2FB20} = {546A8A4D-408D-4EC2-A420-0A1C28A06130}
+		{2ED1E2F7-9FF9-474D-B0C5-34AA2C8F3C3B} = {546A8A4D-408D-4EC2-A420-0A1C28A06130}
 	EndGlobalSection
 EndGlobal

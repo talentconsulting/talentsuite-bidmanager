@@ -63,8 +63,8 @@ find_env_value() {
   return 1
 }
 
-keycloak_base_url="$(find_env_value KEYCLOAK_HTTPS KEYCLOAK_HTTP KEYCLOAK_ENDPOINT SERVICE_KEYCLOAK_ENDPOINT || true)"
-talentserver_base_url="$(find_env_value TALENTSERVER_HTTPS TALENTSERVER_HTTP TALENTSERVER_ENDPOINT SERVICE_TALENTSERVER_ENDPOINT || true)"
+keycloak_base_url="$(find_env_value KEYCLOAK_HTTPS KEYCLOAK_HTTP KEYCLOAK_ENDPOINT || true)"
+talentserver_base_url="$(find_env_value TALENTSERVER_HTTPS TALENTSERVER_HTTP TALENTSERVER_ENDPOINT || true)"
 authentication_enabled="$(find_env_value AUTHENTICATION_ENABLED AZURE_AUTHENTICATION_ENABLED || true)"
 keycloak_client_id="$(find_env_value KEYCLOAK_CLIENT_ID || true)"
 
