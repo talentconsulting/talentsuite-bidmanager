@@ -2,7 +2,9 @@ name: Azure TalentServer
 
 on:
   workflow_dispatch:
-
+  push:
+    branches:
+      - before-swpliiting-deployments
 permissions:
   contents: read
 
