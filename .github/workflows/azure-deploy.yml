@@ -568,6 +568,25 @@ jobs:
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
 
+      - name: Enable talentserver ingress
+        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') }}
+        run: |
+          az containerapp ingress enable \
+            --name talentserver \
+            --resource-group "rg-${AZURE_ENV_NAME}" \
+            --type external \
+            --target-port 8080 \
+            --transport auto
+
+      - name: Show talentserver URL
+        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') }}
+        run: |
+          az containerapp show \
+            --name talentserver \
+            --resource-group "rg-${AZURE_ENV_NAME}" \
+            --query properties.configuration.ingress.fqdn \
+            -o tsv
+
       - name: Import Keycloak realm if missing
         if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
