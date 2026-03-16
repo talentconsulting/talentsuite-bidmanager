@@ -29,6 +29,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{
 		.github\workflows\tests.yml = .github\workflows\tests.yml
 		.github\workflows\azure-deploy.yml = .github\workflows\azure-deploy.yml
 		.github\workflows\azure-frontend.yml = .github\workflows\azure-frontend.yml
+		.github\workflows\azure-talentserver.yml = .github\workflows\azure-talentserver.yml
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripts", "scripts", "{2ED1E2F7-9FF9-474D-B0C5-34AA2C8F3C3B}"
