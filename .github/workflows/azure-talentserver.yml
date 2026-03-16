@@ -2,7 +2,8 @@ name: Azure TalentServer
 
 on:
   workflow_dispatch:
-
+    push:
+      branches:
 permissions:
   contents: read
 
