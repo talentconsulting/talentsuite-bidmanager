@@ -645,6 +645,45 @@ jobs:
 
           echo "Configured AzureWebJobsServiceBus identity settings for $app_name using $servicebus_fqdn"
 
+      - name: Configure invite email settings for talentfunctions
+        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentfunctions') }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          app_name="talentfunctions"
+          frontend_base_url="${FrontendPublicOrigin:-}"
+
+          if [ -z "$frontend_base_url" ]; then
+            frontend_blob_endpoint="$(azd env get-value STORAGE_BLOBENDPOINT --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
+            frontend_storage_account="$(echo "$frontend_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
+            test -n "$frontend_storage_account" || (echo "Could not resolve frontend storage account from STORAGE_BLOBENDPOINT" && exit 1)
+            frontend_base_url="$(az storage account show \
+              --name "$frontend_storage_account" \
+              --resource-group "$resource_group" \
+              --query 'primaryEndpoints.web' \
+              -o tsv)"
+          fi
+
+          test -n "$frontend_base_url" || (echo "Could not resolve frontend static website endpoint in $resource_group" && exit 1)
+          frontend_base_url="${frontend_base_url%/}"
+
+          az containerapp update \
+            --name "$app_name" \
+            --resource-group "$resource_group" \
+            --set-env-vars \
+              InviteEmail__Enabled="${InviteEmailEnabled}" \
+              InviteEmail__FrontendBaseUrl="${frontend_base_url}" \
+              InviteEmail__FromEmail="${InviteFromEmail}" \
+              InviteEmail__FromDisplayName=TalentSuite \
+              InviteEmail__SmtpHost="${InviteSmtpHost}" \
+              InviteEmail__SmtpPort="${InviteSmtpPort}" \
+              InviteEmail__SmtpEnableSsl="${InviteSmtpEnableSsl}" \
+              InviteEmail__SmtpUsername="${InviteSmtpUsername}" >/dev/null
+
+          echo "Configured invite email settings for $app_name using frontend base URL $frontend_base_url"
+
       - name: Configure Google Drive sync settings for talentfunctions
         if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentfunctions') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
