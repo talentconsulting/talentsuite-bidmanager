@@ -23,8 +23,8 @@ public sealed class SmtpCommentMentionEmailSender(
         if (!_options.Enabled)
         {
             logger.LogInformation(
-                "Mention email sending is disabled. Skipping send for {Email}.",
-                mentionedUser.Email);
+                "Mention email sending is disabled. Skipping send for {MaskedEmail}.",
+                MaskEmail(mentionedUser.Email));
             return;
         }
 
@@ -32,8 +32,8 @@ public sealed class SmtpCommentMentionEmailSender(
             string.IsNullOrWhiteSpace(_options.FromEmail))
         {
             logger.LogWarning(
-                "Mention email settings are incomplete (SmtpHost/FromEmail). Skipping send for {Email}.",
-                mentionedUser.Email);
+                "Mention email settings are incomplete (SmtpHost/FromEmail). Skipping send for {MaskedEmail}.",
+                MaskEmail(mentionedUser.Email));
             return;
         }
 
@@ -78,10 +78,23 @@ public sealed class SmtpCommentMentionEmailSender(
         await client.SendMailAsync(message);
 
         logger.LogInformation(
-            "Mention email sent to {Email} for BidId {BidId}, QuestionId {QuestionId}.",
-            mentionedUser.Email,
+            "Mention email sent to {MaskedEmail} for BidId {BidId}, QuestionId {QuestionId}.",
+            MaskEmail(mentionedUser.Email),
             @event.BidId,
             @event.QuestionId);
+    }
+
+    private static string MaskEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return "<empty>";
+
+        var trimmed = email.Trim();
+        var atIndex = trimmed.IndexOf('@');
+        if (atIndex <= 1 || atIndex == trimmed.Length - 1)
+            return "***";
+
+        return $"{trimmed[0]}***{trimmed[(atIndex - 1)]}{trimmed[atIndex..]}";
     }
 
     private string BuildHtmlBody(CommentSavedWithMentionsEvent @event, CommentMentionedUser user)

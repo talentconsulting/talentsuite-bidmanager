@@ -26,13 +26,18 @@ public class InviteUserFunction(
         }
         catch (JsonException ex)
         {
-            logger.LogError(ex, "Failed to deserialize InviteUser command payload: {Payload}", commandJson);
+            logger.LogError(
+                ex,
+                "Failed to deserialize InviteUser command payload. PayloadLength={PayloadLength}.",
+                commandJson?.Length ?? 0);
             throw;
         }
 
         if (command is null || string.IsNullOrWhiteSpace(command.UserId) || string.IsNullOrWhiteSpace(command.Email))
         {
-            logger.LogWarning("InviteUser command missing required data. Payload: {Payload}", commandJson);
+            logger.LogWarning(
+                "InviteUser command missing required data. PayloadLength={PayloadLength}.",
+                commandJson?.Length ?? 0);
             return;
         }
 
@@ -48,10 +53,23 @@ public class InviteUserFunction(
         }
 
         logger.LogInformation(
-            "Received InviteUser command for UserId {UserId}, Email {Email}",
+            "Received InviteUser command for UserId {UserId}, Email {MaskedEmail}",
             command.UserId,
-            command.Email);
+            MaskEmail(command.Email));
 
         await inviteEmailSender.SendInviteAsync(command, ct);
+    }
+
+    private static string MaskEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return "<empty>";
+
+        var trimmed = email.Trim();
+        var atIndex = trimmed.IndexOf('@');
+        if (atIndex <= 1 || atIndex == trimmed.Length - 1)
+            return "***";
+
+        return $"{trimmed[0]}***{trimmed[(atIndex - 1)]}{trimmed[atIndex..]}";
     }
 }

@@ -67,9 +67,22 @@ public sealed class SmtpInviteEmailSender(
         await client.SendMailAsync(message);
 
         logger.LogInformation(
-            "Invite email sent to {Email} for UserId {UserId}.",
-            command.Email,
+            "Invite email sent to {MaskedEmail} for UserId {UserId}.",
+            MaskEmail(command.Email),
             command.UserId);
+    }
+
+    private static string MaskEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return "<empty>";
+
+        var trimmed = email.Trim();
+        var atIndex = trimmed.IndexOf('@');
+        if (atIndex <= 1 || atIndex == trimmed.Length - 1)
+            return "***";
+
+        return $"{trimmed[0]}***{trimmed[(atIndex - 1)]}{trimmed[atIndex..]}";
     }
 
     private string BuildInviteUrl(string invitationToken)

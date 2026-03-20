@@ -26,13 +26,18 @@ public class CommentSavedWithMentionsFunction(
         }
         catch (JsonException ex)
         {
-            logger.LogError(ex, "Failed to deserialize CommentSavedWithMentions event payload: {Payload}", eventJson);
+            logger.LogError(
+                ex,
+                "Failed to deserialize CommentSavedWithMentions event payload. PayloadLength={PayloadLength}.",
+                eventJson?.Length ?? 0);
             throw;
         }
 
         if (@event is null || string.IsNullOrWhiteSpace(@event.BidId) || string.IsNullOrWhiteSpace(@event.QuestionId))
         {
-            logger.LogWarning("CommentSavedWithMentions event missing required data. Payload: {Payload}", eventJson);
+            logger.LogWarning(
+                "CommentSavedWithMentions event missing required data. PayloadLength={PayloadLength}.",
+                eventJson?.Length ?? 0);
             return;
         }
 
