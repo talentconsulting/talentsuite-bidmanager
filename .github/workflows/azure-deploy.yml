@@ -645,6 +645,25 @@ jobs:
 
           echo "Configured AzureWebJobsServiceBus identity settings for $app_name using $servicebus_fqdn"
 
+      - name: Configure Google Drive sync settings for talentfunctions
+        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentfunctions') }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          app_name="talentfunctions"
+
+          az containerapp update \
+            --name "$app_name" \
+            --resource-group "$resource_group" \
+            --set-env-vars \
+              GoogleDriveSync__Enabled="${GoogleDriveSyncEnabled}" \
+              GoogleDriveSync__SourceContainerName="${GoogleDriveSyncSourceContainerName}" \
+              GoogleDriveSync__DriveFolderId="${GoogleDriveSyncDriveFolderId}" >/dev/null
+
+          echo "Configured Google Drive sync settings for $app_name"
+
       - name: Configure AzureWebJobsStorage identity settings for talentfunctions
         if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentfunctions') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
