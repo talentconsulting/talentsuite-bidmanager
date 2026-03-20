@@ -77,8 +77,23 @@ public sealed class GoogleDriveSyncService(
             var contentBytes = blobDownload.Value.Content.ToArray();
             var md5Hex = Convert.ToHexString(MD5.HashData(contentBytes)).ToLowerInvariant();
             var mimeType = blob.Properties.ContentType ?? "application/octet-stream";
+            var pathSegments = blob.Name
+                .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var fileName = pathSegments.LastOrDefault();
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                logger.LogWarning("Google Drive sync skipped blob with empty terminal path segment: {BlobName}", blob.Name);
+                skipped++;
+                continue;
+            }
 
-            var driveFile = await FindExistingDriveFileAsync(driveService, configured.DriveFolderId, blob.Name, ct);
+            var parentFolderId = await ResolveDriveParentFolderAsync(
+                driveService,
+                configured.DriveFolderId,
+                blob.Name,
+                ct);
+
+            var driveFile = await FindExistingDriveFileAsync(driveService, parentFolderId, blob.Name, ct);
             if (driveFile is not null && string.Equals(driveFile.Md5Checksum, md5Hex, StringComparison.OrdinalIgnoreCase))
             {
                 skipped++;
@@ -90,8 +105,8 @@ public sealed class GoogleDriveSyncService(
             {
                 var createMetadata = new DriveFile
                 {
-                    Name = blob.Name,
-                    Parents = [configured.DriveFolderId],
+                    Name = fileName,
+                    Parents = [parentFolderId],
                     AppProperties = new Dictionary<string, string>
                     {
                         ["azureBlobPath"] = blob.Name
@@ -141,6 +156,63 @@ public sealed class GoogleDriveSyncService(
 
         var result = await listRequest.ExecuteAsync(ct);
         return result.Files?.FirstOrDefault();
+    }
+
+    private static async Task<string> ResolveDriveParentFolderAsync(
+        DriveService driveService,
+        string rootFolderId,
+        string blobName,
+        CancellationToken ct)
+    {
+        var segments = blobName
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (segments.Length <= 1)
+            return rootFolderId;
+
+        var parentFolderId = rootFolderId;
+        foreach (var segment in segments[..^1])
+            parentFolderId = await GetOrCreateFolderAsync(driveService, parentFolderId, segment, ct);
+
+        return parentFolderId;
+    }
+
+    private static async Task<string> GetOrCreateFolderAsync(
+        DriveService driveService,
+        string parentFolderId,
+        string folderName,
+        CancellationToken ct)
+    {
+        var listRequest = driveService.Files.List();
+        listRequest.Spaces = "drive";
+        listRequest.PageSize = 1;
+        listRequest.Fields = "files(id,name)";
+        listRequest.SupportsAllDrives = true;
+        listRequest.IncludeItemsFromAllDrives = true;
+        listRequest.Q =
+            $"'{EscapeForQuery(parentFolderId)}' in parents and trashed=false and mimeType='application/vnd.google-apps.folder' and name='{EscapeForQuery(folderName)}'";
+
+        var result = await listRequest.ExecuteAsync(ct);
+        var existingFolder = result.Files?.FirstOrDefault();
+        if (existingFolder is not null && !string.IsNullOrWhiteSpace(existingFolder.Id))
+            return existingFolder.Id;
+
+        var folderMetadata = new DriveFile
+        {
+            Name = folderName,
+            Parents = [parentFolderId],
+            MimeType = "application/vnd.google-apps.folder"
+        };
+
+        var createRequest = driveService.Files.Create(folderMetadata);
+        createRequest.Fields = "id,name";
+        createRequest.SupportsAllDrives = true;
+
+        var createdFolder = await createRequest.ExecuteAsync(ct);
+        if (string.IsNullOrWhiteSpace(createdFolder.Id))
+            throw new InvalidOperationException($"Failed to create Google Drive folder '{folderName}'.");
+
+        return createdFolder.Id;
     }
 
     private static string ResolveServiceAccountJson(GoogleDriveSyncOptions configured)
