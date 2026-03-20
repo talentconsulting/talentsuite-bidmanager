@@ -364,8 +364,25 @@ jobs:
 
           resource_group="rg-${AZURE_ENV_NAME}"
           app_name="talentfunctions"
-          bidstorage_blob_endpoint="$(azd env get-value BIDSTORAGE_BLOBENDPOINT --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
+          azd_values="$(azd env get-values --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
+          bidstorage_blob_endpoint="$(printf '%s\n' "$azd_values" | sed -n -E 's/^(export[[:space:]]+)?BIDSTORAGE_BLOBENDPOINT=(.*)$/\2/p' | head -n1)"
+          if [ "${#bidstorage_blob_endpoint}" -ge 2 ] && [ "${bidstorage_blob_endpoint#\"}" != "$bidstorage_blob_endpoint" ] && [ "${bidstorage_blob_endpoint%\"}" != "$bidstorage_blob_endpoint" ]; then
+            bidstorage_blob_endpoint="${bidstorage_blob_endpoint#\"}"
+            bidstorage_blob_endpoint="${bidstorage_blob_endpoint%\"}"
+          fi
+
           bidstorage_account_name="$(echo "$bidstorage_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
+          if ! az storage account show --name "$bidstorage_account_name" --resource-group "$resource_group" --query 'name' -o tsv >/dev/null 2>&1; then
+            bidstorage_account_name=""
+          fi
+
+          if [ -z "$bidstorage_account_name" ]; then
+            bidstorage_account_name="$(az storage account list \
+              --resource-group "$resource_group" \
+              --query "[?starts_with(name, 'bidcontentstorage')][0].name" \
+              -o tsv 2>/dev/null || true)"
+          fi
+
           test -n "$bidstorage_account_name" || (echo "Could not resolve bid storage account from BIDSTORAGE_BLOBENDPOINT" && exit 1)
 
           storage_account_id="$(az storage account show \
