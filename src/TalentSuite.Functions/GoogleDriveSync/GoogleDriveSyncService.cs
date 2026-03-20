@@ -159,17 +159,17 @@ public sealed class GoogleDriveSyncService(
 
     private BlobContainerClient CreateBidStorageContainerClient(string containerName)
     {
-        var blobServiceUri = configuration["AzureWebJobsStorage:blobServiceUri"]
-                             ?? configuration["AzureWebJobsStorage__blobServiceUri"]
-                             ?? Environment.GetEnvironmentVariable("AzureWebJobsStorage__blobServiceUri");
+        var blobServiceUri = configuration["BidStorage:blobServiceUri"]
+                             ?? configuration["BidStorage__blobServiceUri"]
+                             ?? Environment.GetEnvironmentVariable("BidStorage__blobServiceUri");
         if (!string.IsNullOrWhiteSpace(blobServiceUri))
         {
-            var clientId = configuration["AzureWebJobsStorage:clientId"]
-                           ?? configuration["AzureWebJobsStorage:clientID"]
-                           ?? configuration["AzureWebJobsStorage__clientId"]
-                           ?? configuration["AzureWebJobsStorage__clientID"]
-                           ?? Environment.GetEnvironmentVariable("AzureWebJobsStorage__clientId")
-                           ?? Environment.GetEnvironmentVariable("AzureWebJobsStorage__clientID");
+            var clientId = configuration["BidStorage:clientId"]
+                           ?? configuration["BidStorage:clientID"]
+                           ?? configuration["BidStorage__clientId"]
+                           ?? configuration["BidStorage__clientID"]
+                           ?? Environment.GetEnvironmentVariable("BidStorage__clientId")
+                           ?? Environment.GetEnvironmentVariable("BidStorage__clientID");
             var credential = string.IsNullOrWhiteSpace(clientId)
                 ? new DefaultAzureCredential()
                 : new DefaultAzureCredential(new DefaultAzureCredentialOptions
@@ -186,6 +186,6 @@ public sealed class GoogleDriveSyncService(
             return new BlobContainerClient(connectionString, containerName);
 
         throw new InvalidOperationException(
-            "Storage configuration for bidstorage was not found. Provide ConnectionStrings:bidstorage or AzureWebJobsStorage__blobServiceUri.");
+            "Storage configuration for bidstorage was not found. Provide ConnectionStrings:bidstorage or BidStorage__blobServiceUri.");
     }
 }

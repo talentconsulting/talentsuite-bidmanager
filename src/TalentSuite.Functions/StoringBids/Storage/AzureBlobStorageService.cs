@@ -59,17 +59,17 @@ public sealed class AzureBlobStorageService(IConfiguration configuration) : IAzu
     }
     private BlobServiceClient CreateBlobServiceClient(string name)
     {
-        var blobServiceUri = configuration["AzureWebJobsStorage:blobServiceUri"]
-                             ?? configuration["AzureWebJobsStorage__blobServiceUri"]
-                             ?? Environment.GetEnvironmentVariable("AzureWebJobsStorage__blobServiceUri");
+        var blobServiceUri = configuration["BidStorage:blobServiceUri"]
+                             ?? configuration["BidStorage__blobServiceUri"]
+                             ?? Environment.GetEnvironmentVariable("BidStorage__blobServiceUri");
         if (!string.IsNullOrWhiteSpace(blobServiceUri))
         {
-            var clientId = configuration["AzureWebJobsStorage:clientId"]
-                           ?? configuration["AzureWebJobsStorage:clientID"]
-                           ?? configuration["AzureWebJobsStorage__clientId"]
-                           ?? configuration["AzureWebJobsStorage__clientID"]
-                           ?? Environment.GetEnvironmentVariable("AzureWebJobsStorage__clientId")
-                           ?? Environment.GetEnvironmentVariable("AzureWebJobsStorage__clientID");
+            var clientId = configuration["BidStorage:clientId"]
+                           ?? configuration["BidStorage:clientID"]
+                           ?? configuration["BidStorage__clientId"]
+                           ?? configuration["BidStorage__clientID"]
+                           ?? Environment.GetEnvironmentVariable("BidStorage__clientId")
+                           ?? Environment.GetEnvironmentVariable("BidStorage__clientID");
             var credential = string.IsNullOrWhiteSpace(clientId)
                 ? new DefaultAzureCredential()
                 : new DefaultAzureCredential(new DefaultAzureCredentialOptions
@@ -89,6 +89,6 @@ public sealed class AzureBlobStorageService(IConfiguration configuration) : IAzu
             return new BlobServiceClient(connectionString);
 
         throw new InvalidOperationException(
-            $"Storage configuration for '{name}' was not found. Provide ConnectionStrings:{name} or AzureWebJobsStorage__blobServiceUri.");
+            $"Storage configuration for '{name}' was not found. Provide ConnectionStrings:{name} or BidStorage__blobServiceUri.");
     }
 }

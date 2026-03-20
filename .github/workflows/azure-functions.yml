@@ -365,45 +365,45 @@ jobs:
           resource_group="rg-${AZURE_ENV_NAME}"
           app_name="talentfunctions"
           azd_values="$(azd env get-values --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
-          bidstorage_blob_endpoint="$(printf '%s\n' "$azd_values" | sed -n -E 's/^(export[[:space:]]+)?BIDSTORAGE_BLOBENDPOINT=(.*)$/\2/p' | head -n1)"
-          if [ "${#bidstorage_blob_endpoint}" -ge 2 ] && [ "${bidstorage_blob_endpoint#\"}" != "$bidstorage_blob_endpoint" ] && [ "${bidstorage_blob_endpoint%\"}" != "$bidstorage_blob_endpoint" ]; then
-            bidstorage_blob_endpoint="${bidstorage_blob_endpoint#\"}"
-            bidstorage_blob_endpoint="${bidstorage_blob_endpoint%\"}"
+          storage_blob_endpoint="$(printf '%s\n' "$azd_values" | sed -n -E 's/^(export[[:space:]]+)?STORAGE_BLOBENDPOINT=(.*)$/\2/p' | head -n1)"
+          if [ "${#storage_blob_endpoint}" -ge 2 ] && [ "${storage_blob_endpoint#\"}" != "$storage_blob_endpoint" ] && [ "${storage_blob_endpoint%\"}" != "$storage_blob_endpoint" ]; then
+            storage_blob_endpoint="${storage_blob_endpoint#\"}"
+            storage_blob_endpoint="${storage_blob_endpoint%\"}"
           fi
 
-          bidstorage_account_name="$(echo "$bidstorage_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
-          if ! az storage account show --name "$bidstorage_account_name" --resource-group "$resource_group" --query 'name' -o tsv >/dev/null 2>&1; then
-            bidstorage_account_name=""
+          storage_account_name="$(echo "$storage_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
+          if ! az storage account show --name "$storage_account_name" --resource-group "$resource_group" --query 'name' -o tsv >/dev/null 2>&1; then
+            storage_account_name=""
           fi
 
-          if [ -z "$bidstorage_account_name" ]; then
-            bidstorage_account_name="$(az storage account list \
+          if [ -z "$storage_account_name" ]; then
+            storage_account_name="$(az storage account list \
               --resource-group "$resource_group" \
               --query "[].name" \
-              -o tsv 2>/dev/null | grep '^bidcontentstorage' | head -n1 || true)"
+              -o tsv 2>/dev/null | grep -v '^bidcontentstorage' | head -n1 || true)"
           fi
 
-          test -n "$bidstorage_account_name" || (echo "Could not resolve bid storage account from BIDSTORAGE_BLOBENDPOINT" && exit 1)
+          test -n "$storage_account_name" || (echo "Could not resolve host storage account from STORAGE_BLOBENDPOINT" && exit 1)
 
           storage_account_id="$(az storage account show \
-            --name "$bidstorage_account_name" \
+            --name "$storage_account_name" \
             --resource-group "$resource_group" \
             --query 'id' \
             -o tsv)"
           blob_service_uri="$(az storage account show \
-            --name "$bidstorage_account_name" \
+            --name "$storage_account_name" \
             --resource-group "$resource_group" \
             --query 'primaryEndpoints.blob' \
             -o tsv)"
           queue_service_uri="$(az storage account show \
-            --name "$bidstorage_account_name" \
+            --name "$storage_account_name" \
             --resource-group "$resource_group" \
             --query 'primaryEndpoints.queue' \
             -o tsv)"
 
-          test -n "$storage_account_id" || (echo "Could not resolve storage account id in $resource_group" && exit 1)
-          test -n "$blob_service_uri" || (echo "Could not resolve blob endpoint in $resource_group" && exit 1)
-          test -n "$queue_service_uri" || (echo "Could not resolve queue endpoint in $resource_group" && exit 1)
+          test -n "$storage_account_id" || (echo "Could not resolve host storage account id in $resource_group" && exit 1)
+          test -n "$blob_service_uri" || (echo "Could not resolve host blob endpoint in $resource_group" && exit 1)
+          test -n "$queue_service_uri" || (echo "Could not resolve host queue endpoint in $resource_group" && exit 1)
 
           identity_type="$(az containerapp show \
             --name "$app_name" \
@@ -448,7 +448,8 @@ jobs:
               --resource-group "$resource_group" \
               --set-env-vars \
                 AzureWebJobsStorage__blobServiceUri="$blob_service_uri" \
-                AzureWebJobsStorage__queueServiceUri="$queue_service_uri" >/dev/null
+                AzureWebJobsStorage__queueServiceUri="$queue_service_uri" \
+                AzureWebJobsStorage__credential=managedidentity >/dev/null
           fi
 
           for role_name in "Storage Blob Data Owner" "Storage Queue Data Contributor" "Storage Account Contributor"; do
@@ -473,6 +474,120 @@ jobs:
           done
 
           echo "Configured AzureWebJobsStorage identity settings for $app_name using $blob_service_uri and $queue_service_uri"
+
+      - name: Configure BidStorage identity settings for talentfunctions
+        if: ${{ success() }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          app_name="talentfunctions"
+          azd_values="$(azd env get-values --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
+          bidstorage_blob_endpoint="$(printf '%s\n' "$azd_values" | sed -n -E 's/^(export[[:space:]]+)?BIDSTORAGE_BLOBENDPOINT=(.*)$/\2/p' | head -n1)"
+          if [ "${#bidstorage_blob_endpoint}" -ge 2 ] && [ "${bidstorage_blob_endpoint#\"}" != "$bidstorage_blob_endpoint" ] && [ "${bidstorage_blob_endpoint%\"}" != "$bidstorage_blob_endpoint" ]; then
+            bidstorage_blob_endpoint="${bidstorage_blob_endpoint#\"}"
+            bidstorage_blob_endpoint="${bidstorage_blob_endpoint%\"}"
+          fi
+
+          bidstorage_account_name="$(echo "$bidstorage_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
+          if ! az storage account show --name "$bidstorage_account_name" --resource-group "$resource_group" --query 'name' -o tsv >/dev/null 2>&1; then
+            bidstorage_account_name=""
+          fi
+
+          if [ -z "$bidstorage_account_name" ]; then
+            bidstorage_account_name="$(az storage account list \
+              --resource-group "$resource_group" \
+              --query "[].name" \
+              -o tsv 2>/dev/null | grep '^bidcontentstorage' | head -n1 || true)"
+          fi
+
+          test -n "$bidstorage_account_name" || (echo "Could not resolve bid storage account from BIDSTORAGE_BLOBENDPOINT" && exit 1)
+
+          storage_account_id="$(az storage account show \
+            --name "$bidstorage_account_name" \
+            --resource-group "$resource_group" \
+            --query 'id' \
+            -o tsv)"
+          blob_service_uri="$(az storage account show \
+            --name "$bidstorage_account_name" \
+            --resource-group "$resource_group" \
+            --query 'primaryEndpoints.blob' \
+            -o tsv)"
+          queue_service_uri="$(az storage account show \
+            --name "$bidstorage_account_name" \
+            --resource-group "$resource_group" \
+            --query 'primaryEndpoints.queue' \
+            -o tsv)"
+
+          test -n "$storage_account_id" || (echo "Could not resolve storage account id in $resource_group" && exit 1)
+          test -n "$blob_service_uri" || (echo "Could not resolve blob endpoint in $resource_group" && exit 1)
+
+          identity_type="$(az containerapp show \
+            --name "$app_name" \
+            --resource-group "$resource_group" \
+            --query 'identity.type' \
+            -o tsv)"
+
+          if printf '%s' "$identity_type" | grep -qi 'UserAssigned'; then
+            identity_client_id="$(az containerapp show \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --query 'identity.userAssignedIdentities.*.clientId | [0]' \
+              -o tsv)"
+            identity_principal_id="$(az containerapp show \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --query 'identity.userAssignedIdentities.*.principalId | [0]' \
+              -o tsv)"
+
+            test -n "$identity_client_id" || (echo "Could not resolve user-assigned managed identity clientId for $app_name" && exit 1)
+            test -n "$identity_principal_id" || (echo "Could not resolve user-assigned managed identity principalId for $app_name" && exit 1)
+
+            az containerapp update \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --set-env-vars \
+                BidStorage__blobServiceUri="$blob_service_uri" \
+                BidStorage__clientId="$identity_client_id" >/dev/null
+          else
+            identity_principal_id="$(az containerapp show \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --query 'identity.principalId' \
+              -o tsv)"
+
+            test -n "$identity_principal_id" || (echo "Could not resolve system-assigned managed identity principalId for $app_name" && exit 1)
+
+            az containerapp update \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --set-env-vars \
+                BidStorage__blobServiceUri="$blob_service_uri" >/dev/null
+          fi
+
+          for role_name in "Storage Blob Data Owner" "Storage Account Contributor"; do
+            assignment_id="$(az role assignment list \
+              --assignee-object-id "$identity_principal_id" \
+              --scope "$storage_account_id" \
+              --role "$role_name" \
+              --query '[0].id' \
+              -o tsv 2>/dev/null || true)"
+
+            if [ -z "$assignment_id" ]; then
+              az role assignment create \
+                --assignee-object-id "$identity_principal_id" \
+                --assignee-principal-type ServicePrincipal \
+                --scope "$storage_account_id" \
+                --role "$role_name" >/dev/null 2>&1 || \
+              az role assignment create \
+                --assignee-object-id "$identity_principal_id" \
+                --scope "$storage_account_id" \
+                --role "$role_name" >/dev/null
+            fi
+          done
+
+          echo "Configured BidStorage identity settings for $app_name using $blob_service_uri"
 
       - name: Remove legacy bidstorage env vars from talentfunctions
         if: ${{ success() }}
