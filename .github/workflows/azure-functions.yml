@@ -379,8 +379,8 @@ jobs:
           if [ -z "$bidstorage_account_name" ]; then
             bidstorage_account_name="$(az storage account list \
               --resource-group "$resource_group" \
-              --query "[?starts_with(name, 'bidcontentstorage')][0].name" \
-              -o tsv 2>/dev/null || true)"
+              --query "[].name" \
+              -o tsv 2>/dev/null | grep '^bidcontentstorage' | head -n1 || true)"
           fi
 
           test -n "$bidstorage_account_name" || (echo "Could not resolve bid storage account from BIDSTORAGE_BLOBENDPOINT" && exit 1)
