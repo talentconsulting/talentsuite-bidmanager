@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Talent Consulting - TalentSuite</title>
+  <base href="/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="css/app.css" rel="stylesheet" />
+</head>
+<body>
+  <div id="app">Loading...</div>
+  <script src="js/bid-manage-draft.js"></script>
+  <script src="_content/Microsoft.AspNetCore.Components.WebAssembly.Authentication/AuthenticationService.js"></script>
+  <script>
+    (function () {
+      window.talentSuiteAuth = window.talentSuiteAuth || {};
+      window.talentSuiteAuth.clearClientAuthState = function () {
+        const prefixes = ["oidc.", "Microsoft.AspNetCore.Components.WebAssembly.Authentication"];
+        const clearStore = function (store) {
+          if (!store) {
+            return;
+          }
+
+          const keysToRemove = [];
+          for (let i = 0; i < store.length; i += 1) {
+            const key = store.key(i);
+            if (!key) {
+              continue;
+            }
+
+            if (prefixes.some(prefix => key.startsWith(prefix))) {
+              keysToRemove.push(key);
+            }
+          }
+
+          keysToRemove.forEach(key => store.removeItem(key));
+        };
+
+        clearStore(window.localStorage);
+        clearStore(window.sessionStorage);
+      };
+
+      window.talentSuiteAuth.tryParseJwtPayload = function (token) {
+        if (!token || typeof token !== "string") {
+          return null;
+        }
+
+        const parts = token.split(".");
+        if (parts.length < 2) {
+          return null;
+        }
+
+        try {
+          const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+          const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+          return JSON.parse(window.atob(padded));
+        } catch {
+          return null;
+        }
+      };
+
+      window.talentSuiteAuth.getCachedOidcUser = function () {
+        const stores = [window.localStorage, window.sessionStorage];
+        for (let storeIndex = 0; storeIndex < stores.length; storeIndex += 1) {
+          const store = stores[storeIndex];
+          if (!store) {
+            continue;
+          }
+
+          for (let i = 0; i < store.length; i += 1) {
+            const key = store.key(i);
+            if (!key || !key.startsWith("oidc.user:")) {
+              continue;
+            }
+
+            const raw = store.getItem(key);
+            if (!raw) {
+              continue;
+            }
+
+            try {
+              const parsed = JSON.parse(raw);
+              if (parsed && typeof parsed === "object") {
+                return parsed;
+              }
+            } catch {
+              // Ignore malformed cached auth records and continue scanning.
+            }
+          }
+        }
+
+        return null;
+      };
+
+      window.talentSuiteAuth.getCachedRefreshTokenExpiry = function () {
+        const user = window.talentSuiteAuth.getCachedOidcUser();
+        if (!user) {
+          return null;
+        }
+
+        if (typeof user.refresh_token_expires_at === "number") {
+          return user.refresh_token_expires_at;
+        }
+
+        if (typeof user.refreshTokenExpiresAt === "number") {
+          return user.refreshTokenExpiresAt;
+        }
+
+        const refreshTokenPayload = window.talentSuiteAuth.tryParseJwtPayload(user.refresh_token || user.refreshToken);
+        if (refreshTokenPayload && typeof refreshTokenPayload.exp === "number") {
+          return refreshTokenPayload.exp;
+        }
+
+        return null;
+      };
+
+      window.talentSuiteAuth.hasExpiredCachedSession = function () {
+        const user = window.talentSuiteAuth.getCachedOidcUser();
+        if (!user) {
+          return false;
+        }
+
+        const nowInSeconds = Math.floor(Date.now() / 1000);
+        const skewInSeconds = 30;
+        const refreshTokenExpiry = window.talentSuiteAuth.getCachedRefreshTokenExpiry();
+        if (typeof refreshTokenExpiry === "number") {
+          return refreshTokenExpiry <= nowInSeconds + skewInSeconds;
+        }
+
+        if (typeof user.expires_at === "number") {
+          return user.expires_at <= nowInSeconds + skewInSeconds;
+        }
+
+        return false;
+      };
+
+      window.talentSuiteAuth.ensureUsableCachedSession = function () {
+        if (!window.talentSuiteAuth.hasExpiredCachedSession()) {
+          return true;
+        }
+
+        console.warn("OIDC session expired in browser storage. Clearing cached auth state before token renewal.");
+        window.talentSuiteAuth.clearClientAuthState();
+        return false;
+      };
+
+      window.talentSuiteAuth.isRefreshFailure = function (error) {
+        const message = error && error.message ? error.message : String(error);
+        return message.includes("invalid_grant") ||
+          message.includes("refresh token") ||
+          message.includes("/protocol/openid-connect/token") ||
+          message.includes("400 (Bad Request)");
+      };
+
+      window.talentSuiteAuth.recoverFromRefreshFailure = function (error) {
+        if (!window.talentSuiteAuth.isRefreshFailure(error)) {
+          return false;
+        }
+
+        console.warn("OIDC refresh failed. Clearing cached auth state and requiring interactive login.", error);
+        window.talentSuiteAuth.clearClientAuthState();
+        return true;
+      };
+
+      const authService = window.AuthenticationService;
+      if (!authService) {
+        return;
+      }
+
+      const patchAuthInstance = function () {
+        const instance = authService.instance;
+        if (!instance || instance.__talentSuitePatched) {
+          return;
+        }
+
+        instance.__talentSuitePatched = true;
+
+        if (typeof instance.trySilentSignIn === "function") {
+          instance.trySilentSignIn = async function () {
+            return null;
+          };
+        }
+
+        if (typeof instance.signIn === "function") {
+          const originalSignIn = instance.signIn.bind(instance);
+          instance.signIn = function (request) {
+            const interactiveRequest = request && request.interactiveRequest
+              ? request.interactiveRequest
+              : {};
+            return originalSignIn({ ...(request || {}), interactiveRequest });
+          };
+        }
+      };
+
+      if (typeof authService.init === "function") {
+        const originalInit = authService.init.bind(authService);
+        authService.init = function (options, loggerOptions) {
+          if (options && typeof options === "object") {
+            options.automaticSilentRenew = false;
+            options.monitorSession = false;
+            options.checkSessionIntervalInSeconds = 0;
+
+            if (options.providerOptions && typeof options.providerOptions === "object") {
+              options.providerOptions.automaticSilentRenew = false;
+              options.providerOptions.monitorSession = false;
+              options.providerOptions.checkSessionIntervalInSeconds = 0;
+            }
+          }
+
+          const result = originalInit(options, loggerOptions);
+          patchAuthInstance();
+          return result;
+        };
+      }
+
+      patchAuthInstance();
+
+      if (typeof authService.getUser === "function") {
+        const originalGetUser = authService.getUser.bind(authService);
+        authService.getUser = async function () {
+          patchAuthInstance();
+          if (!window.talentSuiteAuth.ensureUsableCachedSession()) {
+            return null;
+          }
+
+          try {
+            return await originalGetUser();
+          } catch (error) {
+            const message = error && error.message ? error.message : String(error);
+            if (message.includes("Blocked a frame with origin") ||
+                message.includes("Failed to read a named property 'document'") ||
+                message.includes("prompt=none")) {
+              console.warn("Suppressed OIDC cross-origin frame access during session check.", error);
+              return null;
+            }
+
+            throw error;
+          }
+        };
+      }
+
+      if (typeof authService.getAccessToken === "function") {
+        const originalGetAccessToken = authService.getAccessToken.bind(authService);
+        authService.getAccessToken = async function () {
+          patchAuthInstance();
+          if (!window.talentSuiteAuth.ensureUsableCachedSession()) {
+            return null;
+          }
+
+          try {
+            return await originalGetAccessToken();
+          } catch (error) {
+            if (window.talentSuiteAuth.recoverFromRefreshFailure(error)) {
+              return null;
+            }
+
+            throw error;
+          }
+        };
+      }
+
+      if (typeof authService.signIn === "function") {
+        const originalSignIn = authService.signIn.bind(authService);
+        authService.signIn = async function (state) {
+          patchAuthInstance();
+          window.talentSuiteAuth.ensureUsableCachedSession();
+          try {
+            return await originalSignIn(state);
+          } catch (error) {
+            if (window.talentSuiteAuth.recoverFromRefreshFailure(error)) {
+              return originalSignIn(state);
+            }
+
+            throw error;
+          }
+        };
+      }
+
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") {
+          window.talentSuiteAuth.ensureUsableCachedSession();
+        }
+      });
+
+      window.addEventListener("focus", function () {
+        window.talentSuiteAuth.ensureUsableCachedSession();
+      });
+    })();
+  </script>
+  <script src="_framework/blazor.webassembly.js"></script>
+</body>
+</html>

@@ -1,0 +1,483 @@
+name: Azure Functions
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-functions:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZD_WORKING_DIR: "."
+      DOTNET_LAUNCH_PROFILE: "https-azure"
+      TALENTSUITE_FORCE_AZURE_INFRA: "true"
+      TALENTSUITE_INFRA_MODE: "azure"
+
+      AuthenticationEnabled: ${{ vars.AUTHENTICATION_ENABLED }}
+      UseInMemoryData: ${{ vars.USE_IN_MEMORY_DATA }}
+      KeycloakClientId: ${{ vars.KEYCLOAK_CLIENT_ID }}
+      KeycloakDbUsername: ${{ vars.KEYCLOAK_DB_USERNAME }}
+      KeyVaultName: ${{ vars.KEY_VAULT_NAME }}
+      InviteEmailEnabled: ${{ vars.INVITE_EMAIL_ENABLED }}
+      InviteFromEmail: ${{ vars.INVITE_FROM_EMAIL }}
+      InviteSmtpHost: ${{ vars.INVITE_SMTP_HOST }}
+      InviteSmtpPort: ${{ vars.INVITE_SMTP_PORT }}
+      InviteSmtpEnableSsl: ${{ vars.INVITE_SMTP_ENABLE_SSL }}
+      InviteSmtpUsername: ${{ vars.INVITE_SMTP_USERNAME }}
+      GoogleDriveSyncEnabled: ${{ vars.GOOGLE_DRIVE_SYNC_ENABLED }}
+      GoogleDriveSyncSourceContainerName: ${{ vars.GOOGLE_DRIVE_SYNC_SOURCE_CONTAINER_NAME }}
+      GoogleDriveSyncDriveFolderId: ${{ vars.GOOGLE_DRIVE_SYNC_DRIVE_FOLDER_ID }}
+      FrontendPublicOrigin: ${{ vars.FRONTEND_PUBLIC_ORIGIN }}
+
+      SqlPassword: ${{ secrets.SQL_PASSWORD }}
+      KeycloakPassword: ${{ secrets.KEYCLOAK_PASSWORD }}
+      KeycloakDbPassword: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
+      InviteSmtpPassword: ${{ secrets.INVITE_SMTP_PASSWORD }}
+      GoogleDriveSyncServiceAccountJsonBase64: ${{ secrets.GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64 }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup azd
+        uses: Azure/setup-azd@v2
+        with:
+          version: 1.23.10
+
+      - name: Validate required inputs
+        run: |
+          test -n "${{ secrets.AZURE_CLIENT_ID }}" || (echo "AZURE_CLIENT_ID missing" && exit 1)
+          test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
+          test -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
+          test -n "${AuthenticationEnabled:-}" || (echo "AUTHENTICATION_ENABLED var missing" && exit 1)
+          test -n "${UseInMemoryData:-}" || (echo "USE_IN_MEMORY_DATA var missing" && exit 1)
+          test -n "${KeycloakClientId:-}" || (echo "KEYCLOAK_CLIENT_ID var missing" && exit 1)
+          test -n "${KeycloakDbUsername:-}" || (echo "KEYCLOAK_DB_USERNAME var missing" && exit 1)
+          test -n "${InviteSmtpUsername:-}" || (echo "INVITE_SMTP_USERNAME var missing" && exit 1)
+          test -n "${SqlPassword:-}" || (echo "SQL_PASSWORD secret missing" && exit 1)
+          test -n "${KeycloakPassword:-}" || (echo "KEYCLOAK_PASSWORD secret missing" && exit 1)
+          test -n "${KeycloakDbPassword:-}" || (echo "KEYCLOAK_DB_PASSWORD secret missing" && exit 1)
+          test -n "${InviteSmtpPassword:-}" || (echo "INVITE_SMTP_PASSWORD secret missing" && exit 1)
+
+      - name: Seed azd principalId from OIDC token
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          azd env get-values --environment "${AZURE_ENV_NAME}" >/dev/null 2>&1 || azd env new "${AZURE_ENV_NAME}" --no-prompt
+
+          arm_token="$(az account get-access-token --resource-type arm --query accessToken -o tsv)"
+          payload="$(printf '%s' "$arm_token" | cut -d'.' -f2 | tr '_-' '/+')"
+          padding=$(( (4 - ${#payload} % 4) % 4 ))
+          payload="${payload}$(printf '=%.0s' $(seq 1 "$padding"))"
+          principal_id="$(printf '%s' "$payload" | base64 --decode --ignore-garbage 2>/dev/null | jq -r '.oid // empty')"
+
+          if [ -z "$principal_id" ]; then
+            principal_id="$(az ad sp show --id "${{ secrets.AZURE_CLIENT_ID }}" --query id -o tsv 2>/dev/null || true)"
+          fi
+
+          test -n "$principal_id" || (echo "Could not resolve principalId from OIDC token" && exit 1)
+          azd env set principalId "$principal_id" --environment "${AZURE_ENV_NAME}"
+          echo "AZD_PRINCIPAL_ID=$principal_id" >> "$GITHUB_ENV"
+
+      - name: Seed azd environment from explicit vars and secrets
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          azd env get-values --environment "${AZURE_ENV_NAME}" >/dev/null 2>&1 || azd env new "${AZURE_ENV_NAME}" --no-prompt
+          azd env set principalId "${AZD_PRINCIPAL_ID}" --environment "${AZURE_ENV_NAME}"
+          azd env set AuthenticationEnabled "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set AUTHENTICATION_ENABLED "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set UseInMemoryData "${UseInMemoryData}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakClientId "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set KEYCLOAK_CLIENT_ID "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakDbUsername" "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakPassword "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set SqlPassword "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set Password "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.GoogleDriveSyncServiceAccountJsonBase64" "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.InviteSmtpPassword" "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakPassword" "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.SqlPassword" "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteEmailEnabled "${InviteEmailEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteFromEmail "${InviteFromEmail}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpHost "${InviteSmtpHost}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpPort "${InviteSmtpPort}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpEnableSsl "${InviteSmtpEnableSsl}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpUsername "${InviteSmtpUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncEnabled "${GoogleDriveSyncEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncSourceContainerName "${GoogleDriveSyncSourceContainerName}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncDriveFolderId "${GoogleDriveSyncDriveFolderId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncServiceAccountJsonBase64 "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeyVaultName "${KeyVaultName}" --environment "${AZURE_ENV_NAME}"
+
+      - name: Refresh azd environment outputs from existing provisioned infra
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+          azd auth login \
+            --client-id "${{ secrets.AZURE_CLIENT_ID }}" \
+            --tenant-id "${{ secrets.AZURE_TENANT_ID }}" \
+            --federated-credential-provider "github" \
+            --no-prompt
+          azd auth login --check-status >/dev/null
+          azd env refresh --environment "${AZURE_ENV_NAME}" --no-prompt
+
+      - name: Re-seed azd environment after refresh
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          azd env set principalId "${AZD_PRINCIPAL_ID}" --environment "${AZURE_ENV_NAME}"
+          azd env set AuthenticationEnabled "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set AUTHENTICATION_ENABLED "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set UseInMemoryData "${UseInMemoryData}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakClientId "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set KEYCLOAK_CLIENT_ID "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakDbUsername" "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakPassword "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set SqlPassword "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set Password "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.GoogleDriveSyncServiceAccountJsonBase64" "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.InviteSmtpPassword" "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakPassword" "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.SqlPassword" "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteEmailEnabled "${InviteEmailEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteFromEmail "${InviteFromEmail}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpHost "${InviteSmtpHost}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpPort "${InviteSmtpPort}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpEnableSsl "${InviteSmtpEnableSsl}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpUsername "${InviteSmtpUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncEnabled "${GoogleDriveSyncEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncSourceContainerName "${GoogleDriveSyncSourceContainerName}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncDriveFolderId "${GoogleDriveSyncDriveFolderId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncServiceAccountJsonBase64 "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeyVaultName "${KeyVaultName}" --environment "${AZURE_ENV_NAME}"
+
+      - name: Pre-sync Container App secrets from GitHub secrets to Key Vault refs
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        env:
+          EXCLUDE_CONTAINERAPPS: keycloak,talentserver,talentfrontend
+        run: |
+          chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
+          scripts/ci/sync-containerapp-secrets-keyvault.sh
+
+      - name: Deploy talentfunctions
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+          normalize_secret() {
+            local value="$1"
+            value="$(printf '%s' "$value" | tr -d '\r')"
+            value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+            if [ "${#value}" -ge 2 ] && [ "${value#\"}" != "$value" ] && [ "${value%\"}" != "$value" ]; then
+              value="${value#\"}"; value="${value%\"}"
+            elif [ "${#value}" -ge 2 ] && [ "${value#\'}" != "$value" ] && [ "${value%\'}" != "$value" ]; then
+              value="${value#\'}"; value="${value%\'}"
+            fi
+            if [ "${#value}" -ge 4 ] && [ "${value#\\\"}" != "$value" ] && [ "${value%\\\"}" != "$value" ]; then
+              value="${value#\\\"}"; value="${value%\\\"}"
+            fi
+            printf '%s' "$value"
+          }
+
+          SqlPassword="$(normalize_secret "${SqlPassword:-}")"
+          KeycloakPassword="$(normalize_secret "${KeycloakPassword:-}")"
+          KeycloakDbPassword="$(normalize_secret "${KeycloakDbPassword:-}")"
+          InviteSmtpPassword="$(normalize_secret "${InviteSmtpPassword:-}")"
+
+          azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
+          azd auth login --check-status >/dev/null
+
+          azd env set KeycloakPassword "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakDbUsername" "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakPassword" "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.InviteSmtpPassword" "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.SqlPassword" "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
+
+          env \
+            principalId="${AZD_PRINCIPAL_ID}" \
+            KeycloakDbUsername="${KeycloakDbUsername}" \
+            AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
+            AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
+            AZURE_KEYCLOAK_DB_PASSWORD="${KeycloakDbPassword}" \
+            AZURE_KEYCLOAK_PASSWORD="${KeycloakPassword}" \
+            AZURE_SQL_PASSWORD="${SqlPassword}" \
+            AZURE_GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64="${GoogleDriveSyncServiceAccountJsonBase64}" \
+            SqlPassword="${SqlPassword}" \
+            Password="${SqlPassword}" \
+            KeycloakPassword="${KeycloakPassword}" \
+            KeycloakDbPassword="${KeycloakDbPassword}" \
+            InviteSmtpPassword="${InviteSmtpPassword}" \
+            GoogleDriveSyncServiceAccountJsonBase64="${GoogleDriveSyncServiceAccountJsonBase64}" \
+            azd deploy talentfunctions --environment "${AZURE_ENV_NAME}" --no-prompt
+
+      - name: Configure Service Bus identity settings for talentfunctions
+        if: ${{ success() }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          app_name="talentfunctions"
+          servicebus_endpoint="$(az servicebus namespace list \
+            --resource-group "$resource_group" \
+            --query '[0].serviceBusEndpoint' \
+            -o tsv)"
+
+          test -n "$servicebus_endpoint" || (echo "Could not resolve Service Bus namespace endpoint in $resource_group" && exit 1)
+
+          servicebus_fqdn="${servicebus_endpoint#sb://}"
+          servicebus_fqdn="${servicebus_fqdn#https://}"
+          servicebus_fqdn="${servicebus_fqdn#http://}"
+          servicebus_fqdn="${servicebus_fqdn%/}"
+          servicebus_fqdn="${servicebus_fqdn%%:*}"
+
+          identity_type="$(az containerapp show \
+            --name "$app_name" \
+            --resource-group "$resource_group" \
+            --query 'identity.type' \
+            -o tsv)"
+
+          az containerapp update \
+            --name "$app_name" \
+            --resource-group "$resource_group" \
+            --remove-env-vars ServiceBusConnection AzureWebJobsServiceBus >/dev/null || true
+
+          if printf '%s' "$identity_type" | grep -qi 'UserAssigned'; then
+            identity_client_id="$(az containerapp show \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --query 'identity.userAssignedIdentities.*.clientId | [0]' \
+              -o tsv)"
+
+            test -n "$identity_client_id" || (echo "Could not resolve user-assigned managed identity clientId for $app_name" && exit 1)
+
+            az containerapp update \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --set-env-vars \
+                AzureWebJobsServiceBus__fullyQualifiedNamespace="$servicebus_fqdn" \
+                AzureWebJobsServiceBus__credential=managedidentity \
+                AzureWebJobsServiceBus__clientID="$identity_client_id" >/dev/null
+          else
+            az containerapp update \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --set-env-vars \
+                AzureWebJobsServiceBus__fullyQualifiedNamespace="$servicebus_fqdn" \
+                AzureWebJobsServiceBus__credential=managedidentity >/dev/null
+          fi
+
+          echo "Configured AzureWebJobsServiceBus identity settings for $app_name using $servicebus_fqdn"
+
+      - name: Configure invite email settings for talentfunctions
+        if: ${{ success() }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          app_name="talentfunctions"
+          frontend_base_url="${FrontendPublicOrigin:-}"
+
+          if [ -z "$frontend_base_url" ]; then
+            frontend_blob_endpoint="$(azd env get-value STORAGE_BLOBENDPOINT --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
+            frontend_storage_account="$(echo "$frontend_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
+            test -n "$frontend_storage_account" || (echo "Could not resolve frontend storage account from STORAGE_BLOBENDPOINT" && exit 1)
+            frontend_base_url="$(az storage account show \
+              --name "$frontend_storage_account" \
+              --resource-group "$resource_group" \
+              --query 'primaryEndpoints.web' \
+              -o tsv)"
+          fi
+
+          test -n "$frontend_base_url" || (echo "Could not resolve frontend static website endpoint in $resource_group" && exit 1)
+          frontend_base_url="${frontend_base_url%/}"
+
+          az containerapp update \
+            --name "$app_name" \
+            --resource-group "$resource_group" \
+            --set-env-vars \
+              InviteEmail__Enabled="${InviteEmailEnabled}" \
+              InviteEmail__FrontendBaseUrl="${frontend_base_url}" \
+              InviteEmail__FromEmail="${InviteFromEmail}" \
+              InviteEmail__FromDisplayName=TalentSuite \
+              InviteEmail__SmtpHost="${InviteSmtpHost}" \
+              InviteEmail__SmtpPort="${InviteSmtpPort}" \
+              InviteEmail__SmtpEnableSsl="${InviteSmtpEnableSsl}" \
+              InviteEmail__SmtpUsername="${InviteSmtpUsername}" >/dev/null
+
+          echo "Configured invite email settings for $app_name using frontend base URL $frontend_base_url"
+
+      - name: Configure Google Drive sync settings for talentfunctions
+        if: ${{ success() }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          app_name="talentfunctions"
+
+          az containerapp update \
+            --name "$app_name" \
+            --resource-group "$resource_group" \
+            --set-env-vars \
+              GoogleDriveSync__Enabled="${GoogleDriveSyncEnabled}" \
+              GoogleDriveSync__SourceContainerName="${GoogleDriveSyncSourceContainerName}" \
+              GoogleDriveSync__DriveFolderId="${GoogleDriveSyncDriveFolderId}" >/dev/null
+
+          echo "Configured Google Drive sync settings for $app_name"
+
+      - name: Configure AzureWebJobsStorage identity settings for talentfunctions
+        if: ${{ success() }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          app_name="talentfunctions"
+          bidstorage_blob_endpoint="$(azd env get-value BIDSTORAGE_BLOBENDPOINT --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
+          bidstorage_account_name="$(echo "$bidstorage_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
+          test -n "$bidstorage_account_name" || (echo "Could not resolve bid storage account from BIDSTORAGE_BLOBENDPOINT" && exit 1)
+
+          storage_account_id="$(az storage account show \
+            --name "$bidstorage_account_name" \
+            --resource-group "$resource_group" \
+            --query 'id' \
+            -o tsv)"
+          blob_service_uri="$(az storage account show \
+            --name "$bidstorage_account_name" \
+            --resource-group "$resource_group" \
+            --query 'primaryEndpoints.blob' \
+            -o tsv)"
+          queue_service_uri="$(az storage account show \
+            --name "$bidstorage_account_name" \
+            --resource-group "$resource_group" \
+            --query 'primaryEndpoints.queue' \
+            -o tsv)"
+
+          test -n "$storage_account_id" || (echo "Could not resolve storage account id in $resource_group" && exit 1)
+          test -n "$blob_service_uri" || (echo "Could not resolve blob endpoint in $resource_group" && exit 1)
+          test -n "$queue_service_uri" || (echo "Could not resolve queue endpoint in $resource_group" && exit 1)
+
+          identity_type="$(az containerapp show \
+            --name "$app_name" \
+            --resource-group "$resource_group" \
+            --query 'identity.type' \
+            -o tsv)"
+
+          if printf '%s' "$identity_type" | grep -qi 'UserAssigned'; then
+            identity_client_id="$(az containerapp show \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --query 'identity.userAssignedIdentities.*.clientId | [0]' \
+              -o tsv)"
+            identity_principal_id="$(az containerapp show \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --query 'identity.userAssignedIdentities.*.principalId | [0]' \
+              -o tsv)"
+
+            test -n "$identity_client_id" || (echo "Could not resolve user-assigned managed identity clientId for $app_name" && exit 1)
+            test -n "$identity_principal_id" || (echo "Could not resolve user-assigned managed identity principalId for $app_name" && exit 1)
+
+            az containerapp update \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --set-env-vars \
+                AzureWebJobsStorage__blobServiceUri="$blob_service_uri" \
+                AzureWebJobsStorage__queueServiceUri="$queue_service_uri" \
+                AzureWebJobsStorage__credential=managedidentity \
+                AzureWebJobsStorage__clientId="$identity_client_id" >/dev/null
+          else
+            identity_principal_id="$(az containerapp show \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --query 'identity.principalId' \
+              -o tsv)"
+
+            test -n "$identity_principal_id" || (echo "Could not resolve system-assigned managed identity principalId for $app_name" && exit 1)
+
+            az containerapp update \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --set-env-vars \
+                AzureWebJobsStorage__blobServiceUri="$blob_service_uri" \
+                AzureWebJobsStorage__queueServiceUri="$queue_service_uri" >/dev/null
+          fi
+
+          for role_name in "Storage Blob Data Owner" "Storage Queue Data Contributor" "Storage Account Contributor"; do
+            assignment_id="$(az role assignment list \
+              --assignee-object-id "$identity_principal_id" \
+              --scope "$storage_account_id" \
+              --role "$role_name" \
+              --query '[0].id' \
+              -o tsv 2>/dev/null || true)"
+
+            if [ -z "$assignment_id" ]; then
+              az role assignment create \
+                --assignee-object-id "$identity_principal_id" \
+                --assignee-principal-type ServicePrincipal \
+                --scope "$storage_account_id" \
+                --role "$role_name" >/dev/null 2>&1 || \
+              az role assignment create \
+                --assignee-object-id "$identity_principal_id" \
+                --scope "$storage_account_id" \
+                --role "$role_name" >/dev/null
+            fi
+          done
+
+          echo "Configured AzureWebJobsStorage identity settings for $app_name using $blob_service_uri and $queue_service_uri"
+
+      - name: Remove legacy bidstorage env vars from talentfunctions
+        if: ${{ success() }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          app_name="talentfunctions"
+
+          az containerapp update \
+            --name "$app_name" \
+            --resource-group "$resource_group" \
+            --remove-env-vars ConnectionStrings__bidstorage BIDSTORAGE_URI >/dev/null || true
+
+          echo "Removed legacy bidstorage env vars from $app_name"
+
+      - name: Post-sync Container App secrets from GitHub secrets to Key Vault refs
+        if: ${{ success() }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        env:
+          EXCLUDE_CONTAINERAPPS: keycloak,talentserver,talentfrontend
+        run: |
+          chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
+          scripts/ci/sync-containerapp-secrets-keyvault.sh

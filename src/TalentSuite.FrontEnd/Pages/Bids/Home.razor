@@ -1,0 +1,146 @@
+@page "/bids"
+@inject NavigationManager Nav
+
+<h1 class="mb-4">Bids</h1>
+
+@if (!string.IsNullOrWhiteSpace(ErrorText))
+{
+    <div class="alert alert-danger">
+        <strong>Error</strong>
+        <pre class="mb-0">@ErrorText</pre>
+    </div>
+}
+else if (IsLoading)
+{
+    <div class="alert alert-info">Loading bids…</div>
+}
+else if (!IsAdminUser)
+{
+    <div class="alert alert-info">
+        You can access bids assigned to you from your tasks or direct links.
+    </div>
+}
+else if (Bids.TotalCount == 0)
+{
+    <div class="alert alert-warning">
+        No bids found.
+        <div class="mt-2">
+            @if (IsAdminUser)
+            {
+                <a class="btn btn-primary" href="/bids/parse-bid-document">Create bid</a>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="text-muted">
+            Showing @FilteredItems.Count of @Bids.Items.Count on this page (@Bids.TotalCount total)
+        </div>
+
+        @if (IsAdminUser)
+        {
+            <a class="btn btn-primary" href="/bids/parse-bid-document">Create bid</a>
+        }
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    <label class="form-label">Status filter</label>
+                    <select class="form-select" @bind="SelectedStatusFilter">
+                        <option value="">All statuses</option>
+                        <option value="Underway">Underway</option>
+                        <option value="Cancelled">Cancelled</option>
+                        <option value="Submitted">Submitted</option>
+                        <option value="Won">Won</option>
+                        <option value="Lost">Lost</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="list-group mb-3">
+        @if (FilteredItems.Count == 0)
+        {
+            <div class="list-group-item text-muted">
+                No bids match this status filter.
+            </div>
+        }
+        else
+        {
+            @foreach (var b in FilteredItems)
+            {
+                var statusBadgeClass = b.Status switch
+                {
+                    TalentSuite.Shared.Bids.BidStatus.Won => "bg-success",
+                    TalentSuite.Shared.Bids.BidStatus.Lost => "bg-danger",
+                    TalentSuite.Shared.Bids.BidStatus.Cancelled => "bg-secondary",
+                    TalentSuite.Shared.Bids.BidStatus.Submitted => "bg-info text-dark",
+                    _ => "bg-warning text-dark"
+                };
+                <div class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                        
+                        <!-- Left content -->
+                        <div class="me-3">
+                            <div class="fw-bold">@b.Company</div>
+                            <div class="text-muted">@b.Summary</div>
+                            <div class="mt-1">
+                                <span class="badge @statusBadgeClass">Status: @b.Status</span>
+                            </div>
+                        </div>
+
+                        <!-- Right content -->
+                        <div class="text-end d-flex flex-column gap-2 align-items-end">
+                            <div class="badge @statusBadgeClass">@b.Status</div>
+                            <div class="badge bg-secondary">
+                                @b.QuestionCount questions
+                            </div>
+
+                            <button class="btn btn-sm btn-outline-primary"
+                                    @onclick="() => ManageBid(b.Id)">
+                                Manage
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+
+    <nav aria-label="Bids pagination">
+        <ul class="pagination">
+
+            <li class="page-item @(Bids.CurrentPage <= 1 ? "disabled" : "")">
+                <button class="page-link"
+                        @onclick="PrevPage"
+                        disabled="@(Bids.CurrentPage <= 1)">
+                    ← Prev
+                </button>
+            </li>
+
+            @foreach (var p in PageNumbersToShow)
+            {
+                <li class="page-item @(p == Bids.CurrentPage ? "active" : "")">
+                    <button class="page-link"
+                            @onclick="(() => GoToPage(p))">
+                        @p
+                    </button>
+                </li>
+            }
+
+            <li class="page-item @(Bids.CurrentPage >= Bids.TotalPages ? "disabled" : "")">
+                <button class="page-link"
+                        @onclick="NextPage"
+                        disabled="@(Bids.CurrentPage >= Bids.TotalPages)">
+                    Next →
+                </button>
+            </li>
+
+        </ul>
+    </nav>
+}

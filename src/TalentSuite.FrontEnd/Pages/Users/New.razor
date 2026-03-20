@@ -1,0 +1,89 @@
+@page "/users/new"
+@using TalentSuite.FrontEnd.Services
+@using TalentSuite.Shared.Users
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject GlobalBannerState BannerState
+
+<div class="container-fluid">
+    <h3 class="mb-3">Add New User</h3>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            @if (!string.IsNullOrWhiteSpace(ErrorText))
+            {
+                <div class="alert alert-danger">@ErrorText</div>
+            }
+
+            <div class="row g-3">
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Name</label>
+                    <input class="form-control" @bind="Form.Name" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Email</label>
+                    <input class="form-control" type="email" @bind="Form.Email" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Role</label>
+                    <select class="form-select" @bind="Form.Role">
+                        <option value="@UserRole.Admin">@UserRole.Admin</option>
+                        <option value="@UserRole.User">@UserRole.User</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex gap-2">
+                <button type="button"
+                        class="btn btn-primary"
+                        disabled="@IsSaving"
+                        @onclick="SaveAsync">
+                    @(IsSaving ? "Creating..." : "Create User")
+                </button>
+                <a class="btn btn-outline-secondary" href="/users">Cancel</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool IsSaving { get; set; }
+    private string? ErrorText { get; set; }
+
+    private CreateUserRequest Form { get; set; } = new()
+    {
+        Role = UserRole.User
+    };
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Form.Name) || string.IsNullOrWhiteSpace(Form.Email))
+        {
+            ErrorText = "Name and email are required.";
+            return;
+        }
+
+        ErrorText = null;
+        IsSaving = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/users", Form);
+            if (!response.IsSuccessStatusCode)
+            {
+                ErrorText = $"Failed to create user: {(int)response.StatusCode} {response.ReasonPhrase}";
+                return;
+            }
+
+            _ = BannerState.ShowAsync("User created successfully.", "alert-success");
+            NavigationManager.NavigateTo("/users");
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+}

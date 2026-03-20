@@ -1,0 +1,55 @@
+@page "/bids/parse-bid-document"
+@inject IJSRuntime JS
+
+
+<h1>Create bid</h1>
+
+@if (!IsAdminUser)
+{
+    <div class="alert alert-info">You do not have permission to create bids.</div>
+}
+else
+{
+    <div style="display:grid; gap: 0.75rem; max-width: 700px;">
+        <div>
+            <label><b>Bid stage</b></label><br />
+            <select class="form-select"
+                    style="max-width: 220px;"
+                    value="@SelectedStageValue"
+                    @onchange="OnStageChanged">
+                <option value="">Select stage...</option>
+                <option value="Stage1">Stage 1</option>
+                <option value="Stage2">Stage 2</option>
+            </select>
+        </div>
+
+        <div>
+            <label><b>Bid document (Word)</b></label><br />
+            <InputFile OnChange="OnFileChanged"
+                       accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+
+            @if (!string.IsNullOrWhiteSpace(FileName))
+            {
+                <div style="margin-top:0.25rem; color:#555;">
+                    Selected: <code>@FileName</code> (@(FileSizeBytes / 1024) KB)
+                </div>
+            }
+        </div>
+
+        <button @onclick="Submit"
+                disabled="@IsBusy"
+                style="padding:0.6rem 1rem; width:fit-content;">
+            @(IsBusy ? "Submitting..." : "Submit")
+        </button>
+
+        @if (!string.IsNullOrWhiteSpace(ErrorText))
+        {
+            <div style="padding:0.75rem; background:#ffecec; border:1px solid #ffb3b3;">
+                <b>Error</b>
+                <pre style="white-space:pre-wrap; margin:0;">@ErrorText</pre>
+            </div>
+        }
+    </div>
+}
+
+<BusyOverlay IsVisible="@IsBusy" Message="Processing document..." />

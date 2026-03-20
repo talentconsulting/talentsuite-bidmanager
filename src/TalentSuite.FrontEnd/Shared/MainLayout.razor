@@ -1,0 +1,305 @@
+@inherits LayoutComponentBase
+@using TalentSuite.FrontEnd.Services
+@using TalentSuite.FrontEnd.Pages
+@implements IDisposable
+@inject GlobalBannerState BannerState
+@inject NavigationManager NavigationManager
+@inject IServiceProvider Services
+@inject IConfiguration Configuration
+@inject IJSRuntime JS
+@inject ProfileApiClient ProfileApiClient
+
+<div class="ts-shell">
+    @if (BannerState.IsVisible)
+    {
+        <div class="alert @BannerState.CssClass" role="alert">
+            @BannerState.Message
+        </div>
+    }
+
+    <header class="mb-3 ts-header">
+        <div class="border-bottom pb-2 d-flex justify-content-between align-items-center gap-3">
+            <ul class="nav nav-pills gap-2">
+                <li class="nav-item">
+                    <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
+                </li>
+                @if (AuthenticationEnabled)
+                {
+                    @if (IsAdminFromAuthority)
+                    {
+                        <li class="nav-item">
+                            <NavLink class="nav-link" href="/bids" Match="NavLinkMatch.All">Bids</NavLink>
+                        </li>
+                        <li class="nav-item">
+                            <NavLink class="nav-link" href="/users">Users</NavLink>
+                        </li>
+                    }
+                }
+                else
+                {
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="/bids" Match="NavLinkMatch.All">Bids</NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="/users">Users</NavLink>
+                    </li>
+                }
+            </ul>
+
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary btn-sm dropdown-toggle d-flex align-items-center gap-2"
+                        type="button"
+                        aria-expanded="@_accountMenuOpen"
+                        title="Account menu"
+                        @onclick="ToggleAccountMenu">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         width="16"
+                         height="16"
+                         fill="currentColor"
+                         viewBox="0 0 16 16"
+                         aria-hidden="true">
+                        <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
+                        <path d="M8 9a5 5 0 0 0-5 5 .5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5 5 5 0 0 0-5-5z"/>
+                    </svg>
+                    <span>Account</span>
+                </button>
+                @if (_accountMenuOpen)
+                {
+                    <ul class="dropdown-menu dropdown-menu-end show">
+                        <li><a class="dropdown-item" href="/profile" @onclick="CloseAccountMenu">Profile</a></li>
+                        @if (AuthenticationEnabled)
+                        {
+                            <AuthorizeView>
+                                <Authorized>
+                                    <li><hr class="dropdown-divider" /></li>
+                                    <li>
+                                        <button type="button" class="dropdown-item" @onclick="SignOutAsync">Sign out</button>
+                                    </li>
+                                </Authorized>
+                                <NotAuthorized>
+                                    <li><hr class="dropdown-divider" /></li>
+                                    <li><a class="dropdown-item" href="@LoginUrl" @onclick="CloseAccountMenu">Sign in</a></li>
+                                </NotAuthorized>
+                            </AuthorizeView>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+    </header>
+
+    <div class="ts-layout">
+        @if (!IsRootHome && !AuthenticationEnabled)
+        {
+            <aside class="border-end p-3 bg-light ts-sidebar" style="width: @(_navCollapsed ? "56px" : "240px");">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    @if (!_navCollapsed)
+                    {
+                        <div class="fw-bold">@CurrentAreaLabel</div>
+                    }
+                    <button class="btn btn-sm btn-outline-secondary"
+                            title="Collapse navigation"
+                            @onclick="ToggleNav">
+                        &lt;&lt;
+                    </button>
+                </div>
+                @if (!_navCollapsed)
+                {
+                    <div class="list-group">
+                        @if (IsUsersArea)
+                        {
+                            <NavLink class="list-group-item list-group-item-action" href="/users" Match="NavLinkMatch.All">
+                                Directory Home
+                            </NavLink>
+                            <NavLink class="list-group-item list-group-item-action" href="/users/new">
+                                Add New User
+                            </NavLink>
+                        }
+                        else
+                        {
+                            <NavLink class="list-group-item list-group-item-action" href="/bids" Match="NavLinkMatch.All">
+                                Home
+                            </NavLink>
+                            <NavLink class="list-group-item list-group-item-action" href="/bids/parse-bid-document">
+                                New Bid Upload
+                            </NavLink>
+                        }
+                    </div>
+                }
+            </aside>
+        }
+        else if (!IsRootHome && IsAdminFromAuthority)
+        {
+            <aside class="border-end p-3 bg-light ts-sidebar" style="width: @(_navCollapsed ? "56px" : "240px");">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    @if (!_navCollapsed)
+                    {
+                        <div class="fw-bold">@CurrentAreaLabel</div>
+                    }
+                    <button class="btn btn-sm btn-outline-secondary"
+                            title="Collapse navigation"
+                            @onclick="ToggleNav">
+                        &lt;&lt;
+                    </button>
+                </div>
+                @if (!_navCollapsed)
+                {
+                    <div class="list-group">
+                        @if (IsUsersArea)
+                        {
+                            <NavLink class="list-group-item list-group-item-action" href="/users" Match="NavLinkMatch.All">
+                                Directory Home
+                            </NavLink>
+                            <NavLink class="list-group-item list-group-item-action" href="/users/new">
+                                Add New User
+                            </NavLink>
+                        }
+                        else
+                        {
+                            <NavLink class="list-group-item list-group-item-action" href="/bids" Match="NavLinkMatch.All">
+                                Home
+                            </NavLink>
+                            <NavLink class="list-group-item list-group-item-action" href="/bids/parse-bid-document">
+                                New Bid Upload
+                            </NavLink>
+                        }
+                    </div>
+                }
+            </aside>
+        }
+
+        <main class="ts-main">
+            @Body
+        </main>
+    </div>
+
+    <footer class="ts-footer">
+        <hr />
+    </footer>
+</div>
+
+@code {
+    private bool _navCollapsed;
+    private bool _accountMenuOpen;
+    private bool IsAdminFromAuthority { get; set; }
+    private bool IsUsersArea { get; set; }
+    private bool IsRootHome { get; set; }
+    private bool AuthenticationEnabled => Services.GetService(typeof(AuthenticationStateProvider)) is not null;
+    private string CurrentAreaLabel => IsUsersArea ? "Users" : "Bids";
+
+    protected override async Task OnInitializedAsync()
+    {
+        UpdateAreaFromLocation();
+        await ResolveAdminVisibilityAsync();
+
+        BannerState.OnChange += HandleBannerChanged;
+        NavigationManager.LocationChanged += HandleLocationChanged;
+    }
+
+    private void HandleBannerChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _accountMenuOpen = false;
+        UpdateAreaFromLocation();
+        _ = InvokeAsync(ResolveAdminVisibilityAsync);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateAreaFromLocation()
+    {
+        var relativePath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).Trim('/');
+        IsRootHome = string.IsNullOrWhiteSpace(relativePath);
+        IsUsersArea = relativePath.StartsWith("users", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ToggleNav()
+    {
+        _navCollapsed = !_navCollapsed;
+    }
+
+    private void ToggleAccountMenu()
+    {
+        _accountMenuOpen = !_accountMenuOpen;
+    }
+
+    private void CloseAccountMenu()
+    {
+        _accountMenuOpen = false;
+    }
+
+    private string GetCurrentRelativePath()
+    {
+        var relativePath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return "/";
+
+        return "/" + relativePath;
+    }
+
+    private string LoginUrl => $"/authentication/login?returnUrl={Uri.EscapeDataString(GetCurrentRelativePath())}";
+    private string LogoutUrl
+    {
+        get
+        {
+            var authority = Configuration["KEYCLOAK_AUTHORITY"]
+                            ?? BuildKeycloakAuthorityFromEndpointVariables();
+            if (string.IsNullOrWhiteSpace(authority))
+                throw new InvalidOperationException(
+                    "Missing KEYCLOAK_AUTHORITY (or KEYCLOAK_HTTPS/KEYCLOAK_HTTP) configuration for logout URL.");
+            var clientId = Configuration["KEYCLOAK_CLIENT_ID"];
+            if (string.IsNullOrWhiteSpace(clientId))
+                throw new InvalidOperationException(
+                    "Missing KEYCLOAK_CLIENT_ID configuration for logout URL.");
+            var redirect = Uri.EscapeDataString(NavigationManager.BaseUri.TrimEnd('/'));
+            return
+                $"{authority.TrimEnd('/')}/protocol/openid-connect/logout?client_id={Uri.EscapeDataString(clientId)}&post_logout_redirect_uri={redirect}";
+        }
+    }
+
+    private string? BuildKeycloakAuthorityFromEndpointVariables()
+    {
+        var keycloakBaseAddress = Configuration["KEYCLOAK_HTTPS"]
+                                  ?? Configuration["KEYCLOAK_HTTP"];
+        if (string.IsNullOrWhiteSpace(keycloakBaseAddress))
+            return null;
+
+        return $"{keycloakBaseAddress.TrimEnd('/')}/realms/TalentConsulting";
+    }
+
+    private async Task SignOutAsync()
+    {
+        CloseAccountMenu();
+
+        await JS.InvokeVoidAsync("talentSuiteAuth.clearClientAuthState");
+        NavigationManager.NavigateTo(LogoutUrl, forceLoad: true);
+    }
+
+    private async Task ResolveAdminVisibilityAsync()
+    {
+        if (!AuthenticationEnabled)
+        {
+            IsAdminFromAuthority = true;
+            return;
+        }
+
+        try
+        {
+            var authorisation = await ProfileApiClient.GetMyAuthorisationAsync();
+            IsAdminFromAuthority = authorisation?.IsAdmin == true;
+        }
+        catch
+        {
+            IsAdminFromAuthority = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        BannerState.OnChange -= HandleBannerChanged;
+        NavigationManager.LocationChanged -= HandleLocationChanged;
+    }
+}

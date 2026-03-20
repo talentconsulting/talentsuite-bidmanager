@@ -1,0 +1,286 @@
+@page "/bids/ingestion-summary"
+
+<h1 class="mb-4">Bid questions</h1>
+
+@if (Upload is null)
+{
+    <div class="alert alert-warning">
+        No bid in progress. Go back and upload a document first.
+        <div class="mt-2">
+            <button class="btn btn-secondary"
+                    @onclick="@(() => Nav.NavigateTo("/parse-bid-document"))">
+                Back to upload
+            </button>
+        </div>
+    </div>
+}
+else
+{
+    <EditForm Model="@Model" OnValidSubmit="SaveQuestions">
+
+        <!-- Top Action Buttons -->
+        <div class="mb-3 d-flex gap-2">
+            <button type="submit"
+                    class="btn btn-primary"
+                    disabled="@IsBusy">
+                @(IsBusy ? "Saving..." : "Save bid")
+            </button>
+
+            <button type="button"
+                    class="btn btn-outline-secondary"
+                    @onclick="@(() => Nav.NavigateTo("/parse-bid-document"))"
+                    disabled="@IsBusy">
+                Upload another
+            </button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(ErrorText))
+        {
+            <div class="alert alert-danger">
+                <strong>Error</strong>
+                <pre class="mb-0">@ErrorText</pre>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(SuccessText))
+        {
+            <div class="alert alert-success">
+                @SuccessText
+            </div>
+        }
+
+        <!-- ========================= -->
+        <!-- HORIZONTAL SWIPE WIZARD  -->
+        <!-- ========================= -->
+
+        <div class="wizard-shell mb-4">
+            <div class="wizard-track @(ShowQuestions ? "step-2" : "step-1")">
+
+                <!-- STEP 1: OVERVIEW -->
+                <section class="wizard-step">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <h5 class="mb-3">Bid Overview</h5>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Summary</label>
+                                <InputTextArea class="form-control"
+                                               @bind-Value="Model.Response.Summary"
+                                               rows="4"/>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Key information</label>
+                                <InputTextArea class="form-control"
+                                               @bind-Value="Model.Response.KeyInformation"
+                                               rows="4"/>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Company</label>
+                                <InputTextArea class="form-control"
+                                               @bind-Value="Model.Response.Company"
+                                               rows="4"/>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Budget</label>
+                                <InputTextArea class="form-control"
+                                               @bind-Value="Model.Response.Budget"
+                                               rows="2"/>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Deadline for submission</label>
+                                <InputTextArea class="form-control"
+                                               @bind-Value="Model.Response.DeadlineForSubmission"
+                                               rows="2"/>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Qualifying Questions Deadline</label>
+                                <InputTextArea class="form-control"
+                                               @bind-Value="Model.Response.DeadlineForQualifying"
+                                               rows="2"/>
+                            </div>
+
+                            <div class="d-flex justify-content-end">
+                                <button type="button"
+                                        class="btn btn-outline-primary"
+                                        @onclick="GoNext">
+                                    Next: Review Questions →
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- STEP 2: QUESTIONS -->
+                <section class="wizard-step">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center justify-content-between mb-3">
+                                <h5 class="mb-0">Extracted Questions</h5>
+
+                                <button type="button"
+                                        class="btn btn-outline-secondary"
+                                        @onclick="GoBack">
+                                    ← Back to Overview
+                                </button>
+                            </div>
+
+                            @{
+                                var groups = Model.Response.Questions
+                                    .Select((q, idx) => new { q, idx })
+                                    .GroupBy(x => string.IsNullOrWhiteSpace(x.q.Category) ? "Uncategorised" : x.q.Category!)
+                                    .OrderBy(g => g.Key)
+                                    .ToList();
+
+                                if (string.IsNullOrWhiteSpace(ActiveCategory) && groups.Count > 0)
+                                    ActiveCategory = groups[0].Key;
+                            }
+
+                            @if (groups.Count == 0)
+                            {
+                                <div class="alert alert-info">No questions found.</div>
+                            }
+                            else
+                            {
+                                <!-- Tabs -->
+                                <ul class="nav nav-tabs mb-3">
+                                    @foreach (var g in groups)
+                                    {
+                                        var isActive = g.Key == ActiveCategory;
+                                        <li class="nav-item">
+                                            <button type="button"
+                                                    class="nav-link @(isActive ? "active" : "")"
+                                                    @onclick="(() => ActiveCategory = g.Key)">
+                                                @g.Key <span class="badge bg-secondary ms-1">@g.Count()</span>
+                                            </button>
+                                        </li>
+                                    }
+                                </ul>
+
+                                <!-- Tab Content -->
+                                @foreach (var g in groups)
+                                {
+                                    if (g.Key != ActiveCategory) continue;
+
+                                    @foreach (var item in g.OrderBy(x => x.q.Number))
+                                    {
+                                        var i = item.idx;
+                                        var q = Model.Response.Questions[i];
+
+                                        <div class="card mb-4 border">
+                                            <div class="card-body">
+                                                <div class="d-flex justify-content-end mb-2">
+                                                    <button type="button"
+                                                            class="btn btn-outline-danger btn-sm"
+                                                            @onclick="(() => DeleteQuestionAsync(i))">
+                                                        Delete
+                                                    </button>
+                                                </div>
+
+                                                <div class="row mb-3">
+                                                    <div class="col-md-2">
+                                                        <strong>#@q.Number</strong>
+                                                    </div>
+
+                                                    <div class="col-md-2">
+                                                        <label class="form-label mb-1">Length</label>
+                                                        <InputText class="form-control"
+                                                                   @bind-Value="q.Length" />
+                                                    </div>
+
+                                                    <div class="col-md-2">
+                                                        <label class="form-label mb-1">Weighting</label>
+                                                        <InputNumber class="form-control"
+                                                                     @bind-Value="q.Weighting"
+                                                                     min="0"
+                                                                     max="100"/>
+                                                    </div>
+
+                                                    <div class="col-md-4 d-flex gap-3">
+                                                        <div class="form-check">
+                                                            <InputCheckbox class="form-check-input"
+                                                                           @bind-Value="q.Required"/>
+                                                            <label class="form-check-label">Required</label>
+                                                        </div>
+
+                                                        <div class="form-check">
+                                                            <InputCheckbox class="form-check-input"
+                                                                           @bind-Value="q.NiceToHave"/>
+                                                            <label class="form-check-label">Nice to have</label>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold">Title</label>
+                                                    <InputTextArea class="form-control"
+                                                                   @bind-Value="q.Title"
+                                                                   rows="2"/>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold">Description</label>
+                                                    <InputTextArea class="form-control"
+                                                                   @bind-Value="q.Description"
+                                                                   rows="4"/>
+                                                </div>
+
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            }
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </div>
+    </EditForm>
+}
+
+<BusyOverlay IsVisible="@IsBusy" Message="Saving bid..." />
+
+@code {
+    private string? ActiveCategory { get; set; }
+    private bool ShowQuestions { get; set; }
+
+    private void GoNext() => ShowQuestions = true;
+    private void GoBack() => ShowQuestions = false;
+}
+
+<style>
+    .wizard-shell {
+        overflow: hidden;            /* hides the off-screen step */
+        width: 100%;
+    }
+
+    .wizard-track {
+        display: flex;
+        width: 200%;                 /* two full-width panels */
+        transition: transform 260ms ease-in-out;
+        will-change: transform;
+    }
+
+    .wizard-step {
+        width: 50%;                  /* each step takes half of track = full viewport */
+        padding-right: 0.75rem;      /* small breathing space */
+    }
+
+    .wizard-track.step-1 {
+        transform: translateX(0%);
+    }
+
+    .wizard-track.step-2 {
+        transform: translateX(-50%);
+    }
+
+    /* Optional: reduce motion for users who prefer it */
+    @@media (prefers-reduced-motion: reduce) {
+        .wizard-track { transition: none; }
+    }
+</style>

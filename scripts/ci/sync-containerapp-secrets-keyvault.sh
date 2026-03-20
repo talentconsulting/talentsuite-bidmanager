@@ -1,0 +1,265 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+trap 'echo "sync-containerapp-secrets-keyvault.sh failed at line $LINENO"' ERR
+
+require_env() {
+  local name="$1"
+  if [ -z "${!name:-}" ]; then
+    echo "Missing required environment variable: $name"
+    exit 1
+  fi
+}
+
+ensure_role_assignment() {
+  local assignee_object_id="$1"
+  local principal_type="$2"
+  local scope="$3"
+  local role_name="$4"
+
+  local assignment_id
+  assignment_id="$(az role assignment list \
+    --assignee-object-id "$assignee_object_id" \
+    --scope "$scope" \
+    --role "$role_name" \
+    --query '[0].id' -o tsv 2>/dev/null || true)"
+
+  if [ -n "$assignment_id" ]; then
+    return 0
+  fi
+
+  if ! az role assignment create \
+    --assignee-object-id "$assignee_object_id" \
+    --assignee-principal-type "$principal_type" \
+    --scope "$scope" \
+    --role "$role_name" >/dev/null 2>&1; then
+    # Older Azure CLI versions may not support --assignee-principal-type here.
+    if ! az role assignment create \
+      --assignee-object-id "$assignee_object_id" \
+      --scope "$scope" \
+      --role "$role_name" >/dev/null 2>&1; then
+      return 1
+    fi
+  fi
+
+  # Azure RBAC propagation is eventually consistent.
+  sleep 10
+  return 0
+}
+
+require_env "AZURE_ENV_NAME"
+require_env "AZURE_LOCATION"
+
+resource_group="rg-${AZURE_ENV_NAME}"
+excluded_apps_raw="${EXCLUDE_CONTAINERAPPS:-}"
+keycloak_password="${KeycloakPassword:-}"
+keycloak_db_password="${KeycloakDbPassword:-}"
+configured_key_vault_name="${KeyVaultName:-}"
+
+test -n "$keycloak_password" || (echo "Missing KeycloakPassword" && exit 1)
+test -n "$keycloak_db_password" || (echo "Missing KeycloakDbPassword" && exit 1)
+
+echo "::add-mask::$keycloak_password"
+echo "::add-mask::$keycloak_db_password"
+
+if [ -n "$configured_key_vault_name" ]; then
+  key_vault_name="$configured_key_vault_name"
+  if ! [[ "$key_vault_name" =~ ^[a-z0-9-]{3,24}$ ]]; then
+    echo "KeyVaultName must be 3-24 chars and contain only lowercase letters, numbers, or hyphens."
+    exit 1
+  fi
+
+  existing_kv_rg="$(az keyvault show --name "$key_vault_name" --query resourceGroup -o tsv 2>/dev/null || true)"
+  if [ -z "$existing_kv_rg" ]; then
+    az keyvault create \
+      --name "$key_vault_name" \
+      --resource-group "$resource_group" \
+      --location "$AZURE_LOCATION" \
+      --enable-rbac-authorization true >/dev/null
+  elif [ "$existing_kv_rg" != "$resource_group" ]; then
+    echo "Configured KeyVaultName '$key_vault_name' already exists in resource group '$existing_kv_rg'."
+    echo "Use a unique name or a vault in '$resource_group'."
+    exit 1
+  fi
+else
+  key_vault_name="$(az keyvault list --resource-group "$resource_group" --query '[0].name' -o tsv 2>/dev/null || true)"
+
+  if [ -z "$key_vault_name" ]; then
+    rg_hash="$(printf '%s' "$resource_group" | sha256sum | cut -c1-8)"
+    key_vault_name="$(printf 'kv%s%s' "$AZURE_ENV_NAME" "$rg_hash" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9' | cut -c1-24)"
+    az keyvault create \
+      --name "$key_vault_name" \
+      --resource-group "$resource_group" \
+      --location "$AZURE_LOCATION" \
+      --enable-rbac-authorization true >/dev/null
+  fi
+fi
+
+key_vault_id="$(az keyvault show --name "$key_vault_name" --query id -o tsv)"
+key_vault_uri="$(az keyvault show --name "$key_vault_name" --query properties.vaultUri -o tsv)"
+
+# Ensure the current deployment principal has data-plane permission to write Key Vault secrets.
+deployer_principal_id="${AZD_PRINCIPAL_ID:-}"
+if [ -z "$deployer_principal_id" ]; then
+  arm_token="$(az account get-access-token --resource-type arm --query accessToken -o tsv)"
+  payload="$(printf '%s' "$arm_token" | cut -d'.' -f2 | tr '_-' '/+')"
+  padding=$(( (4 - ${#payload} % 4) % 4 ))
+  payload="${payload}$(printf '=%.0s' $(seq 1 "$padding"))"
+  deployer_principal_id="$(printf '%s' "$payload" | base64 --decode --ignore-garbage 2>/dev/null | jq -r '.oid // empty')"
+fi
+test -n "$deployer_principal_id" || (echo "Could not resolve deployer principal id for Key Vault role assignment" && exit 1)
+
+if ! ensure_role_assignment "$deployer_principal_id" "ServicePrincipal" "$key_vault_id" "Key Vault Secrets Officer"; then
+  echo "Unable to assign 'Key Vault Secrets Officer' on $key_vault_name to deployer principal $deployer_principal_id."
+  echo "Grant this once using an Owner/User Access Administrator identity, then re-run:"
+  echo "az role assignment create --assignee-object-id $deployer_principal_id --assignee-principal-type ServicePrincipal --scope $key_vault_id --role \"Key Vault Secrets Officer\""
+  exit 1
+fi
+
+set_secret_with_retry() {
+  local name="$1"
+  local value="$2"
+  local attempts=10
+  local delay=10
+  local i
+
+  for i in $(seq 1 "$attempts"); do
+    if az keyvault secret set --vault-name "$key_vault_name" --name "$name" --value "$value" >/dev/null 2>&1; then
+      return 0
+    fi
+    if [ "$i" -lt "$attempts" ]; then
+      sleep "$delay"
+    fi
+  done
+
+  echo "Failed to set Key Vault secret '$name' after RBAC propagation retries."
+  az keyvault secret set --vault-name "$key_vault_name" --name "$name" --value "$value"
+}
+
+containerapp_secret_refs_match() {
+  local app_name="$1"
+  shift
+
+  local secrets_json
+  secrets_json="$(az containerapp show --name "$app_name" --resource-group "$resource_group" -o json)"
+
+  local secret_update
+  for secret_update in "$@"; do
+    local secret_name="${secret_update%%=*}"
+    local secret_spec="${secret_update#*=}"
+    local desired_keyvault_url="${secret_spec#keyvaultref:}"
+    desired_keyvault_url="${desired_keyvault_url%%,identityref:*}"
+
+    local actual_keyvault_url
+    actual_keyvault_url="$(printf '%s' "$secrets_json" | jq -r --arg name "$secret_name" '.properties.configuration.secrets[]? | select(.name == $name) | .keyVaultUrl // empty' | head -n 1)"
+
+    local actual_identity
+    actual_identity="$(printf '%s' "$secrets_json" | jq -r --arg name "$secret_name" '.properties.configuration.secrets[]? | select(.name == $name) | .identity // empty' | head -n 1)"
+
+    if [ "$actual_keyvault_url" != "$desired_keyvault_url" ] || [ "$actual_identity" != "system" ]; then
+      return 1
+    fi
+  done
+
+  return 0
+}
+
+set_secret_with_retry "keycloak-admin-password" "$keycloak_password"
+set_secret_with_retry "keycloak-db-password" "$keycloak_db_password"
+
+mapfile -t app_names < <(az containerapp list --resource-group "$resource_group" --query '[].name' -o tsv)
+restarted_any="false"
+
+if [ "${#app_names[@]}" -eq 0 ]; then
+  echo "No Container Apps found in $resource_group; skipping Key Vault secret sync."
+  exit 0
+fi
+
+for app_name in "${app_names[@]}"; do
+  if [ -n "$excluded_apps_raw" ] && printf ',%s,' "$excluded_apps_raw" | grep -Fq ",${app_name},"; then
+    echo "Skipping Key Vault secret sync restart for excluded app $app_name"
+    continue
+  fi
+
+  mapfile -t secret_refs < <(
+    az containerapp show --name "$app_name" --resource-group "$resource_group" -o json \
+      | jq -r '.properties.template.containers[]?.env[]? | select(.secretRef != null) | .secretRef' \
+      | sort -u
+  )
+
+  if [ "${#secret_refs[@]}" -eq 0 ]; then
+    continue
+  fi
+
+  az containerapp identity assign --name "$app_name" --resource-group "$resource_group" --system-assigned >/dev/null
+  principal_id="$(az containerapp show --name "$app_name" --resource-group "$resource_group" --query identity.principalId -o tsv)"
+  test -n "$principal_id" || (echo "Failed to resolve managed identity principalId for $app_name" && exit 1)
+
+  if ! ensure_role_assignment "$principal_id" "ServicePrincipal" "$key_vault_id" "Key Vault Secrets User"; then
+    echo "Unable to assign 'Key Vault Secrets User' on $key_vault_name to container app $app_name principal $principal_id."
+    echo "Grant this once using an Owner/User Access Administrator identity, then re-run:"
+    echo "az role assignment create --assignee-object-id $principal_id --assignee-principal-type ServicePrincipal --scope $key_vault_id --role \"Key Vault Secrets User\""
+    exit 1
+  fi
+
+  # Container Apps can continue using a stale managed-identity token briefly after
+  # identity assignment / RBAC changes. Give Entra + Key Vault access propagation
+  # time to settle before switching secrets to Key Vault refs.
+  sleep 60
+
+  secret_updates=()
+  for secret_ref in "${secret_refs[@]}"; do
+    case "$secret_ref" in
+      kc-db-password)
+        secret_updates+=("${secret_ref}=keyvaultref:${key_vault_uri}secrets/keycloak-db-password,identityref:system")
+        ;;
+      kc-bootstrap-admin-password|keycloak-admin-password|kc-bootstrap-*-password|keycloak-*-password)
+        secret_updates+=("${secret_ref}=keyvaultref:${key_vault_uri}secrets/keycloak-admin-password,identityref:system")
+        ;;
+    esac
+  done
+
+  if [ "${#secret_updates[@]}" -gt 0 ]; then
+    if containerapp_secret_refs_match "$app_name" "${secret_updates[@]}"; then
+      echo "Key Vault secret refs already configured for $app_name"
+    else
+      secret_set_output="$(
+        az containerapp secret set \
+          --name "$app_name" \
+          --resource-group "$resource_group" \
+          --secrets "${secret_updates[@]}" 2>&1 >/dev/null
+      )" || {
+        if printf '%s' "$secret_set_output" | grep -Fq "JSONDecodeError" \
+          && containerapp_secret_refs_match "$app_name" "${secret_updates[@]}"; then
+          echo "Key Vault secret refs applied for $app_name despite Azure CLI JSON parsing error"
+        else
+          printf '%s\n' "$secret_set_output" >&2
+          exit 1
+        fi
+      }
+    fi
+    echo "Patched Key Vault secret refs for $app_name"
+
+    mapfile -t active_revisions < <(
+      az containerapp revision list \
+        --name "$app_name" \
+        --resource-group "$resource_group" \
+        --query "[?properties.active].name" \
+        -o tsv
+    )
+
+    for revision_name in "${active_revisions[@]}"; do
+      [ -n "$revision_name" ] || continue
+      az containerapp revision restart \
+        --name "$app_name" \
+        --resource-group "$resource_group" \
+        --revision "$revision_name" >/dev/null
+      echo "Restarted $app_name revision $revision_name so updated secrets take effect"
+      restarted_any="true"
+    done
+  fi
+done
+
+echo "Container App secret refs are backed by Key Vault ($key_vault_name)."
+if [ "$restarted_any" = "true" ]; then
+  echo "Restarted active Container App revisions after secret sync."
+fi

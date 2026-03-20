@@ -1,0 +1,96 @@
+@page "/profile"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inherits ProfilePage
+
+<div class="container py-4" style="max-width: 860px;">
+    <h1 class="mb-3">Profile</h1>
+
+    <div class="card border-info mb-4">
+        <div class="card-header">Auth Debug</div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-4">Is Authenticated</dt>
+                <dd class="col-sm-8">@IsAuthenticated</dd>
+
+                <dt class="col-sm-4">Identity Name</dt>
+                <dd class="col-sm-8 text-break">@AuthName</dd>
+
+                <dt class="col-sm-4">sub</dt>
+                <dd class="col-sm-8 text-break">@SubjectClaim</dd>
+
+                <dt class="col-sm-4">preferred_username</dt>
+                <dd class="col-sm-8 text-break">@PreferredUsernameClaim</dd>
+
+                <dt class="col-sm-4">email</dt>
+                <dd class="col-sm-8 text-break">@EmailClaim</dd>
+
+                <dt class="col-sm-4">roles</dt>
+                <dd class="col-sm-8 text-break">@(RoleClaims.Count == 0 ? "<none>" : string.Join(", ", RoleClaims))</dd>
+
+                <dt class="col-sm-4">Access Token Status</dt>
+                <dd class="col-sm-8">@AccessTokenStatus</dd>
+
+                <dt class="col-sm-4">Access Token Expires (UTC)</dt>
+                <dd class="col-sm-8">@AccessTokenExpiresUtc</dd>
+
+                <dt class="col-sm-4">/api/users/me-identity-debug Status</dt>
+                <dd class="col-sm-8">@IdentityDebugStatusCode</dd>
+            </dl>
+
+            @if (!string.IsNullOrWhiteSpace(IdentityDebugBody))
+            {
+                <hr />
+                <div class="small text-muted mb-2">Identity debug response body</div>
+                <pre class="mb-0" style="max-height: 260px; overflow: auto; white-space: pre-wrap;">@IdentityDebugBody</pre>
+            }
+        </div>
+    </div>
+
+    @if (IsLoading)
+    {
+        <div class="text-muted">Loading profile...</div>
+    }
+    else if (!string.IsNullOrWhiteSpace(ErrorText))
+    {
+        <div class="alert alert-danger">@ErrorText</div>
+    }
+    else if (Profile is null)
+    {
+        <div class="alert alert-warning mb-0">
+            No linked internal profile was found for this signed-in user.
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Id</dt>
+                    <dd class="col-sm-8 text-break">@Profile.Id</dd>
+
+                    <dt class="col-sm-4">Name</dt>
+                    <dd class="col-sm-8">@Profile.Name</dd>
+
+                    <dt class="col-sm-4">Email</dt>
+                    <dd class="col-sm-8">@Profile.Email</dd>
+
+                    <dt class="col-sm-4">Role</dt>
+                    <dd class="col-sm-8">@Profile.Role</dd>
+
+                    <dt class="col-sm-4">Registration Accepted</dt>
+                    <dd class="col-sm-8">@Profile.HasAcceptedRegistration</dd>
+
+                    <dt class="col-sm-4">Identity Provider</dt>
+                    <dd class="col-sm-8">@Profile.IdentityProvider</dd>
+
+                    <dt class="col-sm-4">Identity Subject</dt>
+                    <dd class="col-sm-8 text-break">@Profile.IdentitySubject</dd>
+
+                    <dt class="col-sm-4">Identity Username</dt>
+                    <dd class="col-sm-8">@Profile.IdentityUsername</dd>
+                </dl>
+            </div>
+        </div>
+    }
+</div>

@@ -1,0 +1,235 @@
+@page "/users"
+@using TalentSuite.Shared.Users
+@inject HttpClient Http
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="mb-0">Users Directory</h3>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Search</label>
+                    <input class="form-control"
+                           placeholder="Filter by name or email"
+                           @bind="SearchText"
+                           @bind:event="oninput" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label">Role</label>
+                    <select class="form-select" @bind="SelectedRole">
+                        <option value="">All roles</option>
+                        <option value="@UserRole.Admin">@UserRole.Admin</option>
+                        <option value="@UserRole.User">@UserRole.User</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-secondary w-100" @onclick="ClearFilters">Clear</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(ErrorText))
+    {
+        <div class="alert alert-danger">@ErrorText</div>
+    }
+    else if (IsLoading)
+    {
+        <div class="text-muted">Loading users…</div>
+    }
+    else if (FilteredUsers.Count == 0)
+    {
+        <div class="alert alert-warning mb-0">No users match the current filters.</div>
+    }
+    else
+    {
+        <div class="text-muted small mb-2">Showing @FilteredUsers.Count user(s)</div>
+        <div class="table-responsive">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in FilteredUsers)
+                    {
+                        <tr>
+                            <td>@user.Name</td>
+                            <td>@user.Email</td>
+                            <td>
+                                <span class="badge bg-secondary">@user.Role</span>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group">
+                                    <a class="btn btn-sm btn-outline-primary" href="@($"/users/{Uri.EscapeDataString(user.Id)}/edit")">
+                                        Edit
+                                    </a>
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-danger"
+                                            disabled="@IsDeleting"
+                                            @onclick="() => PromptDelete(user)">
+                                        Delete
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (ShowDeleteModal && PendingDeleteUser is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Are you sure?</h5>
+                    <button type="button" class="btn-close" aria-label="Close" @onclick="CloseDeleteModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-1">This will permanently delete this user from the system and Keycloak:</p>
+                    <div><strong>@PendingDeleteUser.Name</strong> (@PendingDeleteUser.Email)</div>
+                    @if (!string.IsNullOrWhiteSpace(DeleteErrorText))
+                    {
+                        <div class="alert alert-danger mt-3 mb-0">@DeleteErrorText</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CloseDeleteModal" disabled="@IsDeleting">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteAsync" disabled="@IsDeleting">
+                        @(IsDeleting ? "Deleting..." : "Yes, delete user")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly List<UserResponse> _users = new();
+    private bool IsLoading { get; set; } = true;
+    private bool IsDeleting { get; set; }
+    private string? ErrorText { get; set; }
+    private string? DeleteErrorText { get; set; }
+    private string SearchText { get; set; } = string.Empty;
+    private string SelectedRole { get; set; } = string.Empty;
+    private bool ShowDeleteModal { get; set; }
+    private UserResponse? PendingDeleteUser { get; set; }
+
+    private List<UserResponse> FilteredUsers
+    {
+        get
+        {
+            var query = _users.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(SearchText))
+            {
+                var term = SearchText.Trim();
+                query = query.Where(user =>
+                    (!string.IsNullOrWhiteSpace(user.Name) && user.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                    (!string.IsNullOrWhiteSpace(user.Email) && user.Email.Contains(term, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            if (Enum.TryParse<UserRole>(SelectedRole, true, out var role))
+                query = query.Where(user => user.Role == role);
+
+            return query
+                .OrderBy(user => user.Name)
+                .ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsersAsync();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        IsLoading = true;
+        ErrorText = null;
+
+        try
+        {
+            var response = await Http.GetFromJsonAsync<List<UserResponse>>("api/users");
+            _users.Clear();
+            if (response is not null)
+                _users.AddRange(response);
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void ClearFilters()
+    {
+        SearchText = string.Empty;
+        SelectedRole = string.Empty;
+    }
+
+    private void PromptDelete(UserResponse user)
+    {
+        PendingDeleteUser = user;
+        DeleteErrorText = null;
+        ShowDeleteModal = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        if (IsDeleting)
+            return;
+
+        ShowDeleteModal = false;
+        PendingDeleteUser = null;
+        DeleteErrorText = null;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (PendingDeleteUser is null)
+            return;
+
+        IsDeleting = true;
+        DeleteErrorText = null;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/users/{Uri.EscapeDataString(PendingDeleteUser.Id)}");
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                DeleteErrorText = string.IsNullOrWhiteSpace(body)
+                    ? "Failed to delete user."
+                    : body;
+                return;
+            }
+
+            _users.RemoveAll(x => string.Equals(x.Id, PendingDeleteUser.Id, StringComparison.OrdinalIgnoreCase));
+            ShowDeleteModal = false;
+            PendingDeleteUser = null;
+        }
+        catch (Exception ex)
+        {
+            DeleteErrorText = ex.Message;
+        }
+        finally
+        {
+            IsDeleting = false;
+        }
+    }
+}

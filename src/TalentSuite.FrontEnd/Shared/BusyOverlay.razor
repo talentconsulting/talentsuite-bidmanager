@@ -1,0 +1,23 @@
+@namespace TalentSuite.FrontEnd.Shared
+
+@if (IsVisible)
+{
+    <div class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+         style="background: rgba(255, 255, 255, @OverlayOpacity); z-index: @ZIndex;"
+         aria-live="polite"
+         aria-busy="true">
+        <div class="d-flex flex-column align-items-center gap-2">
+            <div class="spinner-border text-primary" role="status" aria-label="@Message">
+                <span class="visually-hidden">@Message</span>
+            </div>
+            <div class="small text-muted fw-semibold">@Message</div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public string Message { get; set; } = "Working...";
+    [Parameter] public int ZIndex { get; set; } = 2000;
+    [Parameter] public double OverlayOpacity { get; set; } = 0.65;
+}

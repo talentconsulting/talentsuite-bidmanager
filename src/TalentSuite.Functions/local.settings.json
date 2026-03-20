@@ -1,0 +1,20 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "AzureWebJobsServiceBus": "",
+    "AzureWebJobsServiceBus__fullyQualifiedNamespace": "",
+    "ConnectionStrings:bidstorage": "",
+    "BidLibrary:ApiBaseUrl": "",
+    "BidLibrary:ApiBearerToken": "",
+    "InviteEmail:Enabled": true,
+    "InviteEmail:FrontendBaseUrl": "https://localhost:5173",
+    "InviteEmail:FromEmail": "talentsuite@talentonsulting.uk",
+    "InviteEmail:FromDisplayName": "TalentSuite",
+    "InviteEmail:SmtpHost": "smtp.gmail.com",
+    "InviteEmail:SmtpPort": "587",
+    "InviteEmail:SmtpEnableSsl": true,
+    "InviteEmail:SmtpUsername": "richard.parkins@gmail.com",
+    "InviteEmail:SmtpPassword": "*****"
+  }
+}

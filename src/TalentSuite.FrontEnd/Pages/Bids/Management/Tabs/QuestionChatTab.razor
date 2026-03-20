@@ -1,0 +1,70 @@
+@namespace TalentSuite.FrontEnd.Pages.Bids.Management.Tabs
+@using Markdig
+@using TalentSuite.FrontEnd.Pages.Bids.Management.Models
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h5 class="mb-0">Chat</h5>
+            <button type="button"
+                    class="btn btn-outline-primary"
+                    @onclick="OnSubmitChat"
+                    disabled="@IsBusy">
+                @(IsBusy ? "Submitting…" : "Submit")
+            </button>
+        </div>
+
+        <label class="form-label fw-bold">Question</label>
+        <textarea class="form-control"
+                  rows="3"
+                  value="@ChatQuestionText"
+                  @oninput="e => OnChatQuestionTextChanged.InvokeAsync(e.Value?.ToString())"
+                  @onkeydown="OnQuestionKeyDown"></textarea>
+
+        <label class="form-label fw-bold mt-3">Response</label>
+        <div class="border rounded p-3 bg-light" style="min-height: 360px; max-height: 540px; overflow: auto;">
+            @if (string.IsNullOrWhiteSpace(Question.ChatResponse))
+            {
+                <div class="text-muted">No response yet.</div>
+            }
+            else
+            {
+                @((MarkupString)RenderMarkdown(Question.ChatResponse))
+            }
+        </div>
+        <div class="mt-2">
+            <button type="button"
+                    class="btn btn-outline-secondary"
+                    @onclick="OnAddChatToDrafts"
+                    disabled="@IsDraftBusy">
+                @(IsDraftBusy ? "Adding…" : "Add to drafts")
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public BidQuestionModel Question { get; set; } = default!;
+    [Parameter] public bool IsBusy { get; set; }
+    [Parameter] public bool IsDraftBusy { get; set; }
+    [Parameter] public string? ChatQuestionText { get; set; }
+    [Parameter] public EventCallback<string?> OnChatQuestionTextChanged { get; set; }
+    [Parameter] public EventCallback OnSubmitChat { get; set; }
+    [Parameter] public EventCallback OnAddChatToDrafts { get; set; }
+
+    private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
+        .DisableHtml()
+        .UseAdvancedExtensions()
+        .Build();
+
+    private static string RenderMarkdown(string? markdown)
+        => Markdown.ToHtml(markdown ?? string.Empty, MarkdownPipeline);
+
+    private async Task OnQuestionKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && !args.ShiftKey)
+        {
+            await OnSubmitChat.InvokeAsync();
+        }
+    }
+}

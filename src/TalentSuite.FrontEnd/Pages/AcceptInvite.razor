@@ -1,0 +1,51 @@
+@page "/accept-invite"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+
+<div class="container py-4" style="max-width: 680px;">
+    <h1 class="mb-3">Complete Registration</h1>
+
+    @if (IsLoading)
+    {
+        <p class="text-muted mb-0">Preparing your invitation...</p>
+    }
+    else if (IsSuccess)
+    {
+        <div class="alert alert-success">
+            Your account has been created and linked successfully.
+        </div>
+        <a class="btn btn-primary" href="/authentication/login">Sign in</a>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(ErrorText))
+        {
+            <div class="alert alert-danger mb-3">
+                @ErrorText
+            </div>
+        }
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Username</label>
+                    <input class="form-control" @bind="Username" @bind:event="oninput" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-control" @bind="Password" @bind:event="oninput" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Confirm password</label>
+                    <input type="password" class="form-control" @bind="ConfirmPassword" @bind:event="oninput" />
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-primary" @onclick="RegisterAsync" disabled="@IsSubmitting">
+                        @(IsSubmitting ? "Creating account..." : "Accept invite")
+                    </button>
+                    <a class="btn btn-outline-secondary" href="/">Back to Home</a>
+                </div>
+            </div>
+        </div>
+    }
+</div>

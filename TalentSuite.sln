@@ -1,0 +1,94 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.3.11505.172 d18.3
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.Server", "src\TalentSuite.Server\TalentSuite.Server.csproj", "{7B36E9A6-7F5F-4E3C-8D8B-11C2A9C9F6A1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.FrontEnd", "src\TalentSuite.FrontEnd\TalentSuite.FrontEnd.csproj", "{9DE77AF8-BA4B-4EAF-AB71-1E3C7E1E4A16}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.Shared", "src\TalentSuite.Shared\TalentSuite.Shared.csproj", "{A3B86A3E-8B99-4F96-9C1A-EC7A0CDB0D8C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.Functions", "src\TalentSuite.Functions\TalentSuite.Functions.csproj", "{2D89F9A1-BE0F-4B81-8C8F-19D135E456F6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.SliceTests", "src\TalentSuite.SliceTests\TalentSuite.SliceTests.csproj", "{EAA7B9D2-7F6E-4E1A-9F7D-2EEAAE1D6F47}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.AppHost", "TalentSuite.AppHost\TalentSuite.AppHost.csproj", "{7DBAF4DB-3311-496A-B84C-E86FA64027CB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.ServiceDefaults", "TalentSuite.ServiceDefaults\TalentSuite.ServiceDefaults.csproj", "{285ACC83-DA24-4768-A298-A9B1E5D4654E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ci-cd", "ci-cd", "{546A8A4D-408D-4EC2-A420-0A1C28A06130}"
+	ProjectSection(SolutionItems) = preProject
+		scripts\ci\KeycloakSqlUserBootstrap\Program.cs = scripts\ci\KeycloakSqlUserBootstrap\Program.cs
+		azure.yaml = azure.yaml
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TalentSuite.Server.Tests", "src\TalentSuite.Server.Tests\TalentSuite.Server.Tests.csproj", "{4E49D6B9-7833-4E61-B4F2-DFBA519CF702}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{59338DA4-ED9D-4501-B3B8-5DB4C4A2FB20}"
+	ProjectSection(SolutionItems) = preProject
+		.github\workflows\tests.yml = .github\workflows\tests.yml
+		.github\workflows\azure-deploy.yml = .github\workflows\azure-deploy.yml
+		.github\workflows\azure-frontend.yml = .github\workflows\azure-frontend.yml
+		.github\workflows\azure-talentserver.yml = .github\workflows\azure-talentserver.yml
+		.github\workflows\azure-functions.yml = .github\workflows\azure-functions.yml
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripts", "scripts", "{2ED1E2F7-9FF9-474D-B0C5-34AA2C8F3C3B}"
+	ProjectSection(SolutionItems) = preProject
+		scripts\run-local-all.sh = scripts\run-local-all.sh
+		scripts\ci\seed-azd-env.sh = scripts\ci\seed-azd-env.sh
+		set-env.sh = set-env.sh
+		scripts\ci\load-azd-env.sh = scripts\ci\load-azd-env.sh
+		scripts\ci\import-keycloak-realm.sh = scripts\ci\import-keycloak-realm.sh
+		scripts\ci\deploy-frontend-static.sh = scripts\ci\deploy-frontend-static.sh
+		scripts\ci\bootstrap-rbac.sh = scripts\ci\bootstrap-rbac.sh
+		scripts\ci\sync-containerapp-secrets-keyvault.sh = scripts\ci\sync-containerapp-secrets-keyvault.sh
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7B36E9A6-7F5F-4E3C-8D8B-11C2A9C9F6A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B36E9A6-7F5F-4E3C-8D8B-11C2A9C9F6A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B36E9A6-7F5F-4E3C-8D8B-11C2A9C9F6A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B36E9A6-7F5F-4E3C-8D8B-11C2A9C9F6A1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9DE77AF8-BA4B-4EAF-AB71-1E3C7E1E4A16}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9DE77AF8-BA4B-4EAF-AB71-1E3C7E1E4A16}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9DE77AF8-BA4B-4EAF-AB71-1E3C7E1E4A16}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9DE77AF8-BA4B-4EAF-AB71-1E3C7E1E4A16}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A3B86A3E-8B99-4F96-9C1A-EC7A0CDB0D8C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A3B86A3E-8B99-4F96-9C1A-EC7A0CDB0D8C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A3B86A3E-8B99-4F96-9C1A-EC7A0CDB0D8C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A3B86A3E-8B99-4F96-9C1A-EC7A0CDB0D8C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2D89F9A1-BE0F-4B81-8C8F-19D135E456F6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2D89F9A1-BE0F-4B81-8C8F-19D135E456F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2D89F9A1-BE0F-4B81-8C8F-19D135E456F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2D89F9A1-BE0F-4B81-8C8F-19D135E456F6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EAA7B9D2-7F6E-4E1A-9F7D-2EEAAE1D6F47}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EAA7B9D2-7F6E-4E1A-9F7D-2EEAAE1D6F47}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EAA7B9D2-7F6E-4E1A-9F7D-2EEAAE1D6F47}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EAA7B9D2-7F6E-4E1A-9F7D-2EEAAE1D6F47}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7DBAF4DB-3311-496A-B84C-E86FA64027CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7DBAF4DB-3311-496A-B84C-E86FA64027CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7DBAF4DB-3311-496A-B84C-E86FA64027CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7DBAF4DB-3311-496A-B84C-E86FA64027CB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{285ACC83-DA24-4768-A298-A9B1E5D4654E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{285ACC83-DA24-4768-A298-A9B1E5D4654E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{285ACC83-DA24-4768-A298-A9B1E5D4654E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{285ACC83-DA24-4768-A298-A9B1E5D4654E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4E49D6B9-7833-4E61-B4F2-DFBA519CF702}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4E49D6B9-7833-4E61-B4F2-DFBA519CF702}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4E49D6B9-7833-4E61-B4F2-DFBA519CF702}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4E49D6B9-7833-4E61-B4F2-DFBA519CF702}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{59338DA4-ED9D-4501-B3B8-5DB4C4A2FB20} = {546A8A4D-408D-4EC2-A420-0A1C28A06130}
+		{2ED1E2F7-9FF9-474D-B0C5-34AA2C8F3C3B} = {546A8A4D-408D-4EC2-A420-0A1C28A06130}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,196 @@
+@page "/"
+@using Microsoft.AspNetCore.Authorization
+@using System.Net
+@using TalentSuite.Shared.Tasks
+@attribute [Authorize]
+@inject HttpClient Http
+
+<div class="container py-4">
+    <h1 class="mb-4">Dashboard</h1>
+
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h2 class="h4 mb-2">My Actions</h2>
+                    <p class="text-muted mb-4">Tasks created from @@mentions in bid comments.</p>
+
+                    @if (!string.IsNullOrWhiteSpace(TasksErrorText))
+                    {
+                        <div class="alert alert-danger mb-0">@TasksErrorText</div>
+                    }
+                    else if (IsLoadingTasks)
+                    {
+                        <div class="text-muted">Loading actions…</div>
+                    }
+                    else if (Tasks.Count == 0)
+                    {
+                        <div class="alert alert-info mb-0">No actions assigned to you.</div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-striped align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Bid</th>
+                                        <th>Question</th>
+                                        <th>Comment</th>
+                                        <th>Created</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var task in Tasks)
+                                    {
+                                        <tr>
+                                            <td style="max-width: 260px; white-space: normal; word-break: break-word;">
+                                                @task.BidTitle
+                                            </td>
+                                            <td style="max-width: 340px; white-space: normal; word-break: break-word;">
+                                                @task.QuestionTitle
+                                            </td>
+                                            <td style="max-width: 420px; white-space: pre-wrap;">@task.CommentText</td>
+                                            <td>@task.CreatedAtUtc.ToLocalTime().ToString("g")</td>
+                                            <td class="text-end">
+                                                <a class="btn btn-sm btn-outline-primary"
+                                                   href="@($"/bids/manage/{Uri.EscapeDataString(task.BidId)}?questionId={Uri.EscapeDataString(task.QuestionId)}&commentId={Uri.EscapeDataString(task.CommentId)}")">
+                                                    Open
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h2 class="h4 mb-2">My Question Assignments</h2>
+                    <p class="text-muted mb-4">Bid questions currently assigned to you and your role.</p>
+
+                    @if (!string.IsNullOrWhiteSpace(AssignedQuestionsErrorText))
+                    {
+                        <div class="alert alert-danger mb-0">@AssignedQuestionsErrorText</div>
+                    }
+                    else if (IsLoadingAssignedQuestions)
+                    {
+                        <div class="text-muted">Loading assignments…</div>
+                    }
+                    else if (AssignedQuestions.Count == 0)
+                    {
+                        <div class="alert alert-info mb-0">No question assignments found.</div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-striped align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Bid</th>
+                                        <th>Question</th>
+                                        <th>Role</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in AssignedQuestions)
+                                    {
+                                        <tr>
+                                            <td style="max-width: 280px; white-space: normal; word-break: break-word;">
+                                                @item.BidTitle
+                                            </td>
+                                            <td style="max-width: 420px; white-space: normal; word-break: break-word;">
+                                                @item.QuestionTitle
+                                            </td>
+                                            <td>@item.Role</td>
+                                            <td class="text-end">
+                                                <a class="btn btn-sm btn-outline-primary"
+                                                   href="@($"/bids/manage/{Uri.EscapeDataString(item.BidId)}?questionId={Uri.EscapeDataString(item.QuestionId)}")">
+                                                    Open
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool IsLoadingTasks { get; set; } = true;
+    private bool IsLoadingAssignedQuestions { get; set; } = true;
+    private string? TasksErrorText { get; set; }
+    private string? AssignedQuestionsErrorText { get; set; }
+    private List<MentionTaskResponse> Tasks { get; set; } = new();
+    private List<AssignedQuestionTaskResponse> AssignedQuestions { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(
+            LoadMentionTasksAsync(),
+            LoadAssignedQuestionsAsync());
+    }
+
+    private async Task LoadMentionTasksAsync()
+    {
+        IsLoadingTasks = true;
+        TasksErrorText = null;
+
+        try
+        {
+            Tasks = await Http.GetFromJsonAsync<List<MentionTaskResponse>>("api/tasks/my")
+                ?? new List<MentionTaskResponse>();
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            TasksErrorText = "Your account is signed in but not authorized for mention tasks in this environment.";
+            Tasks = new List<MentionTaskResponse>();
+        }
+        catch (Exception ex)
+        {
+            TasksErrorText = ex.Message;
+            Tasks = new List<MentionTaskResponse>();
+        }
+        finally
+        {
+            IsLoadingTasks = false;
+        }
+    }
+
+    private async Task LoadAssignedQuestionsAsync()
+    {
+        IsLoadingAssignedQuestions = true;
+        AssignedQuestionsErrorText = null;
+
+        try
+        {
+            AssignedQuestions = await Http.GetFromJsonAsync<List<AssignedQuestionTaskResponse>>("api/tasks/my-question-assignments")
+                ?? new List<AssignedQuestionTaskResponse>();
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            AssignedQuestionsErrorText = "Your account is signed in but not authorized for question assignments in this environment.";
+            AssignedQuestions = new List<AssignedQuestionTaskResponse>();
+        }
+        catch (Exception ex)
+        {
+            AssignedQuestionsErrorText = ex.Message;
+            AssignedQuestions = new List<AssignedQuestionTaskResponse>();
+        }
+        finally
+        {
+            IsLoadingAssignedQuestions = false;
+        }
+    }
+}

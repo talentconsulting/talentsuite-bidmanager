@@ -1,0 +1,241 @@
+@namespace TalentSuite.FrontEnd.Pages.Bids.Management
+@using TalentSuite.FrontEnd.Pages.Bids.Management.Models
+@using TalentSuite.Shared.Bids
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <h5 class="mb-2">Submission and migrating into the bid library</h5>
+        <div class="text-muted mb-3">
+            This panel allows the bid status to be set. The bid status is underway by default.
+        </div>
+        <div class="btn-group" id="@_statusMenuRootId">
+            <button type="button"
+                    class="btn btn-primary dropdown-toggle"
+                    aria-expanded="@_isStatusMenuOpen"
+                    disabled="@IsStatusBusy"
+                    @onclick="ToggleStatusMenu">
+                Status: @BidStatus
+            </button>
+            <ul class="dropdown-menu @( _isStatusMenuOpen ? "show" : string.Empty )">
+                @foreach (var status in AvailableBidStatuses)
+                {
+                    var isSelected = status == BidStatus;
+                    <li>
+                        <button type="button"
+                                class="dropdown-item @(isSelected ? "active" : "")"
+                                disabled="@(isSelected ||IsStatusBusy)"
+                                @onclick="() => OnBidStatusSelectedAsync(status)">
+                            @status
+                        </button>
+                    </li>
+                }
+            </ul>
+        </div>
+
+        <div class="text-muted mt-3">
+            The process below will push the final bid responses chosen into the bid libray. These answer will subsequently be used in future bids.
+        </div>
+        <div class="mt-2">
+            <button type="button"
+                    class="btn btn-outline-primary"
+                    disabled="@(IsStatusBusy || (BidStatus == BidStatus.Underway || IsPushedToLibrary))"
+                    @onclick="OnPushToBidLibrary">
+                Push to Bid Library
+            </button>
+        </div>
+        @if (BidLibraryPush is not null)
+        {
+            <div class="small text-success mt-2">
+                Pushed on @BidLibraryPush.PushedAtUtc.ToLocalTime().ToString("g")
+            </div>
+        }
+    </div>
+</div>
+
+@foreach (var group in Questions
+    .GroupBy(q => NormaliseCategory(q.Category))
+    .OrderBy(g => g.Key))
+{
+    <div class="mb-3">
+        <h5 class="mb-2">@group.Key</h5>
+        @foreach (var q in group
+            .OrderBy(q => q.QuestionOrderIndex <= 0 ? int.MaxValue : q.QuestionOrderIndex)
+            .ThenBy(q => q.Number))
+        {
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div class="fw-bold">#@q.Number</div>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="text-muted small">
+                                <span>Weighting: <span class="badge bg-info text-dark">@q.Weighting</span></span>
+                                <span class="ms-2">Length: <span class="badge bg-light text-dark border">@(string.IsNullOrWhiteSpace(q.Length) ? "-" : q.Length)</span></span>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(q.Id))
+                            {
+                                <button type="button"
+                                        class="btn btn-link btn-sm p-0"
+                                        @onclick="() => OnGoToFinalAnswer.InvokeAsync(q.Id)">
+                                    Go to final response
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    <h5 class="mb-2">@q.Title</h5>
+
+                    <div class="mb-3">
+                        <div class="text-muted small">Users</div>
+                        @{
+                            var userNames = GetQuestionUserNames(q);
+                        }
+                        @if (userNames.Count == 0)
+                        {
+                            <div class="text-muted">No users assigned.</div>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (var name in userNames)
+                                {
+                                    <span class="badge bg-secondary">@name</span>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="text-muted small">Description</div>
+                        <div class="border rounded p-3 bg-light" style="white-space: pre-wrap;">
+                            @q.Description
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-muted small">Final draft response</div>
+                        @if (string.IsNullOrWhiteSpace(q.FinalAnswer))
+                        {
+                            <div class="alert alert-warning mb-0">No final response</div>
+                        }
+                        else
+                        {
+                            @if (!q.ReadyForSubmission)
+                            {
+                                <div class="alert alert-warning mb-2">
+                                    Final response is present but not marked ready for submission.
+                                </div>
+                            }
+                            <div class="border rounded p-3 bg-light" style="white-space: pre-wrap;">@q.FinalAnswer</div>
+                            <div class="text-muted small mt-2">
+                                @GetWordCount(q.FinalAnswer) words • @GetCharCount(q.FinalAnswer) characters
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public List<BidQuestionModel> Questions { get; set; } = new();
+    [Parameter] public BidStatus BidStatus { get; set; } = BidStatus.Underway;
+    [Parameter] public BidLibraryPushResponse? BidLibraryPush { get; set; }
+    [Parameter] public bool IsStatusBusy { get; set; }
+    [Parameter] public IReadOnlyDictionary<string, string> AssignedUserNamesById { get; set; } = new Dictionary<string, string>();
+    [Parameter] public EventCallback<BidStatus> OnBidStatusSelected { get; set; }
+    [Parameter] public EventCallback OnPushToBidLibrary { get; set; }
+    [Parameter] public EventCallback<string> OnGoToFinalAnswer { get; set; }
+
+    private static readonly BidStatus[] AvailableBidStatuses = Enum.GetValues<BidStatus>();
+    private bool _isStatusMenuOpen;
+    private readonly string _statusMenuRootId = $"final-status-menu-{Guid.NewGuid():N}";
+    private readonly string _outsideClickRegistrationKey = $"outside-click-{Guid.NewGuid():N}";
+    private DotNetObjectReference<FinalDraftsPanel>? _dotNetRef;
+
+    private bool CanSetSubmittedStatus
+        => BidStatus == BidStatus.Underway
+           && Questions.Count > 0
+           && Questions.All(q => q.ReadyForSubmission);
+
+    private bool IsPushedToLibrary => BidLibraryPush is not null;
+
+    private void ToggleStatusMenu()
+    {
+        _isStatusMenuOpen = !_isStatusMenuOpen;
+    }
+
+    private async Task OnBidStatusSelectedAsync(BidStatus status)
+    {
+        _isStatusMenuOpen = false;
+        await OnBidStatusSelected.InvokeAsync(status);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        _dotNetRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync(
+            "bidManage.registerOutsideClick",
+            _dotNetRef,
+            _statusMenuRootId,
+            _outsideClickRegistrationKey);
+    }
+
+    [JSInvokable]
+    public Task OnOutsideClick()
+    {
+        if (_isStatusMenuOpen)
+        {
+            _isStatusMenuOpen = false;
+            StateHasChanged();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("bidManage.unregisterOutsideClick", _outsideClickRegistrationKey);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Ignore during teardown/navigation.
+        }
+
+        _dotNetRef?.Dispose();
+    }
+
+    private List<string> GetQuestionUserNames(BidQuestionModel question)
+    {
+        if (question.QuestionAssignments.Count == 0)
+            return new List<string>();
+
+        return question.QuestionAssignments
+            .Select(assignment =>
+            {
+                if (!AssignedUserNamesById.TryGetValue(assignment.UserId, out var name) || string.IsNullOrWhiteSpace(name))
+                    return string.Empty;
+
+                return $"{name} ({assignment.Role})";
+            })
+            .Where(label => !string.IsNullOrWhiteSpace(label))
+            .ToList();
+    }
+
+    private static string NormaliseCategory(string? category)
+        => string.IsNullOrWhiteSpace(category) ? "Uncategorised" : category;
+
+    private static int GetWordCount(string? text)
+        => string.IsNullOrWhiteSpace(text)
+            ? 0
+            : text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+
+    private static int GetCharCount(string? text) => text?.Length ?? 0;
+}

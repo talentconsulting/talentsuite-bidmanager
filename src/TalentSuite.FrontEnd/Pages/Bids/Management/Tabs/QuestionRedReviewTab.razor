@@ -1,0 +1,319 @@
+@namespace TalentSuite.FrontEnd.Pages.Bids.Management.Tabs
+@using TalentSuite.FrontEnd.Pages.Bids.Management.Models
+@using TalentSuite.Shared.Bids
+@inject IJSRuntime JS
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="row g-3 align-items-start">
+            <div class="col-12 col-lg-8">
+                <div class="text-muted small mb-1">
+                    @GetWordCount(Question.RedReviewAnswer) words • @GetCharCount(Question.RedReviewAnswer) characters
+                </div>
+                <textarea id="@GetTextareaId()"
+                          class="form-control"
+                          rows="12"
+                          value="@Question.RedReviewAnswer"
+                          @oninput="OnRedReviewInputAsync"
+                          @onmouseup="CaptureSelectionAsync"
+                          @onkeyup="CaptureSelectionAsync"></textarea>
+
+                <div class="mt-2">
+                    <div class="text-muted small mb-1">Reviewers</div>
+                    @if (Reviewers.Count == 0)
+                    {
+                        <div class="text-muted small">No reviewers assigned.</div>
+                    }
+                    else
+                    {
+                        <div class="d-flex flex-column gap-2">
+                            @foreach (var reviewer in Reviewers)
+                            {
+                                <div class="d-flex flex-wrap align-items-center gap-2">
+                                    <span class="badge rounded-pill bg-secondary">@reviewer.Name</span>
+                                    <span class="text-muted small">@GetRedReviewStateDescription(reviewer.State)</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="mt-3 d-flex gap-2">
+                    <button class="btn btn-primary" @onclick="OnSaveRedReview" disabled="@IsBusy">
+                        @(IsBusy ? "Saving…" : "Save red review")
+                    </button>
+                    <button class="btn btn-outline-secondary" @onclick="OnPromoteToFinal" disabled="@IsBusy">
+                        Promote
+                    </button>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-4">
+                <div class="fw-semibold mb-2">Inline comments</div>
+                @if (Question.RedReviewComments.Count == 0)
+                {
+                    <div class="text-muted small mb-2">No comments yet.</div>
+                }
+                else
+                {
+                    <div class="d-flex flex-column gap-2 mb-2" style="max-height: 360px; overflow: auto;">
+                        @foreach (var comment in Question.RedReviewComments)
+                        {
+                            <div class="border rounded p-2 bg-light" id="@($"red-review-comment-{comment.Id}")">
+                                <div class="form-check mb-1">
+                                    <input class="form-check-input"
+                                           type="checkbox"
+                                           checked="@comment.IsComplete"
+                                           disabled="@IsBusy"
+                                           @onchange="e => OnCommentCompletionChangeAsync(comment.Id, e)" />
+                                    <label class="form-check-label small">Complete</label>
+                                </div>
+                                <div class="small text-muted">
+                                    @(string.IsNullOrWhiteSpace(comment.AuthorName) ? "Unknown" : comment.AuthorName)
+                                    • @comment.CreatedAtUtc.ToLocalTime().ToString("g")
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(comment.SelectedText))
+                                {
+                                    <div class="small text-secondary fst-italic mb-1" style="white-space: pre-wrap;">
+                                        "@comment.SelectedText"
+                                    </div>
+                                }
+                                <div class="@(comment.IsComplete ? "text-muted text-decoration-line-through" : "")"
+                                     style="white-space: pre-wrap;">@FormatMentions(comment.Comment)</div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="small text-muted mb-1">@SelectionInfoText()</div>
+                <textarea class="form-control mb-2"
+                          rows="3"
+                          placeholder="Add inline comment"
+                          value="@_newCommentText"
+                          @oninput="OnCommentInput"></textarea>
+                @if (TryGetMentionQuery(out var query))
+                {
+                    var matches = GetMentionMatches(query).ToList();
+                    if (matches.Count > 0)
+                    {
+                        <div class="list-group mb-2">
+                            @foreach (var user in matches)
+                            {
+                                <button type="button"
+                                        class="list-group-item list-group-item-action"
+                                        @onclick="() => InsertMention(user.Id)">
+                                    <span class="fw-semibold">@user.Name</span>
+                                    <span class="text-muted small ms-2">@user.Id</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                }
+                <div class="d-flex justify-content-end">
+                    <button type="button"
+                            class="btn btn-outline-primary btn-sm"
+                            @onclick="SubmitInlineCommentAsync"
+                            disabled="@IsBusy">
+                        @(IsBusy ? "Adding…" : "Add comment")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public BidQuestionModel Question { get; set; } = default!;
+    [Parameter] public bool IsBusy { get; set; }
+    [Parameter] public List<RedReviewReviewerOption> Reviewers { get; set; } = new();
+    [Parameter] public IReadOnlyList<UserOption> MentionableUsers { get; set; } = Array.Empty<UserOption>();
+    [Parameter] public EventCallback OnRedReviewTextChanged { get; set; }
+    [Parameter] public EventCallback OnSaveRedReview { get; set; }
+    [Parameter] public EventCallback OnPromoteToFinal { get; set; }
+    [Parameter] public EventCallback<(string Comment, int? StartIndex, int? EndIndex, string SelectedText, List<string> MentionedUserIds)> OnAddInlineComment { get; set; }
+    [Parameter] public EventCallback<(string QuestionId, string CommentId, bool IsComplete)> OnCommentCompletionChanged { get; set; }
+
+    private string _newCommentText = string.Empty;
+    private int? _selectionStart;
+    private int? _selectionEnd;
+    private string _selectedText = string.Empty;
+    private string _mentionQuery = string.Empty;
+    private bool _showMentions;
+    private readonly HashSet<string> _mentionedUserIds = new(StringComparer.OrdinalIgnoreCase);
+
+    private static int GetWordCount(string? text)
+        => string.IsNullOrWhiteSpace(text)
+            ? 0
+            : text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+
+    private static int GetCharCount(string? text)
+        => text?.Length ?? 0;
+
+    private static string GetRedReviewStateDescription(RedReviewState state)
+        => state switch
+        {
+            RedReviewState.Pending => "Pending",
+            RedReviewState.ChangesRequested => "Changes requested",
+            RedReviewState.Complete => "Complete",
+            _ => state.ToString()
+        };
+
+    private string SelectionInfoText()
+        => string.IsNullOrWhiteSpace(_selectedText)
+            ? "Inline selection: none (select text in the red review to anchor this comment)."
+            : $"Inline selection: chars {_selectionStart}-{_selectionEnd}";
+
+    private static string GetTextareaId() => "red-review-textarea";
+
+    private async Task CaptureSelectionAsync()
+    {
+        var selection = await JS.InvokeAsync<TextSelectionState?>("bidManage.getTextAreaSelectionById", GetTextareaId());
+        if (selection is null)
+            return;
+
+        _selectionStart = selection.StartIndex;
+        _selectionEnd = selection.EndIndex;
+        _selectedText = selection.SelectedText ?? string.Empty;
+    }
+
+    private async Task SubmitInlineCommentAsync()
+    {
+        var text = (_newCommentText ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
+        var hasSelection = !string.IsNullOrWhiteSpace(_selectedText);
+        await OnAddInlineComment.InvokeAsync((
+            text,
+            hasSelection ? _selectionStart : null,
+            hasSelection ? _selectionEnd : null,
+            hasSelection ? _selectedText : string.Empty,
+            ExtractMentionedUserIds(text)));
+
+        _newCommentText = string.Empty;
+        _showMentions = false;
+        _mentionQuery = string.Empty;
+        _mentionedUserIds.Clear();
+    }
+
+    private async Task OnRedReviewInputAsync(ChangeEventArgs e)
+    {
+        Question.RedReviewAnswer = e.Value?.ToString() ?? string.Empty;
+        await OnRedReviewTextChanged.InvokeAsync();
+    }
+
+    private Task OnCommentCompletionChangeAsync(string commentId, ChangeEventArgs e)
+    {
+        var isComplete = ParseCheckboxValue(e.Value);
+        return OnCommentCompletionChanged.InvokeAsync((Question.Id, commentId, isComplete));
+    }
+
+    private static bool ParseCheckboxValue(object? value)
+    {
+        if (value is bool b)
+            return b;
+
+        return bool.TryParse(value?.ToString(), out var parsed) && parsed;
+    }
+
+    private void OnCommentInput(ChangeEventArgs e)
+    {
+        _newCommentText = e.Value?.ToString() ?? string.Empty;
+        _showMentions = TryExtractMentionQuery(_newCommentText, out _mentionQuery);
+    }
+
+    private bool TryGetMentionQuery(out string query)
+    {
+        query = _mentionQuery;
+        return _showMentions;
+    }
+
+    private IEnumerable<UserOption> GetMentionMatches(string query)
+    {
+        var q = query.Trim();
+        return MentionableUsers
+            .Where(u => string.IsNullOrWhiteSpace(q)
+                        || u.Id.Contains(q, StringComparison.OrdinalIgnoreCase)
+                        || u.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
+            .Take(8);
+    }
+
+    private void InsertMention(string userId)
+    {
+        var user = MentionableUsers.FirstOrDefault(u => string.Equals(u.Id, userId, StringComparison.OrdinalIgnoreCase));
+        if (user is null)
+            return;
+
+        _newCommentText = ReplaceTrailingMentionQuery(_newCommentText, user.Name);
+        _mentionedUserIds.Add(user.Id);
+        _showMentions = false;
+        _mentionQuery = string.Empty;
+    }
+
+    private List<string> ExtractMentionedUserIds(string text)
+    {
+        var byText = MentionableUsers
+            .Where(u => text.Contains($"@{u.Id}", StringComparison.OrdinalIgnoreCase))
+            .Select(u => u.Id)
+            .Concat(MentionableUsers
+                .Where(u => text.Contains($"@{u.Name}", StringComparison.OrdinalIgnoreCase))
+                .Select(u => u.Id));
+
+        return byText
+            .Concat(_mentionedUserIds)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static bool TryExtractMentionQuery(string text, out string query)
+    {
+        query = string.Empty;
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        var atIndex = text.LastIndexOf('@');
+        if (atIndex < 0)
+            return false;
+
+        var isWordStart = atIndex == 0 || char.IsWhiteSpace(text[atIndex - 1]);
+        if (!isWordStart)
+            return false;
+
+        var trailing = text[(atIndex + 1)..];
+        if (trailing.Contains(' ') || trailing.Contains('\n') || trailing.Contains('\r') || trailing.Contains('\t'))
+            return false;
+
+        query = trailing;
+        return true;
+    }
+
+    private static string ReplaceTrailingMentionQuery(string text, string userId)
+    {
+        var atIndex = text.LastIndexOf('@');
+        if (atIndex < 0)
+            return text;
+
+        return $"{text[..atIndex]}@{userId} ";
+    }
+
+    private string FormatMentions(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || MentionableUsers.Count == 0)
+            return text;
+
+        var formatted = text;
+        foreach (var user in MentionableUsers.OrderByDescending(x => x.Id.Length))
+        {
+            formatted = formatted.Replace($"@{user.Id}", $"@{user.Name}", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return formatted;
+    }
+
+    private sealed class TextSelectionState
+    {
+        public int? StartIndex { get; set; }
+        public int? EndIndex { get; set; }
+        public string SelectedText { get; set; } = string.Empty;
+    }
+}

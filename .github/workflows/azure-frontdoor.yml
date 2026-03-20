@@ -1,0 +1,464 @@
+name: Azure Front Door
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile_name:
+        description: "Azure Front Door profile name"
+        required: true
+        default: "talentsuite-afd"
+        type: string
+      endpoint_name:
+        description: "Azure Front Door endpoint name"
+        required: true
+        default: "talentsuite-dev"
+        type: string
+      auth_endpoint_name:
+        description: "Azure Front Door endpoint name for the optional Keycloak auth domain"
+        required: false
+        default: "talentsuite-auth-dev"
+        type: string
+      sku:
+        description: "Azure Front Door SKU"
+        required: true
+        default: "Standard_AzureFrontDoor"
+        type: choice
+        options:
+          - Standard_AzureFrontDoor
+          - Premium_AzureFrontDoor
+      frontend_patterns:
+        description: "Route patterns for the frontend origin"
+        required: true
+        default: "/*"
+        type: string
+      api_patterns:
+        description: "Route patterns for the API origin"
+        required: true
+        default: "/api/*"
+        type: string
+      custom_domain:
+        description: "Optional custom domain to attach, e.g. dev.talentsuite.uk"
+        required: false
+        default: "dev.talentsuite.uk"
+        type: string
+      auth_domain:
+        description: "Keycloak custom domain to attach, e.g. auth-dev.talentsuite.uk"
+        required: true
+        default: "auth-dev.talentsuite.uk"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-frontdoor:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate required inputs
+        run: |
+          test -n "${AZURE_ENV_NAME:-}" || (echo "AZURE_ENV_NAME missing" && exit 1)
+          test -n "${{ github.event.inputs.profile_name }}" || (echo "profile_name missing" && exit 1)
+          test -n "${{ github.event.inputs.endpoint_name }}" || (echo "endpoint_name missing" && exit 1)
+
+      - name: Provision Azure Front Door
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          profile_name="${{ github.event.inputs.profile_name }}"
+          endpoint_name="${{ github.event.inputs.endpoint_name }}"
+          auth_endpoint_name="${{ github.event.inputs.auth_endpoint_name }}"
+          sku="${{ github.event.inputs.sku }}"
+          frontend_patterns="${{ github.event.inputs.frontend_patterns }}"
+          api_patterns="${{ github.event.inputs.api_patterns }}"
+
+          frontend_origin_group="frontend-og"
+          frontend_origin_name="frontend-origin"
+          frontend_route_name="frontend-route"
+          api_origin_group="api-og"
+          api_origin_name="api-origin"
+          api_route_name="api-route"
+          keycloak_origin_group="keycloak-og"
+          keycloak_origin_name="keycloak-origin"
+          keycloak_route_name="keycloak-route"
+          auth_domain="${{ github.event.inputs.auth_domain }}"
+
+          storage_blob_endpoint="$(azd env get-value STORAGE_BLOBENDPOINT --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
+          storage_account_name="$(echo "$storage_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
+          test -n "$storage_account_name" || (echo "Could not resolve storage account name in $resource_group" && exit 1)
+
+          frontend_host="${storage_account_name}.z33.web.core.windows.net"
+
+          api_host="$(az containerapp show \
+            --name talentserver \
+            --resource-group "$resource_group" \
+            --query 'properties.configuration.ingress.fqdn' \
+            -o tsv)"
+          test -n "$api_host" || (echo "Could not resolve public talentserver ingress FQDN in $resource_group" && exit 1)
+
+          if [ -n "$auth_domain" ]; then
+            keycloak_host="$(az containerapp show \
+              --name keycloak \
+              --resource-group "$resource_group" \
+              --query 'properties.configuration.ingress.fqdn' \
+              -o tsv)"
+            test -n "$keycloak_host" || (echo "Could not resolve public keycloak ingress FQDN in $resource_group" && exit 1)
+          fi
+
+          if ! az afd profile show --resource-group "$resource_group" --profile-name "$profile_name" >/dev/null 2>&1; then
+            az afd profile create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --sku "$sku" >/dev/null
+          fi
+
+          if ! az afd endpoint show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" >/dev/null 2>&1; then
+            az afd endpoint create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$endpoint_name" \
+              --enabled-state Enabled >/dev/null
+          fi
+
+          if [ -n "$auth_domain" ] && ! az afd endpoint show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$auth_endpoint_name" >/dev/null 2>&1; then
+            az afd endpoint create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$auth_endpoint_name" \
+              --enabled-state Enabled >/dev/null
+          fi
+
+          if ! az afd origin-group show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$frontend_origin_group" >/dev/null 2>&1; then
+            az afd origin-group create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --origin-group-name "$frontend_origin_group" \
+              --probe-request-type GET \
+              --probe-protocol Https \
+              --probe-path / \
+              --probe-interval-in-seconds 60 \
+              --sample-size 4 \
+              --successful-samples-required 3 \
+              --additional-latency-in-milliseconds 50 \
+              --enable-health-probe >/dev/null
+          fi
+
+          if ! az afd origin-group show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$api_origin_group" >/dev/null 2>&1; then
+            az afd origin-group create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --origin-group-name "$api_origin_group" \
+              --probe-request-type GET \
+              --probe-protocol Https \
+              --probe-path / \
+              --probe-interval-in-seconds 60 \
+              --sample-size 4 \
+              --successful-samples-required 3 \
+              --additional-latency-in-milliseconds 50 \
+              --enable-health-probe >/dev/null
+          fi
+
+          if [ -n "$auth_domain" ] && ! az afd origin-group show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$keycloak_origin_group" >/dev/null 2>&1; then
+            az afd origin-group create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --origin-group-name "$keycloak_origin_group" \
+              --probe-request-type GET \
+              --probe-protocol Https \
+              --probe-path /realms/master/.well-known/openid-configuration \
+              --probe-interval-in-seconds 60 \
+              --sample-size 4 \
+              --successful-samples-required 3 \
+              --additional-latency-in-milliseconds 50 \
+              --enable-health-probe >/dev/null
+          fi
+
+          if az afd origin show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$frontend_origin_group" --origin-name "$frontend_origin_name" >/dev/null 2>&1; then
+            az afd origin update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --origin-group-name "$frontend_origin_group" \
+              --origin-name "$frontend_origin_name" \
+              --host-name "$frontend_host" \
+              --origin-host-header "$frontend_host" \
+              --http-port 80 \
+              --https-port 443 \
+              --priority 1 \
+              --weight 1000 \
+              --enabled-state Enabled >/dev/null
+          else
+            az afd origin create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --origin-group-name "$frontend_origin_group" \
+              --origin-name "$frontend_origin_name" \
+              --host-name "$frontend_host" \
+              --origin-host-header "$frontend_host" \
+              --http-port 80 \
+              --https-port 443 \
+              --priority 1 \
+              --weight 1000 \
+              --enabled-state Enabled >/dev/null
+          fi
+
+          if [ -n "$auth_domain" ] && az afd origin show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$keycloak_origin_group" --origin-name "$keycloak_origin_name" >/dev/null 2>&1; then
+            az afd origin update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --origin-group-name "$keycloak_origin_group" \
+              --origin-name "$keycloak_origin_name" \
+              --host-name "$keycloak_host" \
+              --origin-host-header "$keycloak_host" \
+              --http-port 80 \
+              --https-port 443 \
+              --priority 1 \
+              --weight 1000 \
+              --enabled-state Enabled >/dev/null
+          elif [ -n "$auth_domain" ]; then
+            az afd origin create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --origin-group-name "$keycloak_origin_group" \
+              --origin-name "$keycloak_origin_name" \
+              --host-name "$keycloak_host" \
+              --origin-host-header "$keycloak_host" \
+              --http-port 80 \
+              --https-port 443 \
+              --priority 1 \
+              --weight 1000 \
+              --enabled-state Enabled >/dev/null
+          fi
+
+          if az afd origin show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$api_origin_group" --origin-name "$api_origin_name" >/dev/null 2>&1; then
+            az afd origin update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --origin-group-name "$api_origin_group" \
+              --origin-name "$api_origin_name" \
+              --host-name "$api_host" \
+              --origin-host-header "$api_host" \
+              --http-port 80 \
+              --https-port 443 \
+              --priority 1 \
+              --weight 1000 \
+              --enabled-state Enabled >/dev/null
+          else
+            az afd origin create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --origin-group-name "$api_origin_group" \
+              --origin-name "$api_origin_name" \
+              --host-name "$api_host" \
+              --origin-host-header "$api_host" \
+              --http-port 80 \
+              --https-port 443 \
+              --priority 1 \
+              --weight 1000 \
+              --enabled-state Enabled >/dev/null
+          fi
+
+          if az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" --route-name "$frontend_route_name" >/dev/null 2>&1; then
+            az afd route update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$endpoint_name" \
+              --route-name "$frontend_route_name" \
+              --origin-group "$frontend_origin_group" \
+              --patterns-to-match "$frontend_patterns" \
+              --supported-protocols Https \
+              --link-to-default-domain Enabled \
+              --https-redirect Enabled \
+              --forwarding-protocol MatchRequest >/dev/null
+          else
+            az afd route create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$endpoint_name" \
+              --route-name "$frontend_route_name" \
+              --origin-group "$frontend_origin_group" \
+              --patterns-to-match "$frontend_patterns" \
+              --supported-protocols Https \
+              --link-to-default-domain Enabled \
+              --https-redirect Enabled \
+              --forwarding-protocol MatchRequest >/dev/null
+          fi
+
+          if az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" --route-name "$api_route_name" >/dev/null 2>&1; then
+            az afd route update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$endpoint_name" \
+              --route-name "$api_route_name" \
+              --origin-group "$api_origin_group" \
+              --patterns-to-match "$api_patterns" \
+              --supported-protocols Https \
+              --link-to-default-domain Enabled \
+              --https-redirect Enabled \
+              --forwarding-protocol MatchRequest >/dev/null
+          else
+            az afd route create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$endpoint_name" \
+              --route-name "$api_route_name" \
+              --origin-group "$api_origin_group" \
+              --patterns-to-match "$api_patterns" \
+              --supported-protocols Https \
+              --link-to-default-domain Enabled \
+              --https-redirect Enabled \
+              --forwarding-protocol MatchRequest >/dev/null
+          fi
+
+          if [ -n "$auth_domain" ] && az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$auth_endpoint_name" --route-name "$keycloak_route_name" >/dev/null 2>&1; then
+            az afd route update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$auth_endpoint_name" \
+              --route-name "$keycloak_route_name" \
+              --origin-group "$keycloak_origin_group" \
+              --patterns-to-match "/*" \
+              --supported-protocols Https \
+              --link-to-default-domain Enabled \
+              --https-redirect Enabled \
+              --forwarding-protocol MatchRequest >/dev/null
+          elif [ -n "$auth_domain" ]; then
+            az afd route create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$auth_endpoint_name" \
+              --route-name "$keycloak_route_name" \
+              --origin-group "$keycloak_origin_group" \
+              --patterns-to-match "/*" \
+              --supported-protocols Https \
+              --link-to-default-domain Enabled \
+              --https-redirect Enabled \
+              --forwarding-protocol MatchRequest >/dev/null
+          fi
+
+      - name: Configure custom domains
+        if: ${{ github.event.inputs.custom_domain != '' || github.event.inputs.auth_domain != '' }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          profile_name="${{ github.event.inputs.profile_name }}"
+          endpoint_name="${{ github.event.inputs.endpoint_name }}"
+          auth_endpoint_name="${{ github.event.inputs.auth_endpoint_name }}"
+          custom_domain_host="${{ github.event.inputs.custom_domain }}"
+          auth_domain_host="${{ github.event.inputs.auth_domain }}"
+
+          if [ -n "$custom_domain_host" ]; then
+            custom_domain_name="$(printf '%s' "$custom_domain_host" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-')"
+
+            if ! az afd custom-domain show \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --custom-domain-name "$custom_domain_name" >/dev/null 2>&1; then
+              az afd custom-domain create \
+                --resource-group "$resource_group" \
+                --profile-name "$profile_name" \
+                --custom-domain-name "$custom_domain_name" \
+                --host-name "$custom_domain_host" \
+                --certificate-type ManagedCertificate \
+                --minimum-tls-version TLS12 >/dev/null
+            fi
+
+            az afd route update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$endpoint_name" \
+              --route-name "frontend-route" \
+              --custom-domains "$custom_domain_name" >/dev/null
+
+            az afd route update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$endpoint_name" \
+              --route-name "api-route" \
+              --custom-domains "$custom_domain_name" >/dev/null
+
+            validation_token="$(az afd custom-domain show \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --custom-domain-name "$custom_domain_name" \
+              --query 'validationProperties.validationToken' \
+              -o tsv)"
+
+            echo "Created or reused Front Door custom domain $custom_domain_host"
+            echo "Cloudflare DNS validation token: $validation_token"
+          fi
+
+          if [ -n "$auth_domain_host" ]; then
+            auth_domain_name="$(printf '%s' "$auth_domain_host" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-')"
+
+            if ! az afd custom-domain show \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --custom-domain-name "$auth_domain_name" >/dev/null 2>&1; then
+              az afd custom-domain create \
+                --resource-group "$resource_group" \
+                --profile-name "$profile_name" \
+                --custom-domain-name "$auth_domain_name" \
+                --host-name "$auth_domain_host" \
+                --certificate-type ManagedCertificate \
+                --minimum-tls-version TLS12 >/dev/null
+            fi
+
+            az afd route update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$auth_endpoint_name" \
+              --route-name "keycloak-route" \
+              --custom-domains "$auth_domain_name" \
+              --link-to-default-domain Disabled >/dev/null
+
+            auth_validation_token="$(az afd custom-domain show \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --custom-domain-name "$auth_domain_name" \
+              --query 'validationProperties.validationToken' \
+              -o tsv)"
+
+            echo "Created or reused Front Door Keycloak custom domain $auth_domain_host"
+            echo "Cloudflare DNS validation token: $auth_validation_token"
+          fi
+
+          echo "Add the required TXT/CNAME records in Cloudflare, then wait for domain validation and certificate issuance."
+
+      - name: Show Front Door endpoint
+        run: |
+          az afd endpoint show \
+            --resource-group "rg-${AZURE_ENV_NAME}" \
+            --profile-name "${{ github.event.inputs.profile_name }}" \
+            --endpoint-name "${{ github.event.inputs.endpoint_name }}" \
+            --query hostName \
+            -o tsv
+
+      - name: Show Auth Front Door endpoint
+        if: ${{ github.event.inputs.auth_domain != '' }}
+        run: |
+          az afd endpoint show \
+            --resource-group "rg-${AZURE_ENV_NAME}" \
+            --profile-name "${{ github.event.inputs.profile_name }}" \
+            --endpoint-name "${{ github.event.inputs.auth_endpoint_name }}" \
+            --query hostName \
+            -o tsv
