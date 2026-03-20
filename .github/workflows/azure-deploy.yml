@@ -453,6 +453,8 @@ jobs:
       - name: Pre-sync Container App secrets from GitHub secrets to Key Vault refs
         if: ${{ success() && github.event.inputs.deploy_target != 'frontend' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
+        env:
+          EXCLUDE_CONTAINERAPPS: ${{ github.event.inputs.deploy_target == 'all' && '' || github.event.inputs.deploy_target == 'talentfunctions' && 'keycloak,talentserver,talentfrontend' || github.event.inputs.deploy_target == 'talentserver' && 'keycloak,talentfunctions,talentfrontend' || github.event.inputs.deploy_target == 'keycloak' && 'talentserver,talentfunctions,talentfrontend' || '' }}
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
@@ -578,6 +580,8 @@ jobs:
       - name: Post-sync Container App secrets from GitHub secrets to Key Vault refs
         if: ${{ success() && github.event.inputs.deploy_target != 'frontend' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
+        env:
+          EXCLUDE_CONTAINERAPPS: ${{ github.event.inputs.deploy_target == 'all' && '' || github.event.inputs.deploy_target == 'talentfunctions' && 'keycloak,talentserver,talentfrontend' || github.event.inputs.deploy_target == 'talentserver' && 'keycloak,talentfunctions,talentfrontend' || github.event.inputs.deploy_target == 'keycloak' && 'talentserver,talentfunctions,talentfrontend' || '' }}
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
