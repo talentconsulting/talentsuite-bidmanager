@@ -69,6 +69,7 @@ public sealed class GoogleDriveSyncService(
         var uploaded = 0;
         var updated = 0;
         var skipped = 0;
+        var folderIdByPath = new Dictionary<string, string>(StringComparer.Ordinal);
 
         await foreach (var blob in container.GetBlobsAsync(cancellationToken: ct))
         {
@@ -91,6 +92,7 @@ public sealed class GoogleDriveSyncService(
                 driveService,
                 configured.DriveFolderId,
                 blob.Name,
+                folderIdByPath,
                 ct);
 
             var driveFile = await FindExistingDriveFileAsync(driveService, parentFolderId, blob.Name, ct);
@@ -162,6 +164,7 @@ public sealed class GoogleDriveSyncService(
         DriveService driveService,
         string rootFolderId,
         string blobName,
+        IDictionary<string, string> folderIdByPath,
         CancellationToken ct)
     {
         var segments = blobName
@@ -171,8 +174,21 @@ public sealed class GoogleDriveSyncService(
             return rootFolderId;
 
         var parentFolderId = rootFolderId;
+        var currentPath = string.Empty;
         foreach (var segment in segments[..^1])
-            parentFolderId = await GetOrCreateFolderAsync(driveService, parentFolderId, segment, ct);
+        {
+            currentPath = string.IsNullOrEmpty(currentPath)
+                ? segment
+                : $"{currentPath}/{segment}";
+
+            if (!folderIdByPath.TryGetValue(currentPath, out var cachedFolderId))
+            {
+                cachedFolderId = await GetOrCreateFolderAsync(driveService, parentFolderId, segment, ct);
+                folderIdByPath[currentPath] = cachedFolderId;
+            }
+
+            parentFolderId = cachedFolderId;
+        }
 
         return parentFolderId;
     }
