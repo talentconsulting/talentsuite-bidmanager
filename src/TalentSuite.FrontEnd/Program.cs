@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
+using System.Net.Http.Json;
 using TalentSuite.FrontEnd;
 using TalentSuite.FrontEnd.Pages;
 using TalentSuite.FrontEnd.Pages.Bids;
@@ -13,6 +14,14 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 var strictConfiguration = IsStrictConfiguration(builder.Configuration, builder.HostEnvironment);
 var authenticationEnabled = FrontendConfiguration.IsAuthenticationEnabled(builder.Configuration, strictConfiguration);
 var apiBaseAddress = FrontendConfiguration.ResolveApiBaseAddress(builder.Configuration, strictConfiguration);
+if (authenticationEnabled && builder.HostEnvironment.IsDevelopment())
+{
+    var runtimeKeycloakAuthority = await TryResolveRuntimeKeycloakAuthorityAsync(apiBaseAddress);
+    if (!string.IsNullOrWhiteSpace(runtimeKeycloakAuthority))
+    {
+        builder.Configuration["KEYCLOAK_AUTHORITY"] = runtimeKeycloakAuthority;
+    }
+}
 var keycloakAuthority = authenticationEnabled
     ? FrontendConfiguration.ResolveKeycloakAuthority(builder.Configuration, strictConfiguration)
     : null;
@@ -84,4 +93,23 @@ static void EnsureScope(ICollection<string> scopes, string scope)
         return;
 
     scopes.Add(scope);
+}
+
+static async Task<string?> TryResolveRuntimeKeycloakAuthorityAsync(string apiBaseAddress)
+{
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(apiBaseAddress) };
+        var response = await http.GetFromJsonAsync<RuntimeAuthResponse>("api/runtime/auth");
+        return response?.KeycloakAuthority;
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+sealed class RuntimeAuthResponse
+{
+    public string? KeycloakAuthority { get; set; }
 }

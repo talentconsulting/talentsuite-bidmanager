@@ -35,8 +35,7 @@ public static class FrontendConfiguration
 
     public static string ResolveKeycloakAuthority(IConfiguration configuration, bool strictConfiguration)
     {
-        var keycloakAuthority = configuration["KEYCLOAK_AUTHORITY"]
-                                ?? BuildKeycloakAuthorityFromEndpointVariables(configuration);
+        var keycloakAuthority = TryResolveConfiguredKeycloakAuthority(configuration);
 
         if (!string.IsNullOrWhiteSpace(keycloakAuthority))
             return keycloakAuthority;
@@ -47,6 +46,9 @@ public static class FrontendConfiguration
         throw new InvalidOperationException(
             "Missing KEYCLOAK_AUTHORITY (or KEYCLOAK_HTTPS/KEYCLOAK_HTTP) configuration for OIDC authority.");
     }
+
+    public static string? TryResolveConfiguredKeycloakAuthority(IConfiguration configuration)
+        => configuration["KEYCLOAK_AUTHORITY"] ?? BuildKeycloakAuthorityFromEndpointVariables(configuration);
 
     public static string ResolveKeycloakClientId(IConfiguration configuration, bool strictConfiguration)
     {

@@ -20,6 +20,8 @@ public class BidLibraryWriterTests
         {
             Id = "bid-1",
             Company = "Acme / Ltd.",
+            UniqueReference = "REF/42",
+            Stage = BidStage.Stage2,
             Questions =
             [
                 new QuestionResponse { Id = "q1", Title = "What/Why", Number = "1", Category = "General" },
@@ -40,9 +42,9 @@ public class BidLibraryWriterTests
         Assert.Multiple(() =>
         {
             Assert.That(storage.Writes.Select(w => w.ContainerName).Distinct(), Is.EqualTo(new[] { "bidlibrary" }));
-            Assert.That(storage.Writes.Any(w => w.BlobName == "Acme - Ltd/What-Why.txt" && w.Content == "Answer 1"), Is.True);
-            Assert.That(storage.Writes.Any(w => w.BlobName == "Acme - Ltd/What-Why-2.txt" && w.Content == string.Empty), Is.True);
-            Assert.That(storage.Writes.Any(w => w.BlobName == "Acme - Ltd/question-3-4.txt" && w.Content == "Answer 3"), Is.True);
+            Assert.That(storage.Writes.Any(w => w.BlobName == "Acme - Ltd - REF-42 - Stage 2/What-Why.txt" && w.Content == "Answer 1"), Is.True);
+            Assert.That(storage.Writes.Any(w => w.BlobName == "Acme - Ltd - REF-42 - Stage 2/What-Why-2.txt" && w.Content == string.Empty), Is.True);
+            Assert.That(storage.Writes.Any(w => w.BlobName == "Acme - Ltd - REF-42 - Stage 2/question-3-4.txt" && w.Content == "Answer 3"), Is.True);
         });
     }
 

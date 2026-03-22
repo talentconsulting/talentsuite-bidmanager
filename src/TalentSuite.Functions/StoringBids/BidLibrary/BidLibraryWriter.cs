@@ -26,7 +26,7 @@ public sealed class BidLibraryWriter(
         }
 
         var bidIdForLogs = bid.Id ?? string.Empty;
-        var directoryName = SanitizePathSegment(string.IsNullOrWhiteSpace(bid.Company) ? bidIdForLogs : bid.Company!);
+        var directoryName = BuildDirectoryName(bid, bidIdForLogs);
         var usedFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var question in questions.Where(q => !string.IsNullOrWhiteSpace(q.Id)))
@@ -56,6 +56,31 @@ public sealed class BidLibraryWriter(
             directoryName,
             usedFileNames.Count);
     }
+
+    private static string BuildDirectoryName(BidResponse bid, string bidIdForLogs)
+    {
+        var parts = new[]
+            {
+                SanitizePathSegment(bid.Company),
+                SanitizePathSegment(bid.UniqueReference),
+                SanitizePathSegment(GetStageLabel(bid.Stage))
+            }
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .ToArray();
+
+        if (parts.Length == 0)
+            return SanitizePathSegment(bidIdForLogs);
+
+        return string.Join(" - ", parts);
+    }
+
+    private static string GetStageLabel(BidStage stage)
+        => stage switch
+        {
+            BidStage.Stage1 => "Stage 1",
+            BidStage.Stage2 => "Stage 2",
+            _ => stage.ToString()
+        };
 
     private static string SanitizePathSegment(string? value)
     {

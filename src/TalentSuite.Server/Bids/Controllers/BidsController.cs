@@ -84,32 +84,6 @@ public sealed class BidsController : ControllerBase
 
         await _bidService.SetBidStatus(bidId, request.Status, ct);
 
-        if (request.Status == BidStatus.Submitted)
-        {
-            var model = await _bidService.GetBid(bidId, ct);
-            var bid = _mapper.ToResponse(model);
-            if (bid.BidLibraryPush is null)
-            {
-                var finalAnswerTextByQuestionId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-                foreach (var question in bid.Questions.Where(q => !string.IsNullOrWhiteSpace(q.Id)))
-                {
-                    var answer = await _bidService.GetFinalAnswer(bidId, question.Id, ct);
-                    finalAnswerTextByQuestionId[question.Id] = answer?.AnswerText ?? string.Empty;
-                }
-
-                await _azureServiceBusClient.PublishAsync(
-                    _bidSubmittedEntityName,
-                    new BidSubmittedEvent
-                    {
-                        BidId = bidId,
-                        Bid = bid,
-                        FinalAnswerTextByQuestionId = finalAnswerTextByQuestionId
-                    },
-                    ct);
-            }
-        }
-
         return Ok();
     }
 
@@ -190,6 +164,32 @@ public sealed class BidsController : ControllerBase
             userName ?? string.Empty,
             DateTime.UtcNow,
             ct);
+
+        await PublishBidLibraryPushEventAsync(bidId, ct);
+
         return Ok(result);
+    }
+
+    private async Task PublishBidLibraryPushEventAsync(string bidId, CancellationToken ct)
+    {
+        var model = await _bidService.GetBid(bidId, ct);
+        var bid = _mapper.ToResponse(model);
+        var finalAnswerTextByQuestionId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var question in bid.Questions.Where(q => !string.IsNullOrWhiteSpace(q.Id)))
+        {
+            var answer = await _bidService.GetFinalAnswer(bidId, question.Id, ct);
+            finalAnswerTextByQuestionId[question.Id] = answer?.AnswerText ?? string.Empty;
+        }
+
+        await _azureServiceBusClient.PublishAsync(
+            _bidSubmittedEntityName,
+            new BidSubmittedEvent
+            {
+                BidId = bidId,
+                Bid = bid,
+                FinalAnswerTextByQuestionId = finalAnswerTextByQuestionId
+            },
+            ct);
     }
 }

@@ -35,6 +35,7 @@ public partial class BidMapper
     {
         var target = new BidDataModel(Guid.NewGuid().ToString())
         {
+            UniqueReference = source.UniqueReference,
             Company = source.Company,
             Summary = source.Summary,
             KeyInformation = source.KeyInformation,

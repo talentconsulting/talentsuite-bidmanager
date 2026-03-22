@@ -5,6 +5,7 @@ namespace TalentSuite.Server.Bids.Services.Models;
 public class CreateBidModel
 {
     public string? Category { get; set; }
+    public string? UniqueReference { get; set; }
     public string? Company { get; set; }
     public string? Summary { get; set; }
     public string? KeyInformation { get; set; }

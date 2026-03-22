@@ -34,7 +34,7 @@ public class Update_bid_status : SliceTestBase
     }
 
     [Test]
-    public async Task SetBidStatus_Submitted_PublishesBidSubmittedEvent()
+    public async Task SetBidStatus_Submitted_DoesNotPublishBidSubmittedEvent()
     {
         var bidId = await CreateBidAsync();
 
@@ -49,21 +49,13 @@ public class Update_bid_status : SliceTestBase
         var bus = GetRequiredService<IAzureServiceBusClient>() as InMemoryAzureServiceBusClient;
         Assert.That(bus, Is.Not.Null);
 
-        var publishedEvent = bus!.Messages
+        var publishedEvents = bus!.Messages
             .Where(x => x.EntityName == "bid-submitted")
             .Select(x => x.Payload)
             .OfType<BidSubmittedEvent>()
-            .SingleOrDefault();
+            .ToList();
 
-        Assert.That(publishedEvent, Is.Not.Null);
-        Assert.That(publishedEvent!.BidId, Is.EqualTo(bidId));
-        Assert.That(publishedEvent.Bid, Is.Not.Null);
-        Assert.That(publishedEvent.Bid.Id, Is.EqualTo(bidId));
-        Assert.That(publishedEvent.Bid.Questions, Is.Not.Empty);
-        Assert.That(publishedEvent.FinalAnswerTextByQuestionId.Count, Is.EqualTo(publishedEvent.Bid.Questions.Count));
-        Assert.That(
-            publishedEvent.Bid.Questions.All(q => publishedEvent.FinalAnswerTextByQuestionId.ContainsKey(q.Id)),
-            Is.True);
+        Assert.That(publishedEvents, Is.Empty);
     }
 
     [Test]
@@ -92,7 +84,7 @@ public class Update_bid_status : SliceTestBase
     }
 
     [Test]
-    public async Task SetBidStatus_TwoSubmittedRequests_PublishesTwoBidSubmittedEvents()
+    public async Task SetBidStatus_TwoSubmittedRequests_DoNotPublishBidSubmittedEvents()
     {
         var bidId = await CreateBidAsync();
 
@@ -116,7 +108,7 @@ public class Update_bid_status : SliceTestBase
             .Where(x => x.BidId == bidId)
             .ToList();
 
-        Assert.That(publishedSubmittedEvents.Count, Is.EqualTo(2));
+        Assert.That(publishedSubmittedEvents, Is.Empty);
     }
 
     [Test]

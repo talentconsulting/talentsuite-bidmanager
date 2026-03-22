@@ -167,6 +167,7 @@ If the length of the response is not found please set the default length to '750
 
 
 - company (string), usually on the first page and is company plus department
+- uniqueReference (string), usually on the first page and is the bid reference
 - summary (string), which contains a summary of the work involved
 - budget (string), which contains any information about the budget mentioned in the document
 - deadlineForQualifying (string), which contains any information about the deadline for qualifying questions

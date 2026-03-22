@@ -1,6 +1,7 @@
 using Projects;
 using Azure.Provisioning.ServiceBus;
 using Azure.Provisioning.Sql;
+using Aspire.Hosting.ApplicationModel;
 
 var builder = DistributedApplication.CreateBuilder(args);
 const string InfrastructureModeVariable = "TALENTSUITE_INFRA_MODE";
@@ -115,8 +116,9 @@ var keycloakContainerDbPassword = keycloakDbPassword;
 var keycloak = builder.AddKeycloak(
             "keycloak",
             adminPassword: keycloakContainerAdminPassword,
-            port: 80)
+            port: useLocalInfrastructure ? null : 80)
     .WithEnvironment("KC_DB", "mssql");
+var keycloakHttpEndpoint = keycloak.Resource.GetEndpoint("http");
 
 if (useLocalInfrastructure)
 {
@@ -168,6 +170,8 @@ if (useLocalInfrastructure)
         .WithReference(appDb)
         .WithReference(keycloak)
         .WithReference(messaging)
+        .WithEnvironment(context => context.EnvironmentVariables["KEYCLOAK_HTTP"] = keycloakHttpEndpoint.Url)
+        .WithEnvironment(context => context.EnvironmentVariables["KEYCLOAK_AUTHORITY"] = $"{keycloakHttpEndpoint.Url}/realms/TalentConsulting")
         .WithEnvironment("AUTHENTICATION_ENABLED", authenticationEnabled)
         .WithEnvironment("USE_IN_MEMORY_DATA", useInMemoryData)
         .WithEnvironment("AzureServiceBus__InviteUserEntityName", "invite-user")
@@ -280,6 +284,8 @@ if (useLocalInfrastructure)
     builder.AddProject<TalentSuite_FrontEnd>("talentfrontend")
         .WithEnvironment("AUTHENTICATION_ENABLED", authenticationEnabled)
         .WithEnvironment("USE_IN_MEMORY_DATA", useInMemoryData)
+        .WithEnvironment(context => context.EnvironmentVariables["KEYCLOAK_HTTP"] = keycloakHttpEndpoint.Url)
+        .WithEnvironment(context => context.EnvironmentVariables["KEYCLOAK_AUTHORITY"] = $"{keycloakHttpEndpoint.Url}/realms/TalentConsulting")
         .WithReference(keycloak)
         .WithReference(server)
         .WaitFor(keycloak)

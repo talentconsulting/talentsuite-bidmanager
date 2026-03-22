@@ -2,6 +2,7 @@ namespace TalentSuite.Server.Bids.Services.Models;
 
 public class ParsedDocumentModel
 {
+    public string? UniqueReference { get; set; }
     public string? Company { get; set; }
     public string? Summary { get; set; }
     public string? KeyInformation { get; set; }

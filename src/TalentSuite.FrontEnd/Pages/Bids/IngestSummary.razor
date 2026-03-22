@@ -63,6 +63,12 @@ else
                             <h5 class="mb-3">Bid Overview</h5>
 
                             <div class="mb-3">
+                                <label class="form-label fw-bold">Unique reference</label>
+                                <InputText class="form-control"
+                                           @bind-Value="Model.Response.UniqueReference" />
+                            </div>
+
+                            <div class="mb-3">
                                 <label class="form-label fw-bold">Summary</label>
                                 <InputTextArea class="form-control"
                                                @bind-Value="Model.Response.Summary"

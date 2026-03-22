@@ -28,6 +28,7 @@ public class Ingestion_summary_question_removal : SliceTestBase
 
         var createResponse = await Client.PostAsJsonAsync("/api/bids", new CreateBidRequest
         {
+            UniqueReference = "REF-123",
             Company = parsed.Company ?? "Slice Ingestion Co",
             Summary = parsed.Summary ?? "Created from ingestion result",
             Budget = parsed.Budget,
@@ -61,6 +62,7 @@ public class Ingestion_summary_question_removal : SliceTestBase
         Assert.Multiple(() =>
         {
             Assert.That(created!.Questions, Has.Count.EqualTo(2));
+            Assert.That(created.UniqueReference, Is.EqualTo("REF-123"));
             Assert.That(created.Questions.Any(q =>
                 string.Equals(q.Title, removedQuestion.Title, StringComparison.Ordinal) &&
                 string.Equals(q.Number, removedQuestion.Number, StringComparison.Ordinal)), Is.False);

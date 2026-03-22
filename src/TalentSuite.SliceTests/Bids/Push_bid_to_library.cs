@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using TalentSuite.Shared.Bids;
+using TalentSuite.Shared.Messaging;
+using TalentSuite.Shared.Messaging.Events;
 using TalentSuite.SliceTests.Infrastructure;
 
 namespace TalentSuite.SliceTests.Bids;
@@ -34,6 +36,36 @@ public class Push_bid_to_library : SliceTestBase
             Assert.That(string.IsNullOrWhiteSpace(bid.BidLibraryPush.PerformedByUserId), Is.False);
             Assert.That(bid.BidLibraryPush.PushedAtUtc, Is.Not.EqualTo(default(DateTime)));
         });
+    }
+
+    [Test]
+    public async Task PushBidToLibrary_PublishesBidSubmittedEvent()
+    {
+        var bidId = await CreateBidAsync();
+
+        var pushResponse = await Client.PostAsync(
+            $"/api/bids/{Uri.EscapeDataString(bidId)}/library-push",
+            null);
+        Assert.That(pushResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var bus = GetRequiredService<IAzureServiceBusClient>() as InMemoryAzureServiceBusClient;
+        Assert.That(bus, Is.Not.Null);
+
+        var publishedEvent = bus!.Messages
+            .Where(x => x.EntityName == "bid-submitted")
+            .Select(x => x.Payload)
+            .OfType<BidSubmittedEvent>()
+            .SingleOrDefault();
+
+        Assert.That(publishedEvent, Is.Not.Null);
+        Assert.That(publishedEvent!.BidId, Is.EqualTo(bidId));
+        Assert.That(publishedEvent.Bid, Is.Not.Null);
+        Assert.That(publishedEvent.Bid.Id, Is.EqualTo(bidId));
+        Assert.That(publishedEvent.Bid.Questions, Is.Not.Empty);
+        Assert.That(publishedEvent.FinalAnswerTextByQuestionId.Count, Is.EqualTo(publishedEvent.Bid.Questions.Count));
+        Assert.That(
+            publishedEvent.Bid.Questions.All(q => publishedEvent.FinalAnswerTextByQuestionId.ContainsKey(q.Id)),
+            Is.True);
     }
 
     private async Task<string> CreateBidAsync()
