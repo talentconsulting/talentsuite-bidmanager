@@ -1015,6 +1015,49 @@ jobs:
 
           echo "Removed legacy bidstorage env vars from $app_name"
 
+      - name: Configure Grafana settings
+        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'grafana') }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          app_name="grafana"
+
+          test -n "${GrafanaEntraEnabled:-}" || (echo "GrafanaEntraEnabled is empty/missing" && exit 1)
+          test -n "${GrafanaPublicOrigin:-}" || (echo "GrafanaPublicOrigin is empty/missing" && exit 1)
+          test -n "${GrafanaEntraClientSecret:-}" || (echo "GrafanaEntraClientSecret is empty/missing" && exit 1)
+
+          az containerapp secret set \
+            --name "$app_name" \
+            --resource-group "$resource_group" \
+            --secrets "gf-auth-azuread-client-secret=${GrafanaEntraClientSecret}" >/dev/null
+
+          env_args=(
+            "GF_AUTH_AZUREAD_ENABLED=${GrafanaEntraEnabled}"
+            "GF_SERVER_ROOT_URL=${GrafanaPublicOrigin}"
+            "GF_AUTH_AZUREAD_CLIENT_SECRET=secretref:gf-auth-azuread-client-secret"
+          )
+
+          if [ -n "${GrafanaEntraClientId:-}" ]; then
+            env_args+=("GF_AUTH_AZUREAD_CLIENT_ID=${GrafanaEntraClientId}")
+          fi
+
+          if [ -n "${GrafanaEntraTenantId:-}" ]; then
+            env_args+=("GF_AUTH_AZUREAD_ALLOWED_ORGANIZATIONS=${GrafanaEntraTenantId}")
+          fi
+
+          if [ -n "${GrafanaAzureMonitorSubscriptionId:-}" ]; then
+            env_args+=("GRAFANA_AZURE_MONITOR_SUBSCRIPTION_ID=${GrafanaAzureMonitorSubscriptionId}")
+          fi
+
+          az containerapp update \
+            --name "$app_name" \
+            --resource-group "$resource_group" \
+            --set-env-vars "${env_args[@]}" >/dev/null
+
+          echo "Configured Grafana settings for $app_name"
+
       - name: Configure Azure AI settings for talentserver
         if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') }}
         run: |
