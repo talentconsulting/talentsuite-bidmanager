@@ -1045,6 +1045,8 @@ jobs:
 
           if [ -n "${GrafanaEntraTenantId:-}" ]; then
             env_args+=("GF_AUTH_AZUREAD_ALLOWED_ORGANIZATIONS=${GrafanaEntraTenantId}")
+            env_args+=("GF_AUTH_AZUREAD_AUTH_URL=https://login.microsoftonline.com/${GrafanaEntraTenantId}/oauth2/v2.0/authorize")
+            env_args+=("GF_AUTH_AZUREAD_TOKEN_URL=https://login.microsoftonline.com/${GrafanaEntraTenantId}/oauth2/v2.0/token")
           fi
 
           if [ -n "${GrafanaAzureMonitorSubscriptionId:-}" ]; then

@@ -313,8 +313,6 @@ var grafana = builder.AddDockerfile("grafana", "../ops/grafana")
     .WithEnvironment("GF_AUTH_AZUREAD_NAME", "Microsoft Entra ID")
     .WithEnvironment("GF_AUTH_AZUREAD_CLIENT_ID", grafanaEntraClientId)
     .WithEnvironment("GF_AUTH_AZUREAD_CLIENT_SECRET", grafanaEntraClientSecret)
-    .WithEnvironment("GF_AUTH_AZUREAD_AUTH_URL", "https://login.microsoftonline.com/common/oauth2/v2.0/authorize")
-    .WithEnvironment("GF_AUTH_AZUREAD_TOKEN_URL", "https://login.microsoftonline.com/common/oauth2/v2.0/token")
     .WithEnvironment("GF_AUTH_AZUREAD_ALLOWED_ORGANIZATIONS", grafanaEntraTenantId)
     .WithEnvironment("GF_AUTH_AZUREAD_ALLOW_SIGN_UP", "true")
     .WithEnvironment("GF_AUTH_AZUREAD_AUTO_LOGIN", "false")
@@ -328,11 +326,33 @@ var grafanaHttpEndpoint = grafana.GetEndpoint("http");
 if (useLocalInfrastructure)
 {
     grafana.WithEnvironment(context => context.EnvironmentVariables["GF_SERVER_ROOT_URL"] = grafanaHttpEndpoint.Url);
+    grafana.WithEnvironment(context =>
+    {
+        var tenantId = context.EnvironmentVariables.TryGetValue("GF_AUTH_AZUREAD_ALLOWED_ORGANIZATIONS", out var value)
+            ? value?.ToString()
+            : null;
+        tenantId = string.IsNullOrWhiteSpace(tenantId) ? "common" : tenantId;
+        context.EnvironmentVariables["GF_AUTH_AZUREAD_AUTH_URL"] =
+            $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/authorize";
+        context.EnvironmentVariables["GF_AUTH_AZUREAD_TOKEN_URL"] =
+            $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token";
+    });
 }
 else
 {
     grafana
         .WithEnvironment("GF_SERVER_ROOT_URL", grafanaPublicOrigin)
+        .WithEnvironment(context =>
+        {
+            var tenantId = context.EnvironmentVariables.TryGetValue("GF_AUTH_AZUREAD_ALLOWED_ORGANIZATIONS", out var value)
+                ? value?.ToString()
+                : null;
+            tenantId = string.IsNullOrWhiteSpace(tenantId) ? "common" : tenantId;
+            context.EnvironmentVariables["GF_AUTH_AZUREAD_AUTH_URL"] =
+                $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/authorize";
+            context.EnvironmentVariables["GF_AUTH_AZUREAD_TOKEN_URL"] =
+                $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token";
+        })
         .PublishAsAzureContainerApp((_, app) =>
         {
             app.Configuration ??= new();
