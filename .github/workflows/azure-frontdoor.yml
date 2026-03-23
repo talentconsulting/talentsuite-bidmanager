@@ -170,7 +170,7 @@ jobs:
               --query 'properties.configuration.ingress.fqdn' \
               -o tsv)"
             test -n "$grafana_host" || (echo "Could not resolve public grafana ingress FQDN in $resource_group" && exit 1)
-            grafana_origin_host_header="$grafana_domain"
+            grafana_origin_host_header="$grafana_host"
           else
             grafana_origin_host_header=""
           fi
