@@ -117,11 +117,35 @@ jobs:
           auth_domain="${{ github.event.inputs.auth_domain }}"
           grafana_domain="${{ github.event.inputs.grafana_domain }}"
 
-          storage_blob_endpoint="$(azd env get-value STORAGE_BLOBENDPOINT --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
-          storage_account_name="$(echo "$storage_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
-          test -n "$storage_account_name" || (echo "Could not resolve storage account name in $resource_group" && exit 1)
+          azd_values="$(azd env get-values --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
+          storage_blob_endpoint="$(printf '%s\n' "$azd_values" | sed -n -E 's/^(export[[:space:]]+)?STORAGE_BLOBENDPOINT=(.*)$/\2/p' | head -n1)"
+          if [ "${#storage_blob_endpoint}" -ge 2 ] && [ "${storage_blob_endpoint#\"}" != "$storage_blob_endpoint" ] && [ "${storage_blob_endpoint%\"}" != "$storage_blob_endpoint" ]; then
+            storage_blob_endpoint="${storage_blob_endpoint#\"}"
+            storage_blob_endpoint="${storage_blob_endpoint%\"}"
+          fi
 
-          frontend_host="${storage_account_name}.z33.web.core.windows.net"
+          storage_account_name="$(echo "$storage_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
+          if ! az storage account show --name "$storage_account_name" --resource-group "$resource_group" --query 'name' -o tsv >/dev/null 2>&1; then
+            storage_account_name=""
+          fi
+
+          if [ -z "$storage_account_name" ]; then
+            storage_account_name="$(az storage account list \
+              --resource-group "$resource_group" \
+              --query "[].name" \
+              -o tsv 2>/dev/null | grep -v '^bidcontentstorage' | head -n1 || true)"
+          fi
+
+          test -n "$storage_account_name" || (echo "Could not resolve frontend storage account in $resource_group" && exit 1)
+
+          frontend_host="$(az storage account show \
+            --name "$storage_account_name" \
+            --resource-group "$resource_group" \
+            --query 'primaryEndpoints.web' \
+            -o tsv)"
+          frontend_host="${frontend_host#https://}"
+          frontend_host="${frontend_host%/}"
+          test -n "$frontend_host" || (echo "Could not resolve frontend static website host in $resource_group" && exit 1)
 
           api_host="$(az containerapp show \
             --name talentserver \
