@@ -1,6 +1,7 @@
 using Projects;
 using Azure.Provisioning.ServiceBus;
 using Azure.Provisioning.Sql;
+using Azure.Provisioning.AppContainers;
 using Aspire.Hosting.ApplicationModel;
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -374,6 +375,10 @@ else
             app.Configuration.Ingress ??= new();
             app.Configuration.Ingress.External = true;
             app.Configuration.Ingress.TargetPort = 3000;
+            app.Template ??= new();
+            app.Template.Scale ??= new ContainerAppScale();
+            app.Template.Scale.MinReplicas = 1;
+            app.Template.Scale.MaxReplicas = 1;
         });
 }
 
