@@ -170,6 +170,9 @@ jobs:
               --query 'properties.configuration.ingress.fqdn' \
               -o tsv)"
             test -n "$grafana_host" || (echo "Could not resolve public grafana ingress FQDN in $resource_group" && exit 1)
+            grafana_origin_host_header="$grafana_domain"
+          else
+            grafana_origin_host_header=""
           fi
 
           if ! az afd profile show --resource-group "$resource_group" --profile-name "$profile_name" >/dev/null 2>&1; then
@@ -326,7 +329,7 @@ jobs:
               --origin-group-name "$grafana_origin_group" \
               --origin-name "$grafana_origin_name" \
               --host-name "$grafana_host" \
-              --origin-host-header "$grafana_host" \
+              --origin-host-header "$grafana_origin_host_header" \
               --http-port 80 \
               --https-port 443 \
               --priority 1 \
@@ -339,7 +342,7 @@ jobs:
               --origin-group-name "$grafana_origin_group" \
               --origin-name "$grafana_origin_name" \
               --host-name "$grafana_host" \
-              --origin-host-header "$grafana_host" \
+              --origin-host-header "$grafana_origin_host_header" \
               --http-port 80 \
               --https-port 443 \
               --priority 1 \

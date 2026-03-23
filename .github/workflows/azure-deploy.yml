@@ -1037,7 +1037,22 @@ jobs:
             "GF_AUTH_AZUREAD_ENABLED=${GrafanaEntraEnabled}"
             "GF_SERVER_ROOT_URL=${GrafanaPublicOrigin}"
             "GF_AUTH_AZUREAD_CLIENT_SECRET=secretref:gf-auth-azuread-client-secret"
+            "GF_SECURITY_COOKIE_SECURE=true"
+            "GF_SECURITY_COOKIE_SAMESITE=lax"
           )
+
+          grafana_public_host="$(python3 - <<'PY'
+from urllib.parse import urlparse
+import os
+url = os.environ.get("GrafanaPublicOrigin", "")
+parsed = urlparse(url)
+print(parsed.netloc or parsed.path)
+PY
+)"
+
+          if [ -n "$grafana_public_host" ]; then
+            env_args+=("GF_SERVER_DOMAIN=${grafana_public_host}")
+          fi
 
           if [ -n "${GrafanaEntraClientId:-}" ]; then
             env_args+=("GF_AUTH_AZUREAD_CLIENT_ID=${GrafanaEntraClientId}")

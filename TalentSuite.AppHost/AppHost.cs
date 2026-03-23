@@ -325,7 +325,11 @@ var grafanaHttpEndpoint = grafana.GetEndpoint("http");
 
 if (useLocalInfrastructure)
 {
-    grafana.WithEnvironment(context => context.EnvironmentVariables["GF_SERVER_ROOT_URL"] = grafanaHttpEndpoint.Url);
+    grafana.WithEnvironment(context =>
+    {
+        context.EnvironmentVariables["GF_SERVER_ROOT_URL"] = grafanaHttpEndpoint.Url;
+        context.EnvironmentVariables["GF_SERVER_DOMAIN"] = new Uri(grafanaHttpEndpoint.Url).Authority;
+    });
     grafana.WithEnvironment(context =>
     {
         var tenantId = context.EnvironmentVariables.TryGetValue("GF_AUTH_AZUREAD_ALLOWED_ORGANIZATIONS", out var value)
@@ -342,6 +346,17 @@ else
 {
     grafana
         .WithEnvironment("GF_SERVER_ROOT_URL", grafanaPublicOrigin)
+        .WithEnvironment(context =>
+        {
+            if (context.EnvironmentVariables.TryGetValue("GF_SERVER_ROOT_URL", out var value)
+                && Uri.TryCreate(value?.ToString(), UriKind.Absolute, out var publicUri))
+            {
+                context.EnvironmentVariables["GF_SERVER_DOMAIN"] = publicUri.Authority;
+            }
+
+            context.EnvironmentVariables["GF_SECURITY_COOKIE_SECURE"] = "true";
+            context.EnvironmentVariables["GF_SECURITY_COOKIE_SAMESITE"] = "lax";
+        })
         .WithEnvironment(context =>
         {
             var tenantId = context.EnvironmentVariables.TryGetValue("GF_AUTH_AZUREAD_ALLOWED_ORGANIZATIONS", out var value)

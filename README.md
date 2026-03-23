@@ -211,6 +211,22 @@ The Grafana Entra app registration must include the correct redirect URI:
 - dev: `https://grafana-dev.talentsuite.uk/login/azuread`
 - prod example: `https://grafana.talentsuite.uk/login/azuread`
 
+Recommended registration shape:
+- platform type: `Web`
+- supported account type: `Single tenant`
+- do not register this as an SPA app
+
+Required delegated Microsoft Graph / OIDC permissions:
+- `openid`
+- `profile`
+- `email`
+- `offline_access`
+- `User.Read`
+
+`User.Read` on its own is not enough for Grafana sign-in. The OpenID Connect scopes above are also required.
+
+These Entra app registration settings are not managed by Aspire/AppHost. Aspire only supplies the runtime Grafana configuration values such as client ID, tenant ID, and public origin. Redirect URIs, delegated API permissions, and credentials still need to be configured in Microsoft Entra.
+
 If the redirect URI is missing or the client secret is wrong, Grafana login will fail even if the container is running.
 
 ## Email Setup (Invite Emails)
