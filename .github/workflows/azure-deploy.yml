@@ -1041,14 +1041,9 @@ jobs:
             "GF_SECURITY_COOKIE_SAMESITE=lax"
           )
 
-          grafana_public_host="$(python3 - <<'PY'
-from urllib.parse import urlparse
-import os
-url = os.environ.get("GrafanaPublicOrigin", "")
-parsed = urlparse(url)
-print(parsed.netloc or parsed.path)
-PY
-)"
+          grafana_public_host="${GrafanaPublicOrigin#http://}"
+          grafana_public_host="${grafana_public_host#https://}"
+          grafana_public_host="${grafana_public_host%%/*}"
 
           if [ -n "$grafana_public_host" ]; then
             env_args+=("GF_SERVER_DOMAIN=${grafana_public_host}")
