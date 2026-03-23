@@ -171,6 +171,7 @@ jobs:
           azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
           azd env config set "infra.parameters.KeycloakPassword" "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
           azd env config set "infra.parameters.SqlPassword" "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
           azd env set InviteEmailEnabled "${InviteEmailEnabled}" --environment "${AZURE_ENV_NAME}"
           azd env set InviteFromEmail "${InviteFromEmail}" --environment "${AZURE_ENV_NAME}"
           azd env set InviteSmtpHost "${InviteSmtpHost}" --environment "${AZURE_ENV_NAME}"
@@ -289,6 +290,7 @@ jobs:
           test -n "${KeycloakPassword:-}" || (echo "KeycloakPassword is empty/missing before azd provision" && exit 1)
           test -n "${SqlPassword:-}" || (echo "SqlPassword is empty/missing before azd provision" && exit 1)
           test -n "${InviteSmtpPassword:-}" || (echo "InviteSmtpPassword is empty/missing before azd provision" && exit 1)
+          test -n "${GrafanaEntraClientSecret:-}" || (echo "GrafanaEntraClientSecret is empty/missing before azd provision" && exit 1)
           test -n "${AZD_PRINCIPAL_ID:-}" || (echo "AZD_PRINCIPAL_ID is empty/missing before azd provision" && exit 1)
 
           azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
@@ -301,6 +303,7 @@ jobs:
           azd env set SqlPassword "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set Password "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${{ env.AZURE_ENV_NAME }}"
 
           sql_pw_sha="$(printf '%s' "$SqlPassword" | sha256sum | awk '{print $1}')"
           echo "SqlPassword input diagnostics: len=${#SqlPassword} sha256=${sql_pw_sha}"
@@ -512,6 +515,7 @@ jobs:
           azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env config set "infra.parameters.InviteSmtpPassword" "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env config set "infra.parameters.SqlPassword" "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
 
           echo "AZURE_ENV_NAME=${AZURE_ENV_NAME}"
