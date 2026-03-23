@@ -18,6 +18,11 @@ on:
         required: false
         default: "talentsuite-auth-dev"
         type: string
+      grafana_endpoint_name:
+        description: "Azure Front Door endpoint name for the optional Grafana domain"
+        required: false
+        default: "talentsuite-grafana-dev"
+        type: string
       sku:
         description: "Azure Front Door SKU"
         required: true
@@ -45,6 +50,11 @@ on:
         description: "Keycloak custom domain to attach, e.g. auth-dev.talentsuite.uk"
         required: true
         default: "auth-dev.talentsuite.uk"
+        type: string
+      grafana_domain:
+        description: "Grafana custom domain to attach, e.g. grafana-dev.talentsuite.uk"
+        required: false
+        default: "grafana-dev.talentsuite.uk"
         type: string
 
 permissions:
@@ -87,6 +97,7 @@ jobs:
           profile_name="${{ github.event.inputs.profile_name }}"
           endpoint_name="${{ github.event.inputs.endpoint_name }}"
           auth_endpoint_name="${{ github.event.inputs.auth_endpoint_name }}"
+          grafana_endpoint_name="${{ github.event.inputs.grafana_endpoint_name }}"
           sku="${{ github.event.inputs.sku }}"
           frontend_patterns="${{ github.event.inputs.frontend_patterns }}"
           api_patterns="${{ github.event.inputs.api_patterns }}"
@@ -100,7 +111,11 @@ jobs:
           keycloak_origin_group="keycloak-og"
           keycloak_origin_name="keycloak-origin"
           keycloak_route_name="keycloak-route"
+          grafana_origin_group="grafana-og"
+          grafana_origin_name="grafana-origin"
+          grafana_route_name="grafana-route"
           auth_domain="${{ github.event.inputs.auth_domain }}"
+          grafana_domain="${{ github.event.inputs.grafana_domain }}"
 
           storage_blob_endpoint="$(azd env get-value STORAGE_BLOBENDPOINT --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
           storage_account_name="$(echo "$storage_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
@@ -124,6 +139,15 @@ jobs:
             test -n "$keycloak_host" || (echo "Could not resolve public keycloak ingress FQDN in $resource_group" && exit 1)
           fi
 
+          if [ -n "$grafana_domain" ]; then
+            grafana_host="$(az containerapp show \
+              --name grafana \
+              --resource-group "$resource_group" \
+              --query 'properties.configuration.ingress.fqdn' \
+              -o tsv)"
+            test -n "$grafana_host" || (echo "Could not resolve public grafana ingress FQDN in $resource_group" && exit 1)
+          fi
+
           if ! az afd profile show --resource-group "$resource_group" --profile-name "$profile_name" >/dev/null 2>&1; then
             az afd profile create \
               --resource-group "$resource_group" \
@@ -144,6 +168,14 @@ jobs:
               --resource-group "$resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$auth_endpoint_name" \
+              --enabled-state Enabled >/dev/null
+          fi
+
+          if [ -n "$grafana_domain" ] && ! az afd endpoint show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$grafana_endpoint_name" >/dev/null 2>&1; then
+            az afd endpoint create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$grafana_endpoint_name" \
               --enabled-state Enabled >/dev/null
           fi
 
@@ -185,6 +217,21 @@ jobs:
               --probe-request-type GET \
               --probe-protocol Https \
               --probe-path /realms/master/.well-known/openid-configuration \
+              --probe-interval-in-seconds 60 \
+              --sample-size 4 \
+              --successful-samples-required 3 \
+              --additional-latency-in-milliseconds 50 \
+              --enable-health-probe >/dev/null
+          fi
+
+          if [ -n "$grafana_domain" ] && ! az afd origin-group show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$grafana_origin_group" >/dev/null 2>&1; then
+            az afd origin-group create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --origin-group-name "$grafana_origin_group" \
+              --probe-request-type GET \
+              --probe-protocol Https \
+              --probe-path /api/health \
               --probe-interval-in-seconds 60 \
               --sample-size 4 \
               --successful-samples-required 3 \
@@ -241,6 +288,34 @@ jobs:
               --origin-name "$keycloak_origin_name" \
               --host-name "$keycloak_host" \
               --origin-host-header "$keycloak_host" \
+              --http-port 80 \
+              --https-port 443 \
+              --priority 1 \
+              --weight 1000 \
+              --enabled-state Enabled >/dev/null
+          fi
+
+          if [ -n "$grafana_domain" ] && az afd origin show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$grafana_origin_group" --origin-name "$grafana_origin_name" >/dev/null 2>&1; then
+            az afd origin update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --origin-group-name "$grafana_origin_group" \
+              --origin-name "$grafana_origin_name" \
+              --host-name "$grafana_host" \
+              --origin-host-header "$grafana_host" \
+              --http-port 80 \
+              --https-port 443 \
+              --priority 1 \
+              --weight 1000 \
+              --enabled-state Enabled >/dev/null
+          elif [ -n "$grafana_domain" ]; then
+            az afd origin create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --origin-group-name "$grafana_origin_group" \
+              --origin-name "$grafana_origin_name" \
+              --host-name "$grafana_host" \
+              --origin-host-header "$grafana_host" \
               --http-port 80 \
               --https-port 443 \
               --priority 1 \
@@ -354,8 +429,34 @@ jobs:
               --forwarding-protocol MatchRequest >/dev/null
           fi
 
+          if [ -n "$grafana_domain" ] && az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$grafana_endpoint_name" --route-name "$grafana_route_name" >/dev/null 2>&1; then
+            az afd route update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$grafana_endpoint_name" \
+              --route-name "$grafana_route_name" \
+              --origin-group "$grafana_origin_group" \
+              --patterns-to-match "/*" \
+              --supported-protocols Https \
+              --link-to-default-domain Enabled \
+              --https-redirect Enabled \
+              --forwarding-protocol MatchRequest >/dev/null
+          elif [ -n "$grafana_domain" ]; then
+            az afd route create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$grafana_endpoint_name" \
+              --route-name "$grafana_route_name" \
+              --origin-group "$grafana_origin_group" \
+              --patterns-to-match "/*" \
+              --supported-protocols Https \
+              --link-to-default-domain Enabled \
+              --https-redirect Enabled \
+              --forwarding-protocol MatchRequest >/dev/null
+          fi
+
       - name: Configure custom domains
-        if: ${{ github.event.inputs.custom_domain != '' || github.event.inputs.auth_domain != '' }}
+        if: ${{ github.event.inputs.custom_domain != '' || github.event.inputs.auth_domain != '' || github.event.inputs.grafana_domain != '' }}
         run: |
           set -euo pipefail
 
@@ -363,8 +464,10 @@ jobs:
           profile_name="${{ github.event.inputs.profile_name }}"
           endpoint_name="${{ github.event.inputs.endpoint_name }}"
           auth_endpoint_name="${{ github.event.inputs.auth_endpoint_name }}"
+          grafana_endpoint_name="${{ github.event.inputs.grafana_endpoint_name }}"
           custom_domain_host="${{ github.event.inputs.custom_domain }}"
           auth_domain_host="${{ github.event.inputs.auth_domain }}"
+          grafana_domain_host="${{ github.event.inputs.grafana_domain }}"
 
           if [ -n "$custom_domain_host" ]; then
             custom_domain_name="$(printf '%s' "$custom_domain_host" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-')"
@@ -442,6 +545,41 @@ jobs:
             echo "Cloudflare DNS validation token: $auth_validation_token"
           fi
 
+          if [ -n "$grafana_domain_host" ]; then
+            grafana_domain_name="$(printf '%s' "$grafana_domain_host" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-')"
+
+            if ! az afd custom-domain show \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --custom-domain-name "$grafana_domain_name" >/dev/null 2>&1; then
+              az afd custom-domain create \
+                --resource-group "$resource_group" \
+                --profile-name "$profile_name" \
+                --custom-domain-name "$grafana_domain_name" \
+                --host-name "$grafana_domain_host" \
+                --certificate-type ManagedCertificate \
+                --minimum-tls-version TLS12 >/dev/null
+            fi
+
+            az afd route update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$grafana_endpoint_name" \
+              --route-name "grafana-route" \
+              --custom-domains "$grafana_domain_name" \
+              --link-to-default-domain Disabled >/dev/null
+
+            grafana_validation_token="$(az afd custom-domain show \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --custom-domain-name "$grafana_domain_name" \
+              --query 'validationProperties.validationToken' \
+              -o tsv)"
+
+            echo "Created or reused Front Door Grafana custom domain $grafana_domain_host"
+            echo "Cloudflare DNS validation token: $grafana_validation_token"
+          fi
+
           echo "Add the required TXT/CNAME records in Cloudflare, then wait for domain validation and certificate issuance."
 
       - name: Show Front Door endpoint
@@ -460,5 +598,15 @@ jobs:
             --resource-group "rg-${AZURE_ENV_NAME}" \
             --profile-name "${{ github.event.inputs.profile_name }}" \
             --endpoint-name "${{ github.event.inputs.auth_endpoint_name }}" \
+            --query hostName \
+            -o tsv
+
+      - name: Show Grafana Front Door endpoint
+        if: ${{ github.event.inputs.grafana_domain != '' }}
+        run: |
+          az afd endpoint show \
+            --resource-group "rg-${AZURE_ENV_NAME}" \
+            --profile-name "${{ github.event.inputs.profile_name }}" \
+            --endpoint-name "${{ github.event.inputs.grafana_endpoint_name }}" \
             --query hostName \
             -o tsv

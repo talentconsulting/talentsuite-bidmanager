@@ -137,10 +137,81 @@ GoogleDriveSyncEnabled=true
 GoogleDriveSyncSourceContainerName=bidlibrary
 GoogleDriveSyncDriveFolderId=your-google-drive-folder-id
 GoogleDriveSyncServiceAccountJsonBase64=BASE64_OF_FULL_SERVICE_ACCOUNT_JSON
+
+GrafanaEntraEnabled=true
+GrafanaEntraClientId=your-grafana-app-registration-client-id
+GrafanaEntraTenantId=your-entra-tenant-id
+GrafanaEntraClientSecret=your-grafana-app-registration-client-secret
+GrafanaPublicOrigin=https://grafana-dev.talentsuite.uk
+GrafanaAzureMonitorSubscriptionId=00000000-0000-0000-0000-000000000000
+
 KeyVaultName=kv-talentsuite-dev
 ```
 
 `KeyVaultName` is optional. If set, CI uses that exact vault name (must be 3-24 chars, lowercase letters/numbers/hyphens).
+
+## Grafana
+Grafana is hosted as an Aspire-managed container:
+- local: exposed by AppHost with a dynamic local URL
+- Azure: deployed as a Container App named `grafana`
+
+The Grafana image is defined in:
+- `ops/grafana/Dockerfile`
+
+Datasource provisioning is defined in:
+- `ops/grafana/provisioning/datasources/azure-monitor.yaml`
+
+### What is preconfigured
+- Microsoft Entra ID login is supported through Grafana's `auth.azuread` settings.
+- Azure Monitor is provisioned as a datasource using managed identity.
+
+Azure Monitor is built into Grafana. There is no separate Azure Monitor plugin package to install.
+
+### Required config
+Use these canonical keys in local env files and GitHub Actions `vars`/`secrets`:
+
+`vars`:
+- `GRAFANA_ENTRA_ENABLED`
+- `GRAFANA_ENTRA_CLIENT_ID`
+- `GRAFANA_ENTRA_TENANT_ID`
+- `GRAFANA_PUBLIC_ORIGIN`
+
+`secrets`:
+- `GRAFANA_ENTRA_CLIENT_SECRET`
+
+For Azure Monitor provisioning:
+- `GrafanaAzureMonitorSubscriptionId` should be the Azure subscription that contains the monitored resources.
+
+### Local run
+When you run:
+
+```bash
+aspire run
+```
+
+AppHost starts Grafana alongside the rest of the stack. The local URL is allocated dynamically by Aspire, so use the URL shown in the Aspire dashboard rather than assuming a fixed port.
+
+### Azure deploy
+Grafana is included in Azure AppHost deployment and can be deployed on its own through:
+- workflow: `.github/workflows/azure-deploy.yml`
+- inputs:
+  - `deployment_mode=apps-only`
+  - `deploy_target=grafana`
+
+### Front Door and custom domain
+The Front Door workflow supports a dedicated Grafana endpoint/domain:
+- workflow: `.github/workflows/azure-frontdoor.yml`
+- default Grafana domain input: `grafana-dev.talentsuite.uk`
+
+For production, set the Grafana custom domain you want, for example:
+- `grafana.talentsuite.uk`
+
+### Entra app registration
+The Grafana Entra app registration must include the correct redirect URI:
+- dev: `https://grafana-dev.talentsuite.uk/login/azuread`
+- prod example: `https://grafana.talentsuite.uk/login/azuread`
+
+If the redirect URI is missing or the client secret is wrong, Grafana login will fail even if the container is running.
 
 ## Email Setup (Invite Emails)
 Invite emails are sent by `src/TalentSuite.Functions` using SMTP.
@@ -308,6 +379,10 @@ Required GitHub Actions configuration for environment `dev`:
 - `GOOGLE_DRIVE_SYNC_ENABLED`
 - `GOOGLE_DRIVE_SYNC_SOURCE_CONTAINER_NAME`
 - `GOOGLE_DRIVE_SYNC_DRIVE_FOLDER_ID`
+- `GRAFANA_ENTRA_ENABLED`
+- `GRAFANA_ENTRA_CLIENT_ID`
+- `GRAFANA_ENTRA_TENANT_ID`
+- `GRAFANA_PUBLIC_ORIGIN`
 
 `secrets`:
 - `AZURE_CLIENT_ID`
@@ -318,6 +393,7 @@ Required GitHub Actions configuration for environment `dev`:
 - `KEYCLOAK_DB_PASSWORD`
 - `INVITE_SMTP_PASSWORD`
 - `GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64`
+- `GRAFANA_ENTRA_CLIENT_SECRET`
 
 No JSON secret is required. `AZD_INITIAL_ENVIRONMENT_CONFIG` is no longer used.
 
@@ -327,6 +403,7 @@ When `TALENTSUITE_INFRA_MODE=azure`, deploy includes:
   - `talentfrontend` (`src/TalentSuite.FrontEnd`)
   - `talentfunctions` (`src/TalentSuite.Functions`)
   - `keycloak` (Keycloak container resource)
+  - `grafana` (`ops/grafana`)
 - Data/messaging/storage:
   - Azure SQL server resource `sql`
   - Azure SQL databases:
@@ -352,6 +429,7 @@ For a clean Azure environment build, especially after deleting the resource grou
 3. `Azure Keycloak`
 4. `Azure Frontend`
 5. `Azure Functions`
+6. `Azure Front Door`
 
 Why this order:
 - `Azure Infra` recreates the shared Azure resources and Container Apps environment.
@@ -359,6 +437,7 @@ Why this order:
 - `Azure Keycloak` deploys authentication and can then import the realm against the live endpoint.
 - `Azure Frontend` publishes static runtime config using the public `talentserver` and `keycloak` URLs.
 - `Azure Functions` comes last because it depends on the shared infra and Service Bus wiring.
+- `Azure Front Door` comes after app deployment so its origins can point at live frontend, API, Keycloak, and Grafana endpoints.
 
 ### Azure Secret Handling (CI)
 The workflow uses explicit GitHub `vars` and `secrets` (no JSON blob). It:

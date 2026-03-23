@@ -37,12 +37,18 @@ jobs:
       GoogleDriveSyncEnabled: ${{ vars.GOOGLE_DRIVE_SYNC_ENABLED }}
       GoogleDriveSyncSourceContainerName: ${{ vars.GOOGLE_DRIVE_SYNC_SOURCE_CONTAINER_NAME }}
       GoogleDriveSyncDriveFolderId: ${{ vars.GOOGLE_DRIVE_SYNC_DRIVE_FOLDER_ID }}
+      GrafanaEntraEnabled: ${{ vars.GRAFANA_ENTRA_ENABLED }}
+      GrafanaEntraClientId: ${{ vars.GRAFANA_ENTRA_CLIENT_ID }}
+      GrafanaEntraTenantId: ${{ vars.GRAFANA_ENTRA_TENANT_ID }}
+      GrafanaPublicOrigin: ${{ vars.GRAFANA_PUBLIC_ORIGIN }}
+      GrafanaAzureMonitorSubscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       SqlPassword: ${{ secrets.SQL_PASSWORD }}
       KeycloakPassword: ${{ secrets.KEYCLOAK_PASSWORD }}
       KeycloakDbPassword: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
       InviteSmtpPassword: ${{ secrets.INVITE_SMTP_PASSWORD }}
       GoogleDriveSyncServiceAccountJsonBase64: ${{ secrets.GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GrafanaEntraClientSecret: ${{ secrets.GRAFANA_ENTRA_CLIENT_SECRET }}
 
     steps:
       - name: Checkout
@@ -128,6 +134,12 @@ jobs:
           azd env set GoogleDriveSyncServiceAccountJsonBase64 "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
           azd env set KeycloakPublicOrigin "${KeycloakPublicOrigin}" --environment "${AZURE_ENV_NAME}"
           azd env set KEYCLOAK_PUBLIC_ORIGIN "${KeycloakPublicOrigin}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaEntraEnabled "${GrafanaEntraEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaEntraClientId "${GrafanaEntraClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaEntraTenantId "${GrafanaEntraTenantId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaPublicOrigin "${GrafanaPublicOrigin}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaAzureMonitorSubscriptionId "${GrafanaAzureMonitorSubscriptionId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaEntraClientSecret "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
           azd env set KeyVaultName "${KeyVaultName}" --environment "${AZURE_ENV_NAME}"
 
       - name: Refresh azd environment outputs from provisioned infra

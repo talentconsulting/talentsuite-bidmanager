@@ -44,6 +44,11 @@ jobs:
       AgentsAgentId: ${{ vars.AGENTS_AGENT_ID }}
       FrontendPublicOrigin: ${{ vars.FRONTEND_PUBLIC_ORIGIN }}
       KeycloakPublicOrigin: ${{ vars.KEYCLOAK_PUBLIC_ORIGIN }}
+      GrafanaEntraEnabled: ${{ vars.GRAFANA_ENTRA_ENABLED }}
+      GrafanaEntraClientId: ${{ vars.GRAFANA_ENTRA_CLIENT_ID }}
+      GrafanaEntraTenantId: ${{ vars.GRAFANA_ENTRA_TENANT_ID }}
+      GrafanaPublicOrigin: ${{ vars.GRAFANA_PUBLIC_ORIGIN }}
+      GrafanaAzureMonitorSubscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       SqlPassword: ${{ secrets.SQL_PASSWORD }}
       KeycloakPassword: ${{ secrets.KEYCLOAK_PASSWORD }}
@@ -52,6 +57,7 @@ jobs:
       GoogleDriveSyncServiceAccountJsonBase64: ${{ secrets.GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64 }}
       DocumentIntelligenceApiKey: ${{ secrets.DOCUMENT_INTELLIGENCE_API_KEY }}
       AzureOpenAIApiKey: ${{ secrets.AZURE_OPENAI_API_KEY }}
+      GrafanaEntraClientSecret: ${{ secrets.GRAFANA_ENTRA_CLIENT_SECRET }}
 
     steps:
       - name: Checkout
@@ -139,6 +145,12 @@ jobs:
           azd env set GoogleDriveSyncServiceAccountJsonBase64 "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
           azd env set KeycloakPublicOrigin "${KeycloakPublicOrigin}" --environment "${AZURE_ENV_NAME}"
           azd env set KEYCLOAK_PUBLIC_ORIGIN "${KeycloakPublicOrigin}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaEntraEnabled "${GrafanaEntraEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaEntraClientId "${GrafanaEntraClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaEntraTenantId "${GrafanaEntraTenantId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaPublicOrigin "${GrafanaPublicOrigin}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaAzureMonitorSubscriptionId "${GrafanaAzureMonitorSubscriptionId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaEntraClientSecret "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
           azd env set KeyVaultName "${KeyVaultName}" --environment "${AZURE_ENV_NAME}"
 
       - name: Refresh azd environment outputs from existing provisioned infra
@@ -156,7 +168,7 @@ jobs:
       - name: Pre-sync Container App secrets from GitHub secrets to Key Vault refs
         working-directory: ${{ env.AZD_WORKING_DIR }}
         env:
-          EXCLUDE_CONTAINERAPPS: "keycloak"
+          EXCLUDE_CONTAINERAPPS: "keycloak,grafana"
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
@@ -217,7 +229,7 @@ jobs:
         if: ${{ success() }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         env:
-          EXCLUDE_CONTAINERAPPS: "keycloak"
+          EXCLUDE_CONTAINERAPPS: "keycloak,grafana"
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh

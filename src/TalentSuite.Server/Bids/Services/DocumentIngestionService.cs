@@ -176,7 +176,7 @@ If the length of the response is not found please set the default length to '750
 - keyInformation (string), which contains any key information that could help us choose an example from the bid library, for example the problem to be solved and whjy its being done
 
 Rules:
-  - Do not change the text on a question
+  - Do not change the text on a question, just take the complete question in the document
   - If a question is marked "mandatory", "must", "required" -> required=true, niceToHave=false.
   - If a question is marked "desirable", "optional", "nice to have" -> required=false, niceToHave=true.
   - If neither is clear -> required=false, niceToHave=false.

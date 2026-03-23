@@ -1,0 +1,12 @@
+apiVersion: 1
+
+datasources:
+  - name: Azure Monitor
+    uid: azure-monitor
+    type: grafana-azure-monitor-datasource
+    access: proxy
+    editable: true
+    jsonData:
+      azureAuthType: msi
+      cloudName: azuremonitor
+      subscriptionId: ${GRAFANA_AZURE_MONITOR_SUBSCRIPTION_ID}

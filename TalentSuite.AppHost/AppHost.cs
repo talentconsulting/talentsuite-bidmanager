@@ -110,6 +110,36 @@ var googleDriveSyncServiceAccountJsonBase64 = builder.AddParameter(
                                 value: "",
                                 secret: true,
                                 publishValueAsDefault: false);
+var grafanaEntraEnabled = builder.AddParameter(
+                                "GrafanaEntraEnabled",
+                                value: "false",
+                                secret: false,
+                                publishValueAsDefault: true);
+var grafanaEntraClientId = builder.AddParameter(
+                                "GrafanaEntraClientId",
+                                value: "",
+                                secret: false,
+                                publishValueAsDefault: true);
+var grafanaEntraTenantId = builder.AddParameter(
+                                "GrafanaEntraTenantId",
+                                value: "",
+                                secret: false,
+                                publishValueAsDefault: true);
+var grafanaEntraClientSecret = builder.AddParameter(
+                                "GrafanaEntraClientSecret",
+                                value: "",
+                                secret: true,
+                                publishValueAsDefault: false);
+var grafanaPublicOrigin = builder.AddParameter(
+                                "GrafanaPublicOrigin",
+                                value: "https://grafana-dev.talentsuite.uk",
+                                secret: false,
+                                publishValueAsDefault: true);
+var grafanaAzureMonitorSubscriptionId = builder.AddParameter(
+                                "GrafanaAzureMonitorSubscriptionId",
+                                value: "",
+                                secret: false,
+                                publishValueAsDefault: true);
 var keycloakContainerAdminPassword = keycloakPassword;
 var keycloakContainerDbPassword = keycloakDbPassword;
 
@@ -272,6 +302,45 @@ var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
     .WithEnvironment("GoogleDriveSync__ServiceAccountJsonBase64", googleDriveSyncServiceAccountJsonBase64)
     .WaitFor(messaging)
     .WaitFor(server);
+
+var grafana = builder.AddDockerfile("grafana", "../ops/grafana")
+    .WithHttpEndpoint(targetPort: 3000, name: "http")
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("GF_SERVER_HTTP_PORT", "3000")
+    .WithEnvironment("GF_SECURITY_ADMIN_USER", "admin")
+    .WithEnvironment("GF_USERS_DEFAULT_THEME", "system")
+    .WithEnvironment("GF_AUTH_AZUREAD_ENABLED", grafanaEntraEnabled)
+    .WithEnvironment("GF_AUTH_AZUREAD_NAME", "Microsoft Entra ID")
+    .WithEnvironment("GF_AUTH_AZUREAD_CLIENT_ID", grafanaEntraClientId)
+    .WithEnvironment("GF_AUTH_AZUREAD_CLIENT_SECRET", grafanaEntraClientSecret)
+    .WithEnvironment("GF_AUTH_AZUREAD_AUTH_URL", "https://login.microsoftonline.com/common/oauth2/v2.0/authorize")
+    .WithEnvironment("GF_AUTH_AZUREAD_TOKEN_URL", "https://login.microsoftonline.com/common/oauth2/v2.0/token")
+    .WithEnvironment("GF_AUTH_AZUREAD_ALLOWED_ORGANIZATIONS", grafanaEntraTenantId)
+    .WithEnvironment("GF_AUTH_AZUREAD_ALLOW_SIGN_UP", "true")
+    .WithEnvironment("GF_AUTH_AZUREAD_AUTO_LOGIN", "false")
+    .WithEnvironment("GF_AUTH_AZUREAD_USE_PKCE", "true")
+    .WithEnvironment("GF_AUTH_AZUREAD_SCOPES", "openid email profile")
+    .WithEnvironment("GF_AUTH_AZUREAD_CLIENT_AUTHENTICATION", "client_secret_post")
+    .WithEnvironment("GF_AZURE_MANAGED_IDENTITY_ENABLED", "true")
+    .WithEnvironment("GRAFANA_AZURE_MONITOR_SUBSCRIPTION_ID", grafanaAzureMonitorSubscriptionId);
+var grafanaHttpEndpoint = grafana.GetEndpoint("http");
+
+if (useLocalInfrastructure)
+{
+    grafana.WithEnvironment(context => context.EnvironmentVariables["GF_SERVER_ROOT_URL"] = grafanaHttpEndpoint.Url);
+}
+else
+{
+    grafana
+        .WithEnvironment("GF_SERVER_ROOT_URL", grafanaPublicOrigin)
+        .PublishAsAzureContainerApp((_, app) =>
+        {
+            app.Configuration ??= new();
+            app.Configuration.Ingress ??= new();
+            app.Configuration.Ingress.External = true;
+            app.Configuration.Ingress.TargetPort = 3000;
+        });
+}
 
 if (!useLocalInfrastructure)
 {
