@@ -192,6 +192,7 @@ jobs:
           azd env set GrafanaPublicOrigin "${GrafanaPublicOrigin}" --environment "${AZURE_ENV_NAME}"
           azd env set GrafanaAzureMonitorSubscriptionId "${GrafanaAzureMonitorSubscriptionId}" --environment "${AZURE_ENV_NAME}"
           azd env set GrafanaEntraClientSecret "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
 
       - name: Refresh azd environment outputs from existing provisioned infra
         if: ${{ github.event.inputs.deployment_mode == 'apps-only' }}
@@ -202,6 +203,51 @@ jobs:
           azd auth login --check-status >/dev/null
           azd env refresh --environment "${AZURE_ENV_NAME}" --no-prompt
           echo "Refreshed azd environment outputs for apps-only deploy."
+
+      - name: Re-seed azd environment after refresh
+        if: ${{ github.event.inputs.deployment_mode == 'apps-only' }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+
+          azd env set principalId "${AZD_PRINCIPAL_ID}" --environment "${AZURE_ENV_NAME}"
+          azd env set AuthenticationEnabled "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set AUTHENTICATION_ENABLED "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set UseInMemoryData "${UseInMemoryData}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakClientId "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set KEYCLOAK_CLIENT_ID "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakDbUsername" "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakPassword "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set SqlPassword "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set Password "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.GoogleDriveSyncServiceAccountJsonBase64" "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.InviteSmtpPassword" "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.KeycloakPassword" "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.SqlPassword" "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteEmailEnabled "${InviteEmailEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteFromEmail "${InviteFromEmail}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpHost "${InviteSmtpHost}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpPort "${InviteSmtpPort}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpEnableSsl "${InviteSmtpEnableSsl}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpUsername "${InviteSmtpUsername}" --environment "${AZURE_ENV_NAME}"
+          azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncEnabled "${GoogleDriveSyncEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncSourceContainerName "${GoogleDriveSyncSourceContainerName}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncDriveFolderId "${GoogleDriveSyncDriveFolderId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GoogleDriveSyncServiceAccountJsonBase64 "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeycloakPublicOrigin "${KeycloakPublicOrigin}" --environment "${AZURE_ENV_NAME}"
+          azd env set KEYCLOAK_PUBLIC_ORIGIN "${KeycloakPublicOrigin}" --environment "${AZURE_ENV_NAME}"
+          azd env set KeyVaultName "${KeyVaultName}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaEntraEnabled "${GrafanaEntraEnabled}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaEntraClientId "${GrafanaEntraClientId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaEntraTenantId "${GrafanaEntraTenantId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaPublicOrigin "${GrafanaPublicOrigin}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaAzureMonitorSubscriptionId "${GrafanaAzureMonitorSubscriptionId}" --environment "${AZURE_ENV_NAME}"
+          azd env set GrafanaEntraClientSecret "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
 
       - name: Dump Generated SQL Infra Bindings
         if: ${{ github.event.inputs.deployment_mode != 'apps-only' }}
