@@ -316,6 +316,7 @@ var grafana = builder.AddDockerfile("grafana", "../ops/grafana")
     .WithEnvironment("GF_AUTH_AZUREAD_CLIENT_SECRET", grafanaEntraClientSecret)
     .WithEnvironment("GF_AUTH_AZUREAD_ALLOWED_ORGANIZATIONS", grafanaEntraTenantId)
     .WithEnvironment("GF_AUTH_AZUREAD_ALLOW_SIGN_UP", "true")
+    .WithEnvironment("GF_AUTH_AZUREAD_ALLOW_ASSIGN_GRAFANA_ADMIN", "true")
     .WithEnvironment("GF_AUTH_AZUREAD_AUTO_LOGIN", "false")
     .WithEnvironment("GF_AUTH_AZUREAD_USE_PKCE", "true")
     .WithEnvironment("GF_AUTH_AZUREAD_SCOPES", "openid email profile")
@@ -353,10 +354,12 @@ else
                 && Uri.TryCreate(value?.ToString(), UriKind.Absolute, out var publicUri))
             {
                 context.EnvironmentVariables["GF_SERVER_DOMAIN"] = publicUri.Authority;
+                context.EnvironmentVariables["GF_SECURITY_CSRF_TRUSTED_ORIGINS"] = publicUri.GetLeftPart(UriPartial.Authority);
             }
 
             context.EnvironmentVariables["GF_SECURITY_COOKIE_SECURE"] = "true";
             context.EnvironmentVariables["GF_SECURITY_COOKIE_SAMESITE"] = "lax";
+            context.EnvironmentVariables["GF_SECURITY_CSRF_ADDITIONAL_HEADERS"] = "X-Forwarded-Host";
         })
         .WithEnvironment(context =>
         {

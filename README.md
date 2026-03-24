@@ -161,6 +161,10 @@ The Grafana image is defined in:
 Datasource provisioning is defined in:
 - `ops/grafana/provisioning/datasources/azure-monitor.yaml`
 
+Dashboard imports are available in:
+- `ops/grafana/dashboards/`
+- `ops/grafana/dashboards/README.md`
+
 ### What is preconfigured
 - Microsoft Entra ID login is supported through Grafana's `auth.azuread` settings.
 - Azure Monitor is provisioned as a datasource using managed identity.
@@ -215,6 +219,12 @@ Recommended registration shape:
 - platform type: `Web`
 - supported account type: `Single tenant`
 - do not register this as an SPA app
+
+For Grafana server admin assignment through Entra:
+- this repo enables `GF_AUTH_AZUREAD_ALLOW_ASSIGN_GRAFANA_ADMIN=true`
+- add an app role to the Entra app registration with value `GrafanaAdmin`
+- assign that app role to your user or admin group in the Enterprise Application
+- on next sign-in, Grafana will grant server admin from that Entra role claim
 
 Required delegated Microsoft Graph / OIDC permissions:
 - `openid`
