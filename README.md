@@ -186,6 +186,13 @@ Use these canonical keys in local env files and GitHub Actions `vars`/`secrets`:
 For Azure Monitor provisioning:
 - `GrafanaAzureMonitorSubscriptionId` should be the Azure subscription that contains the monitored resources.
 
+Required Azure RBAC for the Grafana managed identity at subscription scope:
+- `Reader`
+- `Monitoring Reader`
+- `Resource Graph Data Reader`
+
+Without those role assignments, Grafana can authenticate but Azure Monitor resource browsing may fail with errors such as `No subscriptions were found`.
+
 ### Local run
 When you run:
 
