@@ -18,6 +18,10 @@
   <script>
     (function () {
       window.talentSuiteAuth = window.talentSuiteAuth || {};
+      window.talentSuiteAuth.sessionExpiryWarningLeadTimeMs = 2 * 60 * 1000;
+      window.talentSuiteAuth.sessionExpiryRepromptDelayMs = 30 * 1000;
+      window.talentSuiteAuth.sessionExpiryWarningTimerId = null;
+      window.talentSuiteAuth.sessionExpiryWarningVisible = false;
       window.talentSuiteAuth.clearClientAuthState = function () {
         const prefixes = ["oidc.", "Microsoft.AspNetCore.Components.WebAssembly.Authentication"];
         const clearStore = function (store) {
@@ -42,6 +46,30 @@
 
         clearStore(window.localStorage);
         clearStore(window.sessionStorage);
+      };
+
+      window.talentSuiteAuth.isAuthenticationRoute = function () {
+        const path = window.location && window.location.pathname
+          ? window.location.pathname.toLowerCase()
+          : "";
+        return path.startsWith("/authentication/");
+      };
+
+      window.talentSuiteAuth.redirectToLogin = function () {
+        if (window.talentSuiteAuth.isAuthenticationRoute()) {
+          return;
+        }
+
+        const returnUrl = window.location.pathname + window.location.search + window.location.hash;
+        const loginUrl = "/authentication/login?returnUrl=" + window.encodeURIComponent(returnUrl);
+        window.location.assign(loginUrl);
+      };
+
+      window.talentSuiteAuth.clearSessionExpiryWarningTimer = function () {
+        if (window.talentSuiteAuth.sessionExpiryWarningTimerId !== null) {
+          window.clearTimeout(window.talentSuiteAuth.sessionExpiryWarningTimerId);
+          window.talentSuiteAuth.sessionExpiryWarningTimerId = null;
+        }
       };
 
       window.talentSuiteAuth.tryParseJwtPayload = function (token) {
@@ -118,6 +146,24 @@
         return null;
       };
 
+      window.talentSuiteAuth.getCachedSessionExpiry = function () {
+        const user = window.talentSuiteAuth.getCachedOidcUser();
+        if (!user) {
+          return null;
+        }
+
+        const refreshTokenExpiry = window.talentSuiteAuth.getCachedRefreshTokenExpiry();
+        if (typeof refreshTokenExpiry === "number") {
+          return refreshTokenExpiry;
+        }
+
+        if (typeof user.expires_at === "number") {
+          return user.expires_at;
+        }
+
+        return null;
+      };
+
       window.talentSuiteAuth.hasExpiredCachedSession = function () {
         const user = window.talentSuiteAuth.getCachedOidcUser();
         if (!user) {
@@ -138,13 +184,77 @@
         return false;
       };
 
+      window.talentSuiteAuth.promptToExtendSession = function () {
+        if (window.talentSuiteAuth.sessionExpiryWarningVisible || window.talentSuiteAuth.isAuthenticationRoute()) {
+          return;
+        }
+
+        window.talentSuiteAuth.sessionExpiryWarningVisible = true;
+        const shouldRefresh = window.confirm("Your session will expire in about 2 minutes. Click OK to stay signed in.");
+        window.talentSuiteAuth.sessionExpiryWarningVisible = false;
+
+        if (shouldRefresh) {
+          window.talentSuiteAuth.redirectToLogin();
+          return;
+        }
+
+        window.talentSuiteAuth.scheduleSessionExpiryWarning(
+          window.talentSuiteAuth.sessionExpiryRepromptDelayMs
+        );
+      };
+
+      window.talentSuiteAuth.scheduleSessionExpiryWarning = function (overrideDelayMs) {
+        window.talentSuiteAuth.clearSessionExpiryWarningTimer();
+
+        if (window.talentSuiteAuth.isAuthenticationRoute()) {
+          return;
+        }
+
+        const expiryInSeconds = window.talentSuiteAuth.getCachedSessionExpiry();
+        if (typeof expiryInSeconds !== "number") {
+          return;
+        }
+
+        const nowInMilliseconds = Date.now();
+        const expiryInMilliseconds = expiryInSeconds * 1000;
+        const warningAtMilliseconds = expiryInMilliseconds - window.talentSuiteAuth.sessionExpiryWarningLeadTimeMs;
+        const delayInMilliseconds = typeof overrideDelayMs === "number"
+          ? overrideDelayMs
+          : Math.max(warningAtMilliseconds - nowInMilliseconds, 0);
+
+        window.talentSuiteAuth.sessionExpiryWarningTimerId = window.setTimeout(function () {
+          window.talentSuiteAuth.sessionExpiryWarningTimerId = null;
+
+          if (window.talentSuiteAuth.hasExpiredCachedSession()) {
+            window.talentSuiteAuth.ensureUsableCachedSession();
+            return;
+          }
+
+          const currentExpiryInSeconds = window.talentSuiteAuth.getCachedSessionExpiry();
+          if (typeof currentExpiryInSeconds !== "number") {
+            return;
+          }
+
+          const remainingMilliseconds = (currentExpiryInSeconds * 1000) - Date.now();
+          if (remainingMilliseconds <= window.talentSuiteAuth.sessionExpiryWarningLeadTimeMs) {
+            window.talentSuiteAuth.promptToExtendSession();
+            return;
+          }
+
+          window.talentSuiteAuth.scheduleSessionExpiryWarning();
+        }, delayInMilliseconds);
+      };
+
       window.talentSuiteAuth.ensureUsableCachedSession = function () {
         if (!window.talentSuiteAuth.hasExpiredCachedSession()) {
+          window.talentSuiteAuth.scheduleSessionExpiryWarning();
           return true;
         }
 
         console.warn("OIDC session expired in browser storage. Clearing cached auth state before token renewal.");
+        window.talentSuiteAuth.clearSessionExpiryWarningTimer();
         window.talentSuiteAuth.clearClientAuthState();
+        window.talentSuiteAuth.redirectToLogin();
         return false;
       };
 
@@ -162,7 +272,9 @@
         }
 
         console.warn("OIDC refresh failed. Clearing cached auth state and requiring interactive login.", error);
+        window.talentSuiteAuth.clearSessionExpiryWarningTimer();
         window.talentSuiteAuth.clearClientAuthState();
+        window.talentSuiteAuth.redirectToLogin();
         return true;
       };
 
@@ -218,6 +330,7 @@
       }
 
       patchAuthInstance();
+      window.talentSuiteAuth.scheduleSessionExpiryWarning();
 
       if (typeof authService.getUser === "function") {
         const originalGetUser = authService.getUser.bind(authService);
@@ -288,6 +401,10 @@
 
       window.addEventListener("focus", function () {
         window.talentSuiteAuth.ensureUsableCachedSession();
+      });
+
+      window.addEventListener("storage", function () {
+        window.talentSuiteAuth.scheduleSessionExpiryWarning();
       });
     })();
   </script>
