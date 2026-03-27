@@ -428,7 +428,7 @@ Required GitHub Actions configuration for environment `dev`:
 - `GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64`
 - `GRAFANA_ENTRA_CLIENT_SECRET`
 
-No JSON secret is required. `AZD_INITIAL_ENVIRONMENT_CONFIG` is no longer used.
+No JSON secret is required.
 
 When `TALENTSUITE_INFRA_MODE=azure`, deploy includes:
 - App services:

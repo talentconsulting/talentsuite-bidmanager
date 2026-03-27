@@ -10,46 +10,59 @@ require_env() {
   fi
 }
 
-require_env "AZURE_ENV_NAME"
-require_env "AZD_INITIAL_ENVIRONMENT_CONFIG"
+read_env_alias() {
+  local primary="$1"
+  local secondary="${2:-}"
 
-printf '%s' "$AZD_INITIAL_ENVIRONMENT_CONFIG" > /tmp/azd-initial.json
-jq -e . /tmp/azd-initial.json >/dev/null || (echo "AZD_INITIAL_ENVIRONMENT_CONFIG is not valid JSON" && exit 1)
-
-azd env new "$AZURE_ENV_NAME" --no-prompt || true
-
-# Seed non-SQL-password values first. SQL password is handled separately in workflow
-# to avoid accidental quote wrapping in azd environment storage.
-jq -r 'to_entries[]
-  | select(.key != "SqlPassword" and .key != "Password")
-  | "\(.key)=\(.value|tostring)"' /tmp/azd-initial.json > /tmp/azd-initial.env
-azd env set --environment "$AZURE_ENV_NAME" --file /tmp/azd-initial.env --no-prompt || (echo "Failed to seed azd env from /tmp/azd-initial.env" && exit 1)
-
-read_required_value() {
-  local key="$1"
-  local value
-  value="$(jq -r --arg key "$key" '.[$key] // empty | tostring' /tmp/azd-initial.json)"
-  if [ -z "$value" ] || [ "$value" = "null" ]; then
-    echo "$key missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG"
-    exit 1
+  if [ -n "${!primary:-}" ]; then
+    printf '%s' "${!primary}"
+    return 0
   fi
-  echo "$value"
+
+  if [ -n "$secondary" ] && [ -n "${!secondary:-}" ]; then
+    printf '%s' "${!secondary}"
+    return 0
+  fi
+
+  return 1
 }
 
-read_value_or_default() {
-  local key="$1"
-  local default_value="$2"
+read_required_env_alias() {
+  local primary="$1"
+  local secondary="${2:-}"
   local value
 
-  value="$(jq -r --arg key "$key" '.[$key] // empty | tostring' /tmp/azd-initial.json)"
+  value="$(read_env_alias "$primary" "$secondary" || true)"
+  if [ -z "$value" ]; then
+    if [ -n "$secondary" ]; then
+      echo "Missing required environment variable: $primary or $secondary"
+    else
+      echo "Missing required environment variable: $primary"
+    fi
+    exit 1
+  fi
 
-  if [ -z "$value" ] || [ "$value" = "null" ]; then
+  printf '%s' "$value"
+}
+
+read_env_alias_or_default() {
+  local primary="$1"
+  local secondary="${2:-}"
+  local default_value="$3"
+  local value
+
+  value="$(read_env_alias "$primary" "$secondary" || true)"
+  if [ -z "$value" ]; then
     value="$default_value"
   fi
 
   value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-  echo "$value"
+  printf '%s' "$value"
 }
+
+require_env "AZURE_ENV_NAME"
+
+azd env new "$AZURE_ENV_NAME" --no-prompt || true
 
 normalize_secret_value() {
   local value="$1"
@@ -75,20 +88,20 @@ normalize_secret_value() {
   echo "$value"
 }
 
-authentication_enabled="$(read_required_value "AuthenticationEnabled")"
-use_in_memory_data="$(read_required_value "UseInMemoryData")"
-sql_password="$(read_required_value "SqlPassword")"
-keycloak_password="$(read_required_value "KeycloakPassword")"
-keycloak_client_id="$(read_required_value "KeycloakClientId")"
-keycloak_db_username="$(read_required_value "KeycloakDbUsername")"
-keycloak_db_password="$(read_required_value "KeycloakDbPassword")"
-invite_email_enabled="$(read_value_or_default "InviteEmailEnabled" "false")"
-invite_from_email="$(read_value_or_default "InviteFromEmail" "")"
-invite_smtp_host="$(read_value_or_default "InviteSmtpHost" "")"
-invite_smtp_port="$(read_value_or_default "InviteSmtpPort" "587")"
-invite_smtp_enable_ssl="$(read_value_or_default "InviteSmtpEnableSsl" "true")"
-invite_smtp_username="$(read_required_value "InviteSmtpUsername")"
-invite_smtp_password="$(read_required_value "InviteSmtpPassword")"
+authentication_enabled="$(read_required_env_alias "AuthenticationEnabled" "AUTHENTICATION_ENABLED")"
+use_in_memory_data="$(read_required_env_alias "UseInMemoryData" "USE_IN_MEMORY_DATA")"
+sql_password="$(read_required_env_alias "SqlPassword" "SQL_PASSWORD")"
+keycloak_password="$(read_required_env_alias "KeycloakPassword" "KEYCLOAK_PASSWORD")"
+keycloak_client_id="$(read_required_env_alias "KeycloakClientId" "KEYCLOAK_CLIENT_ID")"
+keycloak_db_username="$(read_required_env_alias "KeycloakDbUsername" "KEYCLOAK_DB_USERNAME")"
+keycloak_db_password="$(read_required_env_alias "KeycloakDbPassword" "KEYCLOAK_DB_PASSWORD")"
+invite_email_enabled="$(read_env_alias_or_default "InviteEmailEnabled" "INVITE_EMAIL_ENABLED" "false")"
+invite_from_email="$(read_env_alias_or_default "InviteFromEmail" "INVITE_FROM_EMAIL" "")"
+invite_smtp_host="$(read_env_alias_or_default "InviteSmtpHost" "INVITE_SMTP_HOST" "")"
+invite_smtp_port="$(read_env_alias_or_default "InviteSmtpPort" "INVITE_SMTP_PORT" "587")"
+invite_smtp_enable_ssl="$(read_env_alias_or_default "InviteSmtpEnableSsl" "INVITE_SMTP_ENABLE_SSL" "true")"
+invite_smtp_username="$(read_required_env_alias "InviteSmtpUsername" "INVITE_SMTP_USERNAME")"
+invite_smtp_password="$(read_required_env_alias "InviteSmtpPassword" "INVITE_SMTP_PASSWORD")"
 
 sql_password="$(normalize_secret_value "$sql_password")"
 keycloak_password="$(normalize_secret_value "$keycloak_password")"
@@ -108,10 +121,10 @@ is_placeholder_value() {
   esac
 }
 
-test -n "$authentication_enabled" || (echo "AuthenticationEnabled missing in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
-test -n "$use_in_memory_data" || (echo "UseInMemoryData missing in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
-test -n "$keycloak_client_id" || (echo "KeycloakClientId missing in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
-test -n "$keycloak_db_username" || (echo "KeycloakDbUsername missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
+test -n "$authentication_enabled" || (echo "AuthenticationEnabled/AUTHENTICATION_ENABLED missing" && exit 1)
+test -n "$use_in_memory_data" || (echo "UseInMemoryData/USE_IN_MEMORY_DATA missing" && exit 1)
+test -n "$keycloak_client_id" || (echo "KeycloakClientId/KEYCLOAK_CLIENT_ID missing" && exit 1)
+test -n "$keycloak_db_username" || (echo "KeycloakDbUsername/KEYCLOAK_DB_USERNAME missing or empty" && exit 1)
 [ "$keycloak_db_username" != "sa" ] || (echo "KeycloakDbUsername must not be 'sa' for Azure SQL" && exit 1)
 [[ ! "$keycloak_db_username" =~ ^[Cc]loud[Ss][Aa] ]] || (echo "KeycloakDbUsername must not start with 'CloudSA' (invalid for Azure SQL login)." && exit 1)
 is_placeholder_value "$keycloak_db_username" && (echo "KeycloakDbUsername appears to be a placeholder value" && exit 1)
@@ -161,8 +174,8 @@ if [[ ! "$sql_password" =~ ^[A-Za-z0-9\!@\#%\^\*\(\)_\+=\.,:-]+$ ]]; then
   exit 1
 fi
 
-test -n "$invite_smtp_username" || (echo "InviteSmtpUsername missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
-test -n "$invite_smtp_password" || (echo "InviteSmtpPassword missing or empty in AZD_INITIAL_ENVIRONMENT_CONFIG" && exit 1)
+test -n "$invite_smtp_username" || (echo "InviteSmtpUsername/INVITE_SMTP_USERNAME missing or empty" && exit 1)
+test -n "$invite_smtp_password" || (echo "InviteSmtpPassword/INVITE_SMTP_PASSWORD missing or empty" && exit 1)
 is_placeholder_value "$invite_smtp_username" && (echo "InviteSmtpUsername appears to be a placeholder value" && exit 1)
 is_placeholder_value "$invite_smtp_password" && (echo "InviteSmtpPassword appears to be a placeholder value" && exit 1)
 
