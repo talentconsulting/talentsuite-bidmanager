@@ -36,7 +36,6 @@ builder.Services.AddScoped<GlobalBannerState>();
 builder.Services.AddScoped<GlobalLoadingState>();
 builder.Services.AddScoped<LoadingHttpMessageHandler>();
 builder.Services.AddScoped<BidManageApiClient>();
-builder.Services.AddScoped<AcceptInviteApiClient>();
 builder.Services.AddScoped<ProfileApiClient>();
 builder.Services.AddBidMappings();
 
@@ -78,6 +77,12 @@ builder.Services.AddScoped(sp =>
         BaseAddress = new Uri(apiBaseAddress)
     };
 });
+
+builder.Services.AddScoped(_ =>
+    new AcceptInviteApiClient(new HttpClient
+    {
+        BaseAddress = new Uri(apiBaseAddress)
+    }));
 
 await builder.Build().RunAsync();
 
