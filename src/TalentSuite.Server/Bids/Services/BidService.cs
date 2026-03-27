@@ -157,7 +157,6 @@ public sealed class BidService : IBidService
         {
             configuration["FRONTEND_PUBLIC_ORIGIN"],
             configuration["TALENTFRONTEND_HTTPS"],
-            configuration["TALENTFRONTEND_HTTP"],
             configuration["InviteEmail:FrontendBaseUrl"],
             configuration["InviteEmail__FrontendBaseUrl"]
         };
@@ -171,8 +170,7 @@ public sealed class BidService : IBidService
             if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
                 continue;
 
-            if (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
