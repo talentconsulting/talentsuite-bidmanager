@@ -148,9 +148,41 @@ public sealed class BidService : IBidService
         _serviceBusClient = serviceBusClient;
         _commentSavedWithMentionsEntityName = configuration["AzureServiceBus:CommentSavedWithMentionsEntityName"]
                                               ?? CommentSavedWithMentionsEntityDefault;
-        _frontendBaseUrl = (configuration["TALENTFRONTEND_HTTPS"]
-                            ?? configuration["TALENTFRONTEND_HTTP"]
-                            ?? string.Empty).TrimEnd('/');
+        _frontendBaseUrl = ResolveFrontendBaseUrl(configuration);
+    }
+
+    private static string ResolveFrontendBaseUrl(IConfiguration configuration)
+    {
+        var candidates = new[]
+        {
+            configuration["FRONTEND_PUBLIC_ORIGIN"],
+            configuration["TALENTFRONTEND_HTTPS"],
+            configuration["TALENTFRONTEND_HTTP"],
+            configuration["InviteEmail:FrontendBaseUrl"],
+            configuration["InviteEmail__FrontendBaseUrl"]
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+                continue;
+
+            var trimmed = candidate.Trim();
+            if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+                continue;
+
+            if (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var authority = uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+            if (!string.IsNullOrWhiteSpace(authority))
+                return authority;
+        }
+
+        return string.Empty;
     }
 
     public async Task<ParsedDocumentModel> ParseBidDocument(Stream stream, string filename, BidStage stage, CancellationToken ct = default)
