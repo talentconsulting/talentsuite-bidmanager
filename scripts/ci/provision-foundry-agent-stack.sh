@@ -325,7 +325,7 @@ if ! az cognitiveservices account deployment show \
     --model-format OpenAI \
     --model-name "$openai_model_name" \
     --model-version "$openai_model_version" \
-    --sku-name Standard \
+    --sku-name GlobalStandard \
     --sku-capacity "$openai_model_capacity" >/dev/null
 fi
 
