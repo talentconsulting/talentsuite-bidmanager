@@ -813,8 +813,8 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           retrievable: true,
           sortable: false,
           facetable: false,
-          vectorSearchDimensions: 1536,
-          vectorSearchProfileName: "text-vector-profile"
+          dimensions: 1536,
+          vectorSearchProfile: "text-vector-profile"
         }
       ],
       vectorSearch: {
