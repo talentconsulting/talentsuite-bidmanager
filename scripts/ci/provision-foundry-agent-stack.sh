@@ -611,6 +611,7 @@ if [ -n "$search_index_name" ]; then
   connection_file="$(mktemp)"
   cat > "$connection_file" <<EOF
 {
+  "type": "ApiKey",
   "properties": {
     "category": "CognitiveSearch",
     "target": "$search_endpoint",
