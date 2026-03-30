@@ -290,6 +290,15 @@ foundry_api_with_retry() {
   retry_command 8 30 foundry_api "$method" "$url" "$token" "$payload"
 }
 
+is_foundry_search_tool_schema_error() {
+  local response="$1"
+
+  printf '%s' "$response" | grep -q "tools\\[0\\]\\.azure_ai_search" && return 0
+  printf '%s' "$response" | grep -q "tool_resources\\.azure_ai_search" && return 0
+  printf '%s' "$response" | grep -q "project_connection_id" && return 0
+  return 1
+}
+
 subscription=""
 resource_group=""
 location=""
@@ -789,6 +798,7 @@ existing_agent_id="$(printf '%s' "$assistants_response" \
 if [ -n "$existing_agent_id" ]; then
   agent_id="$existing_agent_id"
 else
+  agent_created_without_search_tool="false"
   agent_payload="$(jq -n \
     --arg model "$openai_model_deployment" \
     --arg name "$agent_name" \
@@ -832,7 +842,34 @@ else
     echo "Foundry agent create API returned a non-JSON response:"
     printf '%s\n' "$agent_response" | head -c 1000
     echo
-    exit 1
+
+    if [ -n "$search_index_name" ] && is_foundry_search_tool_schema_error "$agent_response"; then
+      echo "Foundry agent create endpoint does not accept Azure AI Search tool wiring in this API shape."
+      echo "Falling back to creating a plain agent without search tool configuration."
+      plain_agent_payload="$(jq -n \
+        --arg model "$openai_model_deployment" \
+        --arg name "$agent_name" \
+        --arg instructions "$agent_instructions" \
+        '{
+          model: $model,
+          name: $name,
+          instructions: $instructions
+        }')"
+      agent_response="$(foundry_api_with_retry POST \
+        "$foundry_project_endpoint/assistants?api-version=v1" \
+        "$agent_token" \
+        "$plain_agent_payload" || true)"
+      if ! printf '%s' "$agent_response" | jq -e . >/dev/null 2>&1; then
+        echo "Foundry plain agent create API returned a non-JSON response:"
+        printf '%s\n' "$agent_response" | head -c 1000
+        echo
+        exit 1
+      fi
+
+      agent_created_without_search_tool="true"
+    else
+      exit 1
+    fi
   fi
   agent_id="$(printf '%s' "$agent_response" | jq -r '.id')"
 fi
@@ -862,6 +899,9 @@ if [ "$auto_index_blob_storage" = "true" ]; then
 fi
 echo "  Azure AI Foundry agent name: $agent_name"
 echo "  Azure AI Foundry agent id: $agent_id"
+if [ "${agent_created_without_search_tool:-false}" = "true" ]; then
+  echo "  Azure AI Search tool wiring: not applied automatically by this Foundry endpoint"
+fi
 
 echo
 echo "App configuration values:"
@@ -870,6 +910,11 @@ echo "  AzureOpenAI__ApiKey=$openai_api_key"
 echo "  AzureOpenAI__ChatDeployment=$openai_model_deployment"
 echo "  AzureAIFoundry__ProjectEndpoint=$foundry_project_endpoint"
 echo "  Agents__AgentId=$agent_id"
+if [ "${agent_created_without_search_tool:-false}" = "true" ]; then
+  echo
+  echo "Manual follow-up:"
+  echo "  Attach the Azure AI Search connection/index to the agent in Foundry or via the Azure AI Projects SDK."
+fi
 
 if [ "$emit_azd_env" = "true" ]; then
   echo
