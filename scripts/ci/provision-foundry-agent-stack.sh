@@ -172,6 +172,48 @@ search_api_with_retry() {
   retry_command 6 20 search_api "$method" "$url" "$api_key" "$payload"
 }
 
+get_foundry_access_token() {
+  local token=""
+
+  token="$(az account get-access-token \
+    --scope "https://cognitiveservices.azure.com/.default" \
+    --query accessToken -o tsv 2>/dev/null || true)"
+  if [ -n "$token" ]; then
+    printf '%s' "$token"
+    return 0
+  fi
+
+  token="$(az account get-access-token \
+    --scope "https://ai.azure.com/.default" \
+    --query accessToken -o tsv 2>/dev/null || true)"
+  printf '%s' "$token"
+}
+
+foundry_api() {
+  local method="$1"
+  local url="$2"
+  local token="$3"
+  local payload="${4:-}"
+
+  if [ -n "$payload" ] || [ "$method" = "POST" ] || [ "$method" = "PUT" ] || [ "$method" = "PATCH" ]; then
+    if [ -z "$payload" ]; then
+      payload='{}'
+    fi
+
+    curl -fsS \
+      -X "$method" \
+      -H "Authorization: Bearer $token" \
+      -H "Content-Type: application/json" \
+      "$url" \
+      --data "$payload"
+  else
+    curl -fsS \
+      -X "$method" \
+      -H "Authorization: Bearer $token" \
+      "$url"
+  fi
+}
+
 subscription=""
 resource_group=""
 location=""
@@ -637,10 +679,11 @@ if [ -n "$search_index_name" ]; then
 fi
 
 echo "Ensuring Foundry agent $agent_name"
-agent_token="$(az account get-access-token --scope "https://ai.azure.com/.default" --query accessToken -o tsv)"
-existing_agent_id="$(curl -fsS \
-  -H "Authorization: Bearer $agent_token" \
+agent_token="$(get_foundry_access_token)"
+require_value "Foundry access token" "$agent_token"
+existing_agent_id="$(foundry_api GET \
   "$foundry_project_endpoint/assistants?api-version=v1" \
+  "$agent_token" \
   | jq -r --arg name "$agent_name" '.data[]? | select(.name == $name) | .id' \
   | head -n 1 || true)"
 
@@ -684,12 +727,10 @@ else
     end
   ')"
 
-  agent_id="$(curl -fsS \
-    -X POST \
-    -H "Authorization: Bearer $agent_token" \
-    -H "Content-Type: application/json" \
+  agent_id="$(foundry_api POST \
     "$foundry_project_endpoint/assistants?api-version=v1" \
-    --data "$agent_payload" \
+    "$agent_token" \
+    "$agent_payload" \
     | jq -r '.id')"
 fi
 
