@@ -72,7 +72,7 @@ if [[ "$MODE" == "local" ]]; then
   export DocumentIntelligence__ApiKey=""
   export AzureOpenAI__Endpoint="https://rgp-test-epomai.openai.azure.com/"
   export AzureOpenAI__ApiKey=""
-  export AzureOpenAI__ChatDeployment="gpt-4.1"
+  export AzureOpenAI__ChatDeployment="gpt-4-1"
   export AzureAIFoundry__ProjectEndpoint="https://rgp-foundry.services.ai.azure.com/api/projects/proj-bidproj"
   export Agents__AgentId=""
 

@@ -59,7 +59,7 @@ on:
       agent_name:
         description: Azure AI Foundry agent name
         required: true
-        default: foundryt-agent-talentsuite-dev
+        default: foundry-agent-talentsuite-dev
         type: string
       openai_account:
         description: Azure OpenAI account name override
