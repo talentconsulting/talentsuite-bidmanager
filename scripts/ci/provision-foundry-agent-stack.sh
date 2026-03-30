@@ -802,20 +802,18 @@ else
         instructions: $instructions,
         tools: [
           {
-            type: "azure_ai_search"
+            type: "azure_ai_search",
+            azure_ai_search: {
+              indexes: [
+                {
+                  project_connection_id: $connectionId,
+                  index_name: $indexName,
+                  query_type: "simple"
+                }
+              ]
+            }
           }
-        ],
-        tool_resources: {
-          azure_ai_search: {
-            indexes: [
-              {
-                project_connection_id: $connectionId,
-                index_name: $indexName,
-                query_type: "simple"
-              }
-            ]
-          }
-        }
+        ]
       }
     else
       {
