@@ -106,6 +106,17 @@ resolve_aspire_storage_account() {
   printf '%s' "$resolved"
 }
 
+ensure_search_managed_identity() {
+  local rg="$1"
+  local service_name="$2"
+
+  az resource update \
+    --resource-group "$rg" \
+    --resource-type "Microsoft.Search/searchServices" \
+    --name "$service_name" \
+    --set identity.type=SystemAssigned >/dev/null
+}
+
 search_api() {
   local method="$1"
   local url="$2"
@@ -375,32 +386,52 @@ search_primary_key="$(az search admin-key show \
   --resource-group "$resource_group" \
   --query primaryKey -o tsv)"
 storage_connection_id=""
-storage_account_key=""
-storage_connection_string=""
+storage_resource_id=""
 if [ "$auto_index_blob_storage" = "true" ]; then
   if [ -z "$storage_account_name" ]; then
     storage_account_name="$(resolve_aspire_storage_account "$resource_group")"
   fi
 
   require_value "--storage-account (or discoverable Aspire bid content storage account)" "$storage_account_name"
-
-  storage_account_key="$(az storage account keys list \
-    --account-name "$storage_account_name" \
+  storage_resource_id="$(az storage account show \
+    --name "$storage_account_name" \
     --resource-group "$resource_group" \
-    --query '[0].value' -o tsv)"
+    --query id -o tsv)"
+  require_value "storage account resource id" "$storage_resource_id"
 
-  storage_connection_string="DefaultEndpointsProtocol=https;AccountName=${storage_account_name};AccountKey=${storage_account_key};EndpointSuffix=core.windows.net"
+  echo "Enabling system-assigned identity on Azure AI Search service $search_service_name"
+  ensure_search_managed_identity "$resource_group" "$search_service_name"
+
+  search_principal_id="$(az resource show \
+    --resource-group "$resource_group" \
+    --resource-type "Microsoft.Search/searchServices" \
+    --name "$search_service_name" \
+    --query identity.principalId -o tsv)"
+  require_value "Azure AI Search managed identity principal id" "$search_principal_id"
+
+  echo "Granting Azure AI Search managed identity Storage Blob Data Reader on $storage_account_name"
+  if ! az role assignment list \
+    --assignee-object-id "$search_principal_id" \
+    --scope "$storage_resource_id" \
+    --query "[?roleDefinitionName=='Storage Blob Data Reader'][0].id" \
+    -o tsv | grep -q .; then
+    az role assignment create \
+      --assignee-object-id "$search_principal_id" \
+      --assignee-principal-type ServicePrincipal \
+      --role "Storage Blob Data Reader" \
+      --scope "$storage_resource_id" >/dev/null
+  fi
 
   echo "Ensuring blob container $storage_container_name in storage account $storage_account_name"
   az storage container create \
     --name "$storage_container_name" \
     --account-name "$storage_account_name" \
-    --account-key "$storage_account_key" >/dev/null
+    --auth-mode login >/dev/null
 
   echo "Ensuring Azure AI Search datasource $search_datasource_name"
   datasource_payload="$(jq -n \
     --arg name "$search_datasource_name" \
-    --arg connectionString "$storage_connection_string" \
+    --arg connectionString "ResourceId=${storage_resource_id};" \
     --arg containerName "$storage_container_name" \
     '{
       name: $name,
