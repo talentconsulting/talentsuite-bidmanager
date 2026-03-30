@@ -803,10 +803,16 @@ if [ -n "$search_index_name" ]; then
       }
     }')"
   echo "Ensuring Azure AI Search knowledge source $knowledge_source_name"
-  search_api_with_retry PUT \
+  knowledge_source_response="$(search_api_with_retry PUT \
     "$search_endpoint/knowledgesources('$knowledge_source_name')?api-version=2025-11-01-preview" \
     "$search_primary_key" \
-    "$knowledge_source_payload" >/dev/null
+    "$knowledge_source_payload" || true)"
+  if [ -n "$knowledge_source_response" ] && ! printf '%s' "$knowledge_source_response" | jq -e . >/dev/null 2>&1; then
+    echo "Azure AI Search knowledge source API returned a non-JSON response:"
+    printf '%s\n' "$knowledge_source_response" | head -c 1000
+    echo
+    exit 1
+  fi
   knowledge_source_created="true"
 
   knowledge_base_payload="$(jq -n \
@@ -843,10 +849,16 @@ if [ -n "$search_index_name" ]; then
       }
     }')"
   echo "Ensuring Azure AI Search knowledge base $knowledge_base_name"
-  search_api_with_retry PUT \
+  knowledge_base_response="$(search_api_with_retry PUT \
     "$search_endpoint/knowledgebases('$knowledge_base_name')?api-version=2025-11-01-preview" \
     "$search_primary_key" \
-    "$knowledge_base_payload" >/dev/null
+    "$knowledge_base_payload" || true)"
+  if [ -n "$knowledge_base_response" ] && ! printf '%s' "$knowledge_base_response" | jq -e . >/dev/null 2>&1; then
+    echo "Azure AI Search knowledge base API returned a non-JSON response:"
+    printf '%s\n' "$knowledge_base_response" | head -c 1000
+    echo
+    exit 1
+  fi
   knowledge_base_created="true"
 fi
 
