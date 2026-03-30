@@ -144,7 +144,11 @@ search_api() {
   local api_key="$3"
   local payload="${4:-}"
 
-  if [ -n "$payload" ]; then
+  if [ -n "$payload" ] || [ "$method" = "POST" ] || [ "$method" = "PUT" ] || [ "$method" = "PATCH" ]; then
+    if [ -z "$payload" ]; then
+      payload='{}'
+    fi
+
     curl -fsS \
       -X "$method" \
       -H "Content-Type: application/json" \
