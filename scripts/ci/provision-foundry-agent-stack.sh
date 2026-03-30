@@ -993,10 +993,16 @@ if [ "$auto_index_blob_storage" = "true" ]; then
         }
       }
     }')"
-  search_api_with_retry PUT \
+  skillset_response="$(search_api_with_retry PUT \
     "$search_endpoint/skillsets/$search_skillset_name?api-version=$search_api_version" \
     "$search_primary_key" \
-    "$skillset_payload" >/dev/null
+    "$skillset_payload" || true)"
+  if [ -n "$skillset_response" ] && ! printf '%s' "$skillset_response" | jq -e . >/dev/null 2>&1; then
+    echo "Azure AI Search skillset API returned a non-JSON response:"
+    printf '%s\n' "$skillset_response" | head -c 1000
+    echo
+    exit 1
+  fi
 
   echo "Ensuring Azure AI Search indexer $search_indexer_name"
   indexer_payload="$(jq -n \
@@ -1019,15 +1025,27 @@ if [ "$auto_index_blob_storage" = "true" ]; then
         }
       }
     }')"
-  search_api_with_retry PUT \
+  indexer_response="$(search_api_with_retry PUT \
     "$search_endpoint/indexers/$search_indexer_name?api-version=$search_api_version" \
     "$search_primary_key" \
-    "$indexer_payload" >/dev/null
+    "$indexer_payload" || true)"
+  if [ -n "$indexer_response" ] && ! printf '%s' "$indexer_response" | jq -e . >/dev/null 2>&1; then
+    echo "Azure AI Search indexer API returned a non-JSON response:"
+    printf '%s\n' "$indexer_response" | head -c 1000
+    echo
+    exit 1
+  fi
 
   echo "Running Azure AI Search indexer $search_indexer_name"
-  search_api_with_retry POST \
+  indexer_run_response="$(search_api_with_retry POST \
     "$search_endpoint/indexers/$search_indexer_name/run?api-version=$search_api_version" \
-    "$search_primary_key" >/dev/null
+    "$search_primary_key" || true)"
+  if [ -n "$indexer_run_response" ] && ! printf '%s' "$indexer_run_response" | jq -e . >/dev/null 2>&1; then
+    echo "Azure AI Search indexer run API returned a non-JSON response:"
+    printf '%s\n' "$indexer_run_response" | head -c 1000
+    echo
+    exit 1
+  fi
 fi
 foundry_project_endpoint="https://${foundry_account_name}.services.ai.azure.com/api/projects/${foundry_project_name}"
 foundry_account_id="$(az cognitiveservices account show \
