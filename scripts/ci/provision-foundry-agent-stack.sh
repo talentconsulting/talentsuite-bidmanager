@@ -829,7 +829,7 @@ else
   agent_response="$(foundry_api_with_retry POST \
     "$foundry_project_endpoint/assistants?api-version=v1" \
     "$agent_token" \
-    "$agent_payload")"
+    "$agent_payload" || true)"
   if ! printf '%s' "$agent_response" | jq -e . >/dev/null 2>&1; then
     echo "Foundry agent create API returned a non-JSON response:"
     printf '%s\n' "$agent_response" | head -c 1000
