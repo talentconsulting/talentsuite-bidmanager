@@ -233,26 +233,53 @@ foundry_api() {
   local url="$2"
   local token="$3"
   local payload="${4:-}"
+  local response_file
+  local http_code
+
+  response_file="$(mktemp)"
 
   if [ -n "$payload" ] || [ "$method" = "POST" ] || [ "$method" = "PUT" ] || [ "$method" = "PATCH" ]; then
     if [ -z "$payload" ]; then
       payload='{}'
     fi
 
-    curl -fsS \
+    http_code="$(curl -sS \
       -X "$method" \
       -H "Authorization: Bearer $token" \
       -H "Content-Type: application/json" \
       -H "Accept: application/json" \
       "$url" \
-      --data "$payload"
+      --data "$payload" \
+      -o "$response_file" \
+      -w '%{http_code}')"
   else
-    curl -fsS \
+    http_code="$(curl -sS \
       -X "$method" \
       -H "Authorization: Bearer $token" \
       -H "Accept: application/json" \
-      "$url"
+      "$url" \
+      -o "$response_file" \
+      -w '%{http_code}')"
   fi
+
+  if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+    echo "HTTP $http_code"
+    cat "$response_file"
+    rm -f "$response_file"
+    return 1
+  fi
+
+  cat "$response_file"
+  rm -f "$response_file"
+}
+
+foundry_api_with_retry() {
+  local method="$1"
+  local url="$2"
+  local token="$3"
+  local payload="${4:-}"
+
+  retry_command 8 30 foundry_api "$method" "$url" "$token" "$payload"
 }
 
 subscription=""
@@ -738,7 +765,7 @@ fi
 echo "Ensuring Foundry agent $agent_name"
 agent_token="$(get_foundry_access_token)"
 require_value "Foundry access token" "$agent_token"
-assistants_response="$(foundry_api GET \
+assistants_response="$(foundry_api_with_retry GET \
   "$foundry_project_endpoint/assistants?api-version=v1" \
   "$agent_token" || true)"
 if [ -n "$assistants_response" ] && ! printf '%s' "$assistants_response" | jq -e . >/dev/null 2>&1; then
@@ -791,7 +818,7 @@ else
     end
   ')"
 
-  agent_response="$(foundry_api POST \
+  agent_response="$(foundry_api_with_retry POST \
     "$foundry_project_endpoint/assistants?api-version=v1" \
     "$agent_token" \
     "$agent_payload")"
