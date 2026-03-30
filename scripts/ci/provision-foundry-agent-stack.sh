@@ -18,6 +18,10 @@ Usage:
     [--openai-model-name <model-name>] \
     [--openai-model-version <version>] \
     [--openai-model-capacity <capacity>] \
+    [--openai-embedding-deployment <deployment-name>] \
+    [--openai-embedding-model-name <model-name>] \
+    [--openai-embedding-model-version <version>] \
+    [--openai-embedding-capacity <capacity>] \
     [--search-service <name>] \
     [--search-sku <sku>] \
     [--search-replicas <count>] \
@@ -29,6 +33,7 @@ Usage:
     [--storage-container <name>] \
     [--search-datasource-name <name>] \
     [--search-indexer-name <name>] \
+    [--search-skillset-name <name>] \
     [--search-index-name <name>] \
     [--knowledge-source-name <name>] \
     [--knowledge-base-name <name>] \
@@ -336,6 +341,10 @@ openai_model_deployment=""
 openai_model_name=""
 openai_model_version=""
 openai_model_capacity=""
+openai_embedding_deployment=""
+openai_embedding_model_name=""
+openai_embedding_model_version=""
+openai_embedding_capacity=""
 search_service_name=""
 search_sku=""
 search_replicas=""
@@ -347,6 +356,7 @@ storage_account_name=""
 storage_container_name=""
 search_datasource_name=""
 search_indexer_name=""
+search_skillset_name=""
 search_index_name=""
 knowledge_source_name=""
 knowledge_base_name=""
@@ -405,6 +415,22 @@ while [ $# -gt 0 ]; do
       openai_model_capacity="${2:-}"
       shift 2
       ;;
+    --openai-embedding-deployment)
+      openai_embedding_deployment="${2:-}"
+      shift 2
+      ;;
+    --openai-embedding-model-name)
+      openai_embedding_model_name="${2:-}"
+      shift 2
+      ;;
+    --openai-embedding-model-version)
+      openai_embedding_model_version="${2:-}"
+      shift 2
+      ;;
+    --openai-embedding-capacity)
+      openai_embedding_capacity="${2:-}"
+      shift 2
+      ;;
     --search-service)
       search_service_name="${2:-}"
       shift 2
@@ -447,6 +473,10 @@ while [ $# -gt 0 ]; do
       ;;
     --search-indexer-name)
       search_indexer_name="${2:-}"
+      shift 2
+      ;;
+    --search-skillset-name)
+      search_skillset_name="${2:-}"
       shift 2
       ;;
     --search-index-name)
@@ -502,6 +532,10 @@ openai_model_deployment="${openai_model_deployment:-gpt-4-1}"
 openai_model_name="${openai_model_name:-gpt-4.1}"
 openai_model_version="${openai_model_version:-2025-04-14}"
 openai_model_capacity="${openai_model_capacity:-10}"
+openai_embedding_deployment="${openai_embedding_deployment:-text-embedding-3-small}"
+openai_embedding_model_name="${openai_embedding_model_name:-text-embedding-3-small}"
+openai_embedding_model_version="${openai_embedding_model_version:-1}"
+openai_embedding_capacity="${openai_embedding_capacity:-10}"
 search_service_name="${search_service_name:-$(slugify "${resource_group}-search" | cut -c1-24)}"
 search_sku="${search_sku:-basic}"
 search_replicas="${search_replicas:-1}"
@@ -513,6 +547,7 @@ storage_container_name="${storage_container_name:-bidlibrary}"
 search_datasource_name="${search_datasource_name:-bidlibrary-datasource}"
 search_index_name="${search_index_name:-}"
 search_indexer_name="${search_indexer_name:-bidlibrary-indexer}"
+search_skillset_name="${search_skillset_name:-bidlibrary-skillset}"
 knowledge_source_name="${knowledge_source_name:-talentsuite-knowledge-source}"
 knowledge_base_name="${knowledge_base_name:-talentsuite-knowledge-base}"
 agent_name="${agent_name:-talentsuite-agent}"
@@ -573,6 +608,39 @@ if ! az cognitiveservices account deployment show \
     --sku-name GlobalStandard \
     --sku-capacity "$openai_model_capacity" >/dev/null
 fi
+
+echo "Ensuring Azure OpenAI embedding deployment $openai_embedding_deployment"
+if ! az cognitiveservices account deployment show \
+  --name "$openai_account_name" \
+  --resource-group "$resource_group" \
+  --deployment-name "$openai_embedding_deployment" >/dev/null 2>&1; then
+  az cognitiveservices account deployment create \
+    --name "$openai_account_name" \
+    --resource-group "$resource_group" \
+    --deployment-name "$openai_embedding_deployment" \
+    --model-format OpenAI \
+    --model-name "$openai_embedding_model_name" \
+    --model-version "$openai_embedding_model_version" \
+    --sku-name GlobalStandard \
+    --sku-capacity "$openai_embedding_capacity" >/dev/null
+fi
+
+document_intelligence_endpoint="$(az cognitiveservices account show \
+  --name "$document_intelligence_account_name" \
+  --resource-group "$resource_group" \
+  --query properties.endpoint -o tsv)"
+document_intelligence_api_key="$(az cognitiveservices account keys list \
+  --name "$document_intelligence_account_name" \
+  --resource-group "$resource_group" \
+  --query key1 -o tsv)"
+openai_endpoint="$(az cognitiveservices account show \
+  --name "$openai_account_name" \
+  --resource-group "$resource_group" \
+  --query properties.endpoint -o tsv)"
+openai_api_key="$(az cognitiveservices account keys list \
+  --name "$openai_account_name" \
+  --resource-group "$resource_group" \
+  --query key1 -o tsv)"
 
 echo "Ensuring Azure AI Search service $search_service_name"
 if ! az search service show --name "$search_service_name" --resource-group "$resource_group" >/dev/null 2>&1; then
@@ -694,6 +762,10 @@ if [ "$auto_index_blob_storage" = "true" ]; then
   echo "Ensuring Azure AI Search index $search_index_name"
   index_payload="$(jq -n \
     --arg name "$search_index_name" \
+    --arg openAiEndpoint "$openai_endpoint" \
+    --arg openAiApiKey "$openai_api_key" \
+    --arg embeddingDeployment "$openai_embedding_deployment" \
+    --arg embeddingModelName "$openai_embedding_model_name" \
     '{
       name: $name,
       fields: [
@@ -751,8 +823,46 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           retrievable: true,
           sortable: false,
           facetable: true
+        },
+        {
+          name: "content_vector",
+          type: "Collection(Edm.Single)",
+          searchable: true,
+          filterable: false,
+          retrievable: true,
+          sortable: false,
+          facetable: false,
+          vectorSearchDimensions: 1536,
+          vectorSearchProfileName: "content-vector-profile"
         }
       ],
+      vectorSearch: {
+        algorithms: [
+          {
+            name: "content-vector-hnsw",
+            kind: "hnsw"
+          }
+        ],
+        profiles: [
+          {
+            name: "content-vector-profile",
+            algorithm: "content-vector-hnsw",
+            vectorizer: "content-vectorizer"
+          }
+        ],
+        vectorizers: [
+          {
+            name: "content-vectorizer",
+            kind: "azureOpenAI",
+            azureOpenAIParameters: {
+              resourceUri: $openAiEndpoint,
+              apiKey: $openAiApiKey,
+              deploymentId: $embeddingDeployment,
+              modelName: $embeddingModelName
+            }
+          }
+        ]
+      },
       semantic: {
         configurations: [
           {
@@ -776,15 +886,55 @@ if [ "$auto_index_blob_storage" = "true" ]; then
     "$search_primary_key" \
     "$index_payload" >/dev/null
 
+  echo "Ensuring Azure AI Search skillset $search_skillset_name"
+  skillset_payload="$(jq -n \
+    --arg name "$search_skillset_name" \
+    --arg openAiEndpoint "$openai_endpoint" \
+    --arg openAiApiKey "$openai_api_key" \
+    --arg embeddingDeployment "$openai_embedding_deployment" \
+    --arg embeddingModelName "$openai_embedding_model_name" \
+    '{
+      name: $name,
+      description: "Embeds extracted Word, Excel, and other blob content with text-embedding-3-small.",
+      skills: [
+        {
+          "@odata.type": "#Microsoft.Skills.Text.AzureOpenAIEmbeddingSkill",
+          context: "/document",
+          resourceUri: $openAiEndpoint,
+          apiKey: $openAiApiKey,
+          deploymentId: $embeddingDeployment,
+          modelName: $embeddingModelName,
+          inputs: [
+            {
+              name: "text",
+              source: "/document/content"
+            }
+          ],
+          outputs: [
+            {
+              name: "embedding",
+              targetName: "content_vector"
+            }
+          ]
+        }
+      ]
+    }')"
+  search_api_with_retry PUT \
+    "$search_endpoint/skillsets/$search_skillset_name?api-version=2024-07-01" \
+    "$search_primary_key" \
+    "$skillset_payload" >/dev/null
+
   echo "Ensuring Azure AI Search indexer $search_indexer_name"
   indexer_payload="$(jq -n \
     --arg name "$search_indexer_name" \
     --arg dataSourceName "$search_datasource_name" \
     --arg targetIndexName "$search_index_name" \
+    --arg skillsetName "$search_skillset_name" \
     '{
       name: $name,
       dataSourceName: $dataSourceName,
       targetIndexName: $targetIndexName,
+      skillsetName: $skillsetName,
       schedule: {
         interval: "PT30M"
       },
@@ -802,6 +952,12 @@ if [ "$auto_index_blob_storage" = "true" ]; then
             name: "base64Encode"
           }
         }
+      ],
+      outputFieldMappings: [
+        {
+          sourceFieldName: "/document/content_vector",
+          targetFieldName: "content_vector"
+        }
       ]
     }')"
   search_api_with_retry PUT \
@@ -814,22 +970,6 @@ if [ "$auto_index_blob_storage" = "true" ]; then
     "$search_endpoint/indexers/$search_indexer_name/run?api-version=2024-07-01" \
     "$search_primary_key" >/dev/null
 fi
-document_intelligence_endpoint="$(az cognitiveservices account show \
-  --name "$document_intelligence_account_name" \
-  --resource-group "$resource_group" \
-  --query properties.endpoint -o tsv)"
-document_intelligence_api_key="$(az cognitiveservices account keys list \
-  --name "$document_intelligence_account_name" \
-  --resource-group "$resource_group" \
-  --query key1 -o tsv)"
-openai_endpoint="$(az cognitiveservices account show \
-  --name "$openai_account_name" \
-  --resource-group "$resource_group" \
-  --query properties.endpoint -o tsv)"
-openai_api_key="$(az cognitiveservices account keys list \
-  --name "$openai_account_name" \
-  --resource-group "$resource_group" \
-  --query key1 -o tsv)"
 foundry_project_endpoint="https://${foundry_account_name}.services.ai.azure.com/api/projects/${foundry_project_name}"
 foundry_account_id="$(az cognitiveservices account show \
   --name "$foundry_account_name" \
@@ -1077,6 +1217,7 @@ fi
 if [ "$auto_index_blob_storage" = "true" ]; then
   echo "  Azure AI Search datasource: $search_datasource_name"
   echo "  Azure AI Search index: $search_index_name"
+  echo "  Azure AI Search skillset: $search_skillset_name"
   echo "  Azure AI Search indexer: $search_indexer_name"
 fi
 if [ "$knowledge_source_created" = "true" ]; then
