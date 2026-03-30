@@ -176,7 +176,7 @@ get_foundry_access_token() {
   local token=""
 
   token="$(az account get-access-token \
-    --scope "https://cognitiveservices.azure.com/.default" \
+    --resource "https://cognitiveservices.azure.com" \
     --query accessToken -o tsv 2>/dev/null || true)"
   if [ -n "$token" ]; then
     printf '%s' "$token"
@@ -479,11 +479,13 @@ if ! az cognitiveservices account show --name "$foundry_account_name" --resource
     --allow-project-management \
     --yes >/dev/null
 
-  az cognitiveservices account update \
-    --name "$foundry_account_name" \
-    --resource-group "$resource_group" \
-    --custom-domain "$foundry_account_name" >/dev/null
 fi
+
+echo "Ensuring Azure AI Foundry custom subdomain $foundry_account_name"
+az cognitiveservices account update \
+  --name "$foundry_account_name" \
+  --resource-group "$resource_group" \
+  --custom-domain "$foundry_account_name" >/dev/null
 
 echo "Ensuring Azure AI Foundry project $foundry_project_name"
 if ! az cognitiveservices account project show \
@@ -686,12 +688,7 @@ openai_api_key="$(az cognitiveservices account keys list \
   --name "$openai_account_name" \
   --resource-group "$resource_group" \
   --query key1 -o tsv)"
-foundry_base_endpoint="$(az cognitiveservices account show \
-  --name "$foundry_account_name" \
-  --resource-group "$resource_group" \
-  --query properties.endpoint -o tsv)"
-require_value "Azure AI Foundry endpoint" "$foundry_base_endpoint"
-foundry_project_endpoint="${foundry_base_endpoint%/}/api/projects/${foundry_project_name}"
+foundry_project_endpoint="https://${foundry_account_name}.services.ai.azure.com/api/projects/${foundry_project_name}"
 foundry_account_id="$(az cognitiveservices account show \
   --name "$foundry_account_name" \
   --resource-group "$resource_group" \
