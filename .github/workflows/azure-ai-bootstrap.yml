@@ -49,7 +49,7 @@ on:
       openai_account:
         description: Azure OpenAI account name override
         required: false
-        default: ""
+        default: openai-talentsuite-dev
         type: string
       openai_model_deployment:
         description: Azure OpenAI deployment name
