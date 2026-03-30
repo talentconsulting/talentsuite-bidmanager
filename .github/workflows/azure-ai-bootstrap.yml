@@ -41,6 +41,21 @@ on:
         required: false
         default: foundry-prj-talentsuite-dev
         type: string
+      foundry_model_deployment:
+        description: Azure AI Foundry model deployment name
+        required: false
+        default: gpt-4o
+        type: string
+      foundry_model_name:
+        description: Azure AI Foundry model name
+        required: false
+        default: gpt-4o
+        type: string
+      foundry_model_version:
+        description: Azure AI Foundry model version
+        required: false
+        default: 2024-11-20
+        type: string
       agent_name:
         description: Azure AI Foundry agent name
         required: true
@@ -65,21 +80,6 @@ on:
         description: Azure OpenAI model version
         required: false
         default: 2025-04-14
-        type: string
-      openai_secondary_deployment:
-        description: Azure OpenAI secondary deployment name
-        required: false
-        default: gpt-4o
-        type: string
-      openai_secondary_model_name:
-        description: Azure OpenAI secondary model name
-        required: false
-        default: gpt-4o
-        type: string
-      openai_secondary_model_version:
-        description: Azure OpenAI secondary model version
-        required: false
-        default: 2024-11-20
         type: string
       search_service:
         description: Azure AI Search service name override
@@ -152,12 +152,12 @@ jobs:
             --resource-group "${{ github.event.inputs.resource_group }}"
             --location "${{ github.event.inputs.location }}"
             --agent-name "${{ github.event.inputs.agent_name }}"
+            --foundry-model-deployment "${{ github.event.inputs.foundry_model_deployment }}"
+            --foundry-model-name "${{ github.event.inputs.foundry_model_name }}"
+            --foundry-model-version "${{ github.event.inputs.foundry_model_version }}"
             --openai-model-deployment "${{ github.event.inputs.openai_model_deployment }}"
             --openai-model-name "${{ github.event.inputs.openai_model_name }}"
             --openai-model-version "${{ github.event.inputs.openai_model_version }}"
-            --openai-secondary-deployment "${{ github.event.inputs.openai_secondary_deployment }}"
-            --openai-secondary-model-name "${{ github.event.inputs.openai_secondary_model_name }}"
-            --openai-secondary-model-version "${{ github.event.inputs.openai_secondary_model_version }}"
             --emit-azd-env
           )
 

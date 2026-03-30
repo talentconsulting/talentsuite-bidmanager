@@ -18,10 +18,6 @@ Usage:
     [--openai-model-name <model-name>] \
     [--openai-model-version <version>] \
     [--openai-model-capacity <capacity>] \
-    [--openai-secondary-deployment <deployment-name>] \
-    [--openai-secondary-model-name <model-name>] \
-    [--openai-secondary-model-version <version>] \
-    [--openai-secondary-model-capacity <capacity>] \
     [--openai-embedding-deployment <deployment-name>] \
     [--openai-embedding-model-name <model-name>] \
     [--openai-embedding-model-version <version>] \
@@ -32,6 +28,10 @@ Usage:
     [--search-partitions <count>] \
     [--foundry-account <name>] \
     [--foundry-project <name>] \
+    [--foundry-model-deployment <deployment-name>] \
+    [--foundry-model-name <model-name>] \
+    [--foundry-model-version <version>] \
+    [--foundry-model-capacity <capacity>] \
     [--search-connection-name <name>] \
     [--storage-account <name>] \
     [--storage-container <name>] \
@@ -385,10 +385,6 @@ openai_model_deployment=""
 openai_model_name=""
 openai_model_version=""
 openai_model_capacity=""
-openai_secondary_deployment=""
-openai_secondary_model_name=""
-openai_secondary_model_version=""
-openai_secondary_model_capacity=""
 openai_embedding_deployment=""
 openai_embedding_model_name=""
 openai_embedding_model_version=""
@@ -399,6 +395,10 @@ search_replicas=""
 search_partitions=""
 foundry_account_name=""
 foundry_project_name=""
+foundry_model_deployment=""
+foundry_model_name=""
+foundry_model_version=""
+foundry_model_capacity=""
 search_connection_name=""
 storage_account_name=""
 storage_container_name=""
@@ -463,22 +463,6 @@ while [ $# -gt 0 ]; do
       openai_model_capacity="${2:-}"
       shift 2
       ;;
-    --openai-secondary-deployment)
-      openai_secondary_deployment="${2:-}"
-      shift 2
-      ;;
-    --openai-secondary-model-name)
-      openai_secondary_model_name="${2:-}"
-      shift 2
-      ;;
-    --openai-secondary-model-version)
-      openai_secondary_model_version="${2:-}"
-      shift 2
-      ;;
-    --openai-secondary-model-capacity)
-      openai_secondary_model_capacity="${2:-}"
-      shift 2
-      ;;
     --openai-embedding-deployment)
       openai_embedding_deployment="${2:-}"
       shift 2
@@ -517,6 +501,22 @@ while [ $# -gt 0 ]; do
       ;;
     --foundry-project)
       foundry_project_name="${2:-}"
+      shift 2
+      ;;
+    --foundry-model-deployment)
+      foundry_model_deployment="${2:-}"
+      shift 2
+      ;;
+    --foundry-model-name)
+      foundry_model_name="${2:-}"
+      shift 2
+      ;;
+    --foundry-model-version)
+      foundry_model_version="${2:-}"
+      shift 2
+      ;;
+    --foundry-model-capacity)
+      foundry_model_capacity="${2:-}"
       shift 2
       ;;
     --search-connection-name)
@@ -596,10 +596,6 @@ openai_model_deployment="${openai_model_deployment:-gpt-4-1}"
 openai_model_name="${openai_model_name:-gpt-4.1}"
 openai_model_version="${openai_model_version:-2025-04-14}"
 openai_model_capacity="${openai_model_capacity:-10}"
-openai_secondary_deployment="${openai_secondary_deployment:-gpt-4o}"
-openai_secondary_model_name="${openai_secondary_model_name:-gpt-4o}"
-openai_secondary_model_version="${openai_secondary_model_version:-2024-11-20}"
-openai_secondary_model_capacity="${openai_secondary_model_capacity:-10}"
 openai_embedding_deployment="${openai_embedding_deployment:-text-embedding-3-small}"
 openai_embedding_model_name="${openai_embedding_model_name:-text-embedding-3-small}"
 openai_embedding_model_version="${openai_embedding_model_version:-1}"
@@ -610,6 +606,10 @@ search_replicas="${search_replicas:-1}"
 search_partitions="${search_partitions:-1}"
 foundry_account_name="${foundry_account_name:-$(slugify "${resource_group}-foundry" | cut -c1-24)}"
 foundry_project_name="${foundry_project_name:-proj-$(slugify "$resource_group" | cut -c1-18)}"
+foundry_model_deployment="${foundry_model_deployment:-gpt-4o}"
+foundry_model_name="${foundry_model_name:-gpt-4o}"
+foundry_model_version="${foundry_model_version:-2024-11-20}"
+foundry_model_capacity="${foundry_model_capacity:-10}"
 search_connection_name="${search_connection_name:-search-connection}"
 storage_container_name="${storage_container_name:-bidlibrary}"
 search_datasource_name="${search_datasource_name:-bidlibrary-datasource}"
@@ -675,24 +675,6 @@ if ! az cognitiveservices account deployment show \
     --model-version "$openai_model_version" \
     --sku-name GlobalStandard \
     --sku-capacity "$openai_model_capacity" >/dev/null
-fi
-
-if [ -n "$openai_secondary_deployment" ]; then
-  echo "Ensuring Azure OpenAI secondary deployment $openai_secondary_deployment"
-  if ! az cognitiveservices account deployment show \
-    --name "$openai_account_name" \
-    --resource-group "$resource_group" \
-    --deployment-name "$openai_secondary_deployment" >/dev/null 2>&1; then
-    az cognitiveservices account deployment create \
-      --name "$openai_account_name" \
-      --resource-group "$resource_group" \
-      --deployment-name "$openai_secondary_deployment" \
-      --model-format OpenAI \
-      --model-name "$openai_secondary_model_name" \
-      --model-version "$openai_secondary_model_version" \
-      --sku-name GlobalStandard \
-      --sku-capacity "$openai_secondary_model_capacity" >/dev/null
-  fi
 fi
 
 echo "Ensuring Azure OpenAI embedding deployment $openai_embedding_deployment"
@@ -768,6 +750,24 @@ if ! az cognitiveservices account project show \
     --resource-group "$resource_group" \
     --project-name "$foundry_project_name" \
     --location "$location" >/dev/null
+fi
+
+if [ -n "$foundry_model_deployment" ]; then
+  echo "Ensuring Azure AI Foundry model deployment $foundry_model_deployment"
+  if ! az cognitiveservices account deployment show \
+    --name "$foundry_account_name" \
+    --resource-group "$resource_group" \
+    --deployment-name "$foundry_model_deployment" >/dev/null 2>&1; then
+    az cognitiveservices account deployment create \
+      --name "$foundry_account_name" \
+      --resource-group "$resource_group" \
+      --deployment-name "$foundry_model_deployment" \
+      --model-format OpenAI \
+      --model-name "$foundry_model_name" \
+      --model-version "$foundry_model_version" \
+      --sku-name GlobalStandard \
+      --sku-capacity "$foundry_model_capacity" >/dev/null
+  fi
 fi
 
 search_endpoint="https://${search_service_name}.search.windows.net"
@@ -1363,9 +1363,6 @@ echo "  Azure AI Document Intelligence endpoint: $document_intelligence_endpoint
 echo "  Azure OpenAI account: $openai_account_name"
 echo "  Azure OpenAI endpoint: $openai_endpoint"
 echo "  Azure OpenAI deployment: $openai_model_deployment"
-if [ -n "$openai_secondary_deployment" ]; then
-  echo "  Azure OpenAI secondary deployment: $openai_secondary_deployment"
-fi
 echo "  Azure AI Search service: $search_service_name"
 echo "  Azure AI Search endpoint: $search_endpoint"
 if [ -n "$storage_account_name" ]; then
@@ -1374,6 +1371,9 @@ if [ -n "$storage_account_name" ]; then
 fi
 echo "  Azure AI Foundry account: $foundry_account_name"
 echo "  Azure AI Foundry project: $foundry_project_name"
+if [ -n "$foundry_model_deployment" ]; then
+  echo "  Azure AI Foundry model deployment: $foundry_model_deployment"
+fi
 echo "  Azure AI Foundry project endpoint: $foundry_project_endpoint"
 if [ -n "$connection_id" ]; then
   echo "  Azure AI Search project connection: $search_connection_name"
