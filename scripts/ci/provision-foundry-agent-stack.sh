@@ -892,7 +892,7 @@ if [ "$auto_index_blob_storage" = "true" ]; then
     "$search_primary_key" \
     "$index_payload" || true)"
   if [ -n "$index_response" ] && ! printf '%s' "$index_response" | jq -e . >/dev/null 2>&1; then
-    if printf '%s' "$index_response" | grep -q "CannotDeleteExistingField"; then
+    if printf '%s' "$index_response" | grep -Eq "CannotDeleteExistingField|CannotChangeExistingField"; then
       echo "Existing Azure AI Search index $search_index_name uses an incompatible schema. Recreating index, skillset, and indexer."
       delete_search_resource_if_exists "indexers" "$search_indexer_name" "$search_endpoint" "$search_primary_key"
       delete_search_resource_if_exists "skillsets" "$search_skillset_name" "$search_endpoint" "$search_primary_key"
