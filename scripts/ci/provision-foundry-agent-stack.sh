@@ -27,6 +27,8 @@ Usage:
     [--search-datasource-name <name>] \
     [--search-indexer-name <name>] \
     [--search-index-name <name>] \
+    [--knowledge-source-name <name>] \
+    [--knowledge-base-name <name>] \
     [--auto-index-blob-storage] \
     [--agent-name <name>] \
     [--agent-instructions <text>] \
@@ -40,6 +42,7 @@ Purpose:
   - Azure AI Foundry project
   - Azure AI Foundry project connection to Azure AI Search
   - Azure AI Foundry agent
+  - Azure AI Search knowledge source and knowledge base
   - Optional Azure AI Search datasource/index/indexer over Aspire-managed blob storage
 
 Notes:
@@ -320,6 +323,8 @@ storage_container_name=""
 search_datasource_name=""
 search_indexer_name=""
 search_index_name=""
+knowledge_source_name=""
+knowledge_base_name=""
 auto_index_blob_storage="false"
 agent_name=""
 agent_instructions=""
@@ -411,6 +416,14 @@ while [ $# -gt 0 ]; do
       search_index_name="${2:-}"
       shift 2
       ;;
+    --knowledge-source-name)
+      knowledge_source_name="${2:-}"
+      shift 2
+      ;;
+    --knowledge-base-name)
+      knowledge_base_name="${2:-}"
+      shift 2
+      ;;
     --auto-index-blob-storage)
       auto_index_blob_storage="true"
       shift 1
@@ -460,6 +473,8 @@ storage_container_name="${storage_container_name:-bidlibrary}"
 search_datasource_name="${search_datasource_name:-bidlibrary-datasource}"
 search_index_name="${search_index_name:-}"
 search_indexer_name="${search_indexer_name:-bidlibrary-indexer}"
+knowledge_source_name="${knowledge_source_name:-talentsuite-knowledge-source}"
+knowledge_base_name="${knowledge_base_name:-talentsuite-knowledge-base}"
 agent_name="${agent_name:-talentsuite-agent}"
 agent_instructions="${agent_instructions:-You are a helpful bid-writing assistant. Give concise, accurate answers and cite sources when search results are available.}"
 
@@ -679,7 +694,27 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           sortable: false,
           facetable: true
         }
-      ]
+      ],
+      semantic: {
+        defaultConfiguration: "default-semantic",
+        configurations: [
+          {
+            name: "default-semantic",
+            prioritizedFields: {
+              contentFields: [
+                {
+                  fieldName: "content"
+                }
+              ],
+              keywordsFields: [
+                {
+                  fieldName: "metadata_storage_name"
+                }
+              ]
+            }
+          }
+        ]
+      }
     }')"
   search_api_with_retry PUT \
     "$search_endpoint/indexes/$search_index_name?api-version=2024-07-01" \
@@ -746,6 +781,75 @@ if [ -n "$current_principal_id" ]; then
   ensure_role_assignment "$current_principal_id" "Azure AI User" "$foundry_project_id"
   echo "Waiting for Azure AI User role assignment to propagate"
   sleep 30
+fi
+
+knowledge_source_created="false"
+knowledge_base_created="false"
+if [ -n "$search_index_name" ]; then
+  knowledge_source_payload="$(jq -n \
+    --arg name "$knowledge_source_name" \
+    --arg indexName "$search_index_name" \
+    '{
+      name: $name,
+      kind: "searchIndex",
+      description: "Knowledge source backed by the Azure AI Search index for TalentSuite.",
+      searchIndexParameters: {
+        searchIndexName: $indexName,
+        semanticConfigurationName: "default-semantic",
+        sourceDataFields: [
+          { name: "content" },
+          { name: "metadata_storage_name" },
+          { name: "metadata_storage_path" }
+        ],
+        searchFields: []
+      }
+    }')"
+  echo "Ensuring Azure AI Search knowledge source $knowledge_source_name"
+  search_api_with_retry PUT \
+    "$search_endpoint/knowledgesources('$knowledge_source_name')?api-version=2025-11-01-preview" \
+    "$search_primary_key" \
+    "$knowledge_source_payload" >/dev/null
+  knowledge_source_created="true"
+
+  knowledge_base_payload="$(jq -n \
+    --arg name "$knowledge_base_name" \
+    --arg knowledgeSourceName "$knowledge_source_name" \
+    --arg openAiEndpoint "$openai_endpoint" \
+    --arg openAiApiKey "$openai_api_key" \
+    --arg deploymentId "$openai_model_deployment" \
+    --arg modelName "$openai_model_name" \
+    '{
+      name: $name,
+      description: "Knowledge base for TalentSuite retrieval over the Azure AI Search index.",
+      retrievalInstructions: "Answer using the configured knowledge source. If relevant content is missing, say you do not know.",
+      answerInstructions: "Provide concise, citation-backed answers.",
+      outputMode: "answerSynthesis",
+      knowledgeSources: [
+        {
+          name: $knowledgeSourceName
+        }
+      ],
+      models: [
+        {
+          kind: "azureOpenAI",
+          azureOpenAIParameters: {
+            resourceUri: $openAiEndpoint,
+            apiKey: $openAiApiKey,
+            deploymentId: $deploymentId,
+            modelName: $modelName
+          }
+        }
+      ],
+      retrievalReasoningEffort: {
+        kind: "low"
+      }
+    }')"
+  echo "Ensuring Azure AI Search knowledge base $knowledge_base_name"
+  search_api_with_retry PUT \
+    "$search_endpoint/knowledgebases('$knowledge_base_name')?api-version=2025-11-01-preview" \
+    "$search_primary_key" \
+    "$knowledge_base_payload" >/dev/null
+  knowledge_base_created="true"
 fi
 
 connection_id=""
@@ -896,6 +1000,12 @@ if [ "$auto_index_blob_storage" = "true" ]; then
   echo "  Azure AI Search datasource: $search_datasource_name"
   echo "  Azure AI Search index: $search_index_name"
   echo "  Azure AI Search indexer: $search_indexer_name"
+fi
+if [ "$knowledge_source_created" = "true" ]; then
+  echo "  Azure AI Search knowledge source: $knowledge_source_name"
+fi
+if [ "$knowledge_base_created" = "true" ]; then
+  echo "  Azure AI Search knowledge base: $knowledge_base_name"
 fi
 echo "  Azure AI Foundry agent name: $agent_name"
 echo "  Azure AI Foundry agent id: $agent_id"
