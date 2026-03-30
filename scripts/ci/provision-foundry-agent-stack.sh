@@ -930,7 +930,6 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           maximumPageLength: 2000,
           pageOverlapLength: 500,
           maximumPagesToTake: 0,
-          unit: "characters",
           inputs: [
             {
               name: "text",
