@@ -844,7 +844,6 @@ if [ "$auto_index_blob_storage" = "true" ]; then
             name: "content-vector-profile",
             algorithm: "content-vector-hnsw"
           }
-          }
         ]
       },
       semantic: {
