@@ -69,6 +69,9 @@ EOF
 command -v az >/dev/null || (echo "Azure CLI is required." && exit 1)
 command -v jq >/dev/null || (echo "jq is required." && exit 1)
 
+search_api_version="2025-09-01"
+search_knowledge_api_version="2025-11-01-preview"
+
 require_value() {
   local name="$1"
   local value="$2"
@@ -755,7 +758,7 @@ if [ "$auto_index_blob_storage" = "true" ]; then
       }
     }')"
   search_api_with_retry PUT \
-    "$search_endpoint/datasources/$search_datasource_name?api-version=2024-07-01" \
+    "$search_endpoint/datasources/$search_datasource_name?api-version=$search_api_version" \
     "$search_primary_key" \
     "$datasource_payload" >/dev/null
 
@@ -766,7 +769,7 @@ if [ "$auto_index_blob_storage" = "true" ]; then
       name: $name,
       fields: [
         {
-          name: "id",
+          name: "chunk_id",
           type: "Edm.String",
           key: true,
           searchable: false,
@@ -776,7 +779,16 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           facetable: false
         },
         {
-          name: "content",
+          name: "parent_id",
+          type: "Edm.String",
+          searchable: false,
+          filterable: true,
+          retrievable: true,
+          sortable: false,
+          facetable: false
+        },
+        {
+          name: "chunk",
           type: "Edm.String",
           searchable: true,
           filterable: false,
@@ -785,7 +797,7 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           facetable: false
         },
         {
-          name: "metadata_storage_name",
+          name: "title",
           type: "Edm.String",
           searchable: true,
           filterable: true,
@@ -794,34 +806,7 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           facetable: false
         },
         {
-          name: "metadata_storage_path",
-          type: "Edm.String",
-          searchable: false,
-          filterable: true,
-          retrievable: true,
-          sortable: false,
-          facetable: false
-        },
-        {
-          name: "metadata_storage_last_modified",
-          type: "Edm.DateTimeOffset",
-          searchable: false,
-          filterable: true,
-          retrievable: true,
-          sortable: true,
-          facetable: false
-        },
-        {
-          name: "metadata_storage_content_type",
-          type: "Edm.String",
-          searchable: false,
-          filterable: true,
-          retrievable: true,
-          sortable: false,
-          facetable: true
-        },
-        {
-          name: "content_vector",
+          name: "text_vector",
           type: "Collection(Edm.Single)",
           searchable: true,
           filterable: false,
@@ -829,20 +814,20 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           sortable: false,
           facetable: false,
           vectorSearchDimensions: 1536,
-          vectorSearchProfileName: "content-vector-profile"
+          vectorSearchProfileName: "text-vector-profile"
         }
       ],
       vectorSearch: {
         algorithms: [
           {
-            name: "content-vector-hnsw",
+            name: "text-vector-hnsw",
             kind: "hnsw"
           }
         ],
         profiles: [
           {
-            name: "content-vector-profile",
-            algorithm: "content-vector-hnsw"
+            name: "text-vector-profile",
+            algorithm: "text-vector-hnsw"
           }
         ]
       },
@@ -852,11 +837,11 @@ if [ "$auto_index_blob_storage" = "true" ]; then
             name: "default-semantic",
             prioritizedFields: {
               titleField: {
-                fieldName: "metadata_storage_name"
+                fieldName: "title"
               },
               prioritizedContentFields: [
                 {
-                  fieldName: "content"
+                  fieldName: "chunk"
                 }
               ]
             }
@@ -865,7 +850,7 @@ if [ "$auto_index_blob_storage" = "true" ]; then
       }
     }')"
   index_response="$(search_api_with_retry PUT \
-    "$search_endpoint/indexes/$search_index_name?api-version=2024-07-01" \
+    "$search_endpoint/indexes/$search_index_name?api-version=$search_api_version" \
     "$search_primary_key" \
     "$index_payload" || true)"
   if [ -n "$index_response" ] && ! printf '%s' "$index_response" | jq -e . >/dev/null 2>&1; then
@@ -882,17 +867,20 @@ if [ "$auto_index_blob_storage" = "true" ]; then
     --arg openAiApiKey "$openai_api_key" \
     --arg embeddingDeployment "$openai_embedding_deployment" \
     --arg embeddingModelName "$openai_embedding_model_name" \
+    --arg targetIndexName "$search_index_name" \
     '{
       name: $name,
-      description: "Embeds extracted Word, Excel, and other blob content with text-embedding-3-small.",
+      description: "Chunks documents and generates embeddings for Azure AI Search.",
       skills: [
         {
-          "@odata.type": "#Microsoft.Skills.Text.AzureOpenAIEmbeddingSkill",
+          "@odata.type": "#Microsoft.Skills.Text.SplitSkill",
           context: "/document",
-          resourceUri: $openAiEndpoint,
-          apiKey: $openAiApiKey,
-          deploymentId: $embeddingDeployment,
-          modelName: $embeddingModelName,
+          defaultLanguageCode: "en",
+          textSplitMode: "pages",
+          maximumPageLength: 2000,
+          pageOverlapLength: 500,
+          maximumPagesToTake: 0,
+          unit: "characters",
           inputs: [
             {
               name: "text",
@@ -901,15 +889,62 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           ],
           outputs: [
             {
+              name: "textItems",
+              targetName: "pages"
+            }
+          ]
+        },
+        {
+          "@odata.type": "#Microsoft.Skills.Text.AzureOpenAIEmbeddingSkill",
+          context: "/document/pages/*",
+          resourceUri: $openAiEndpoint,
+          apiKey: $openAiApiKey,
+          deploymentId: $embeddingDeployment,
+          dimensions: 1536,
+          modelName: $embeddingModelName,
+          inputs: [
+            {
+              name: "text",
+              source: "/document/pages/*"
+            }
+          ],
+          outputs: [
+            {
               name: "embedding",
-              targetName: "content_vector"
+              targetName: "text_vector"
             }
           ]
         }
-      ]
+      ],
+      indexProjections: {
+        selectors: [
+          {
+            targetIndexName: $targetIndexName,
+            parentKeyFieldName: "parent_id",
+            sourceContext: "/document/pages/*",
+            mappings: [
+              {
+                name: "text_vector",
+                source: "/document/pages/*/text_vector"
+              },
+              {
+                name: "chunk",
+                source: "/document/pages/*"
+              },
+              {
+                name: "title",
+                source: "/document/metadata_storage_name"
+              }
+            ]
+          }
+        ],
+        parameters: {
+          projectionMode: "skipIndexingParentDocuments"
+        }
+      }
     }')"
   search_api_with_retry PUT \
-    "$search_endpoint/skillsets/$search_skillset_name?api-version=2024-07-01" \
+    "$search_endpoint/skillsets/$search_skillset_name?api-version=$search_api_version" \
     "$search_primary_key" \
     "$skillset_payload" >/dev/null
 
@@ -932,31 +967,16 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           dataToExtract: "contentAndMetadata",
           parsingMode: "default"
         }
-      },
-      fieldMappings: [
-        {
-          sourceFieldName: "metadata_storage_path",
-          targetFieldName: "id",
-          mappingFunction: {
-            name: "base64Encode"
-          }
-        }
-      ],
-      outputFieldMappings: [
-        {
-          sourceFieldName: "/document/content_vector",
-          targetFieldName: "content_vector"
-        }
-      ]
+      }
     }')"
   search_api_with_retry PUT \
-    "$search_endpoint/indexers/$search_indexer_name?api-version=2024-07-01" \
+    "$search_endpoint/indexers/$search_indexer_name?api-version=$search_api_version" \
     "$search_primary_key" \
     "$indexer_payload" >/dev/null
 
   echo "Running Azure AI Search indexer $search_indexer_name"
   search_api_with_retry POST \
-    "$search_endpoint/indexers/$search_indexer_name/run?api-version=2024-07-01" \
+    "$search_endpoint/indexers/$search_indexer_name/run?api-version=$search_api_version" \
     "$search_primary_key" >/dev/null
 fi
 foundry_project_endpoint="https://${foundry_account_name}.services.ai.azure.com/api/projects/${foundry_project_name}"
@@ -998,7 +1018,7 @@ if [ -n "$search_index_name" ]; then
     }')"
   echo "Ensuring Azure AI Search knowledge source $knowledge_source_name"
   knowledge_source_response="$(search_api_with_retry PUT \
-    "$search_endpoint/knowledgesources('$knowledge_source_name')?api-version=2025-11-01-preview" \
+    "$search_endpoint/knowledgesources('$knowledge_source_name')?api-version=$search_knowledge_api_version" \
     "$search_primary_key" \
     "$knowledge_source_payload" || true)"
   if [ -n "$knowledge_source_response" ] && ! printf '%s' "$knowledge_source_response" | jq -e . >/dev/null 2>&1; then
@@ -1044,7 +1064,7 @@ if [ -n "$search_index_name" ]; then
     }')"
   echo "Ensuring Azure AI Search knowledge base $knowledge_base_name"
   knowledge_base_response="$(search_api_with_retry PUT \
-    "$search_endpoint/knowledgebases('$knowledge_base_name')?api-version=2025-11-01-preview" \
+    "$search_endpoint/knowledgebases('$knowledge_base_name')?api-version=$search_knowledge_api_version" \
     "$search_primary_key" \
     "$knowledge_base_payload" || true)"
   if [ -n "$knowledge_base_response" ] && ! printf '%s' "$knowledge_base_response" | jq -e . >/dev/null 2>&1; then
