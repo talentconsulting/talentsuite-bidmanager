@@ -212,6 +212,7 @@ delete_search_resource_if_exists() {
   local api_key="$4"
 
   local status
+  local response_file
   status="$(curl -sS \
     -o /dev/null \
     -w '%{http_code}' \
@@ -222,9 +223,23 @@ delete_search_resource_if_exists() {
     return 0
   fi
 
-  search_api DELETE \
+  response_file="$(mktemp)"
+  status="$(curl -sS \
+    -X DELETE \
+    -H "api-key: $api_key" \
     "$search_endpoint/$resource_type/$resource_name?api-version=$search_api_version" \
-    "$api_key" >/dev/null
+    -o "$response_file" \
+    -w '%{http_code}')"
+
+  if [ "$status" = "404" ] || { [ "$status" -ge 200 ] && [ "$status" -lt 300 ]; }; then
+    rm -f "$response_file"
+    return 0
+  fi
+
+  echo "Azure AI Search delete API returned HTTP $status for $resource_type/$resource_name:"
+  cat "$response_file"
+  rm -f "$response_file"
+  return 1
 }
 
 get_foundry_access_token() {
