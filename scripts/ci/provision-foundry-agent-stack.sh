@@ -835,12 +835,39 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           facetable: false
         },
         {
+          name: "content",
+          type: "Edm.String",
+          searchable: true,
+          filterable: false,
+          retrievable: true,
+          sortable: false,
+          facetable: false
+        },
+        {
           name: "title",
           type: "Edm.String",
           searchable: true,
           filterable: true,
           retrievable: true,
           sortable: true,
+          facetable: false
+        },
+        {
+          name: "metadata_storage_name",
+          type: "Edm.String",
+          searchable: true,
+          filterable: true,
+          retrievable: true,
+          sortable: true,
+          facetable: false
+        },
+        {
+          name: "metadata_storage_path",
+          type: "Edm.String",
+          searchable: false,
+          filterable: true,
+          retrievable: true,
+          sortable: false,
           facetable: false
         },
         {
@@ -982,8 +1009,20 @@ if [ "$auto_index_blob_storage" = "true" ]; then
                 source: "/document/pages/*"
               },
               {
+                name: "content",
+                source: "/document/pages/*"
+              },
+              {
                 name: "title",
                 source: "/document/metadata_storage_name"
+              },
+              {
+                name: "metadata_storage_name",
+                source: "/document/metadata_storage_name"
+              },
+              {
+                name: "metadata_storage_path",
+                source: "/document/metadata_storage_path"
               }
             ]
           }
