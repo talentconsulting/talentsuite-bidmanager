@@ -1,0 +1,678 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+trap 'echo "provision-foundry-agent-stack.sh failed at line $LINENO"' ERR
+
+usage() {
+  cat <<'EOF'
+Usage:
+  scripts/ci/provision-foundry-agent-stack.sh \
+    --subscription <subscription-id-or-name> \
+    --resource-group <resource-group> \
+    --location <azure-region> \
+    [--openai-account <name>] \
+    [--openai-sku <sku>] \
+    [--openai-model-deployment <deployment-name>] \
+    [--openai-model-name <model-name>] \
+    [--openai-model-version <version>] \
+    [--openai-model-capacity <capacity>] \
+    [--search-service <name>] \
+    [--search-sku <sku>] \
+    [--search-replicas <count>] \
+    [--search-partitions <count>] \
+    [--foundry-account <name>] \
+    [--foundry-project <name>] \
+    [--search-connection-name <name>] \
+    [--storage-account <name>] \
+    [--storage-container <name>] \
+    [--search-datasource-name <name>] \
+    [--search-indexer-name <name>] \
+    [--search-index-name <name>] \
+    [--auto-index-blob-storage] \
+    [--agent-name <name>] \
+    [--agent-instructions <text>] \
+    [--emit-azd-env]
+
+Purpose:
+  Creates the Azure AI resources this application needs:
+  - Azure OpenAI account and model deployment
+  - Azure AI Search service
+  - Azure AI Foundry resource
+  - Azure AI Foundry project
+  - Azure AI Foundry project connection to Azure AI Search
+  - Azure AI Foundry agent
+  - Optional Azure AI Search datasource/index/indexer over Aspire-managed blob storage
+
+Notes:
+  - The agent is created as a plain prompt agent unless --search-index-name is supplied.
+  - If --search-index-name is supplied, the script also creates a Foundry project
+    connection to Azure AI Search and wires that index into the agent's tool config.
+  - If --auto-index-blob-storage is supplied, the script discovers the Aspire Azure
+    Storage account for bid content, targets the bidlibrary container by default,
+    creates Search datasource/index/indexer resources, and runs the indexer once.
+  - The script uses the Azure AI agents REST API for agent creation and Azure CLI for
+    the underlying Azure resources.
+EOF
+}
+
+command -v az >/dev/null || (echo "Azure CLI is required." && exit 1)
+command -v jq >/dev/null || (echo "jq is required." && exit 1)
+
+require_value() {
+  local name="$1"
+  local value="$2"
+  if [ -z "$value" ]; then
+    echo "Missing required argument: $name"
+    usage
+    exit 1
+  fi
+}
+
+slugify() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-'
+}
+
+json_escape() {
+  printf '%s' "$1" | jq -Rs .
+}
+
+resolve_aspire_storage_account() {
+  local rg="$1"
+  local resolved=""
+
+  resolved="$(az resource list \
+    --resource-group "$rg" \
+    --resource-type "Microsoft.Storage/storageAccounts" \
+    --query "[?tags.\"aspire-resource-name\"=='bidcontentstorage'][0].name" \
+    -o tsv 2>/dev/null || true)"
+  if [ -n "$resolved" ]; then
+    printf '%s' "$resolved"
+    return 0
+  fi
+
+  resolved="$(az storage account list \
+    --resource-group "$rg" \
+    --query "[?starts_with(name, 'bidcontentstorage')][0].name" \
+    -o tsv 2>/dev/null || true)"
+  if [ -n "$resolved" ]; then
+    printf '%s' "$resolved"
+    return 0
+  fi
+
+  resolved="$(az resource list \
+    --resource-group "$rg" \
+    --resource-type "Microsoft.Storage/storageAccounts/blobServices/containers" \
+    --query "[?name=='default/bidstorage'].split(id, '/')[8] | [0]" \
+    -o tsv 2>/dev/null || true)"
+  printf '%s' "$resolved"
+}
+
+search_api() {
+  local method="$1"
+  local url="$2"
+  local api_key="$3"
+  local payload="${4:-}"
+
+  if [ -n "$payload" ]; then
+    curl -fsS \
+      -X "$method" \
+      -H "Content-Type: application/json" \
+      -H "api-key: $api_key" \
+      "$url" \
+      --data "$payload"
+  else
+    curl -fsS \
+      -X "$method" \
+      -H "api-key: $api_key" \
+      "$url"
+  fi
+}
+
+subscription=""
+resource_group=""
+location=""
+openai_account_name=""
+openai_sku=""
+openai_model_deployment=""
+openai_model_name=""
+openai_model_version=""
+openai_model_capacity=""
+search_service_name=""
+search_sku=""
+search_replicas=""
+search_partitions=""
+foundry_account_name=""
+foundry_project_name=""
+search_connection_name=""
+storage_account_name=""
+storage_container_name=""
+search_datasource_name=""
+search_indexer_name=""
+search_index_name=""
+auto_index_blob_storage="false"
+agent_name=""
+agent_instructions=""
+emit_azd_env="false"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --subscription)
+      subscription="${2:-}"
+      shift 2
+      ;;
+    --resource-group)
+      resource_group="${2:-}"
+      shift 2
+      ;;
+    --location)
+      location="${2:-}"
+      shift 2
+      ;;
+    --openai-account)
+      openai_account_name="${2:-}"
+      shift 2
+      ;;
+    --openai-sku)
+      openai_sku="${2:-}"
+      shift 2
+      ;;
+    --openai-model-deployment)
+      openai_model_deployment="${2:-}"
+      shift 2
+      ;;
+    --openai-model-name)
+      openai_model_name="${2:-}"
+      shift 2
+      ;;
+    --openai-model-version)
+      openai_model_version="${2:-}"
+      shift 2
+      ;;
+    --openai-model-capacity)
+      openai_model_capacity="${2:-}"
+      shift 2
+      ;;
+    --search-service)
+      search_service_name="${2:-}"
+      shift 2
+      ;;
+    --search-sku)
+      search_sku="${2:-}"
+      shift 2
+      ;;
+    --search-replicas)
+      search_replicas="${2:-}"
+      shift 2
+      ;;
+    --search-partitions)
+      search_partitions="${2:-}"
+      shift 2
+      ;;
+    --foundry-account)
+      foundry_account_name="${2:-}"
+      shift 2
+      ;;
+    --foundry-project)
+      foundry_project_name="${2:-}"
+      shift 2
+      ;;
+    --search-connection-name)
+      search_connection_name="${2:-}"
+      shift 2
+      ;;
+    --storage-account)
+      storage_account_name="${2:-}"
+      shift 2
+      ;;
+    --storage-container)
+      storage_container_name="${2:-}"
+      shift 2
+      ;;
+    --search-datasource-name)
+      search_datasource_name="${2:-}"
+      shift 2
+      ;;
+    --search-indexer-name)
+      search_indexer_name="${2:-}"
+      shift 2
+      ;;
+    --search-index-name)
+      search_index_name="${2:-}"
+      shift 2
+      ;;
+    --auto-index-blob-storage)
+      auto_index_blob_storage="true"
+      shift 1
+      ;;
+    --agent-name)
+      agent_name="${2:-}"
+      shift 2
+      ;;
+    --agent-instructions)
+      agent_instructions="${2:-}"
+      shift 2
+      ;;
+    --emit-azd-env)
+      emit_azd_env="true"
+      shift 1
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+require_value "--subscription" "$subscription"
+require_value "--resource-group" "$resource_group"
+require_value "--location" "$location"
+
+openai_account_name="${openai_account_name:-$(slugify "${resource_group}-openai" | cut -c1-24)}"
+openai_sku="${openai_sku:-S0}"
+openai_model_deployment="${openai_model_deployment:-gpt-4-1}"
+openai_model_name="${openai_model_name:-gpt-4.1}"
+openai_model_version="${openai_model_version:-2025-04-14}"
+openai_model_capacity="${openai_model_capacity:-10}"
+search_service_name="${search_service_name:-$(slugify "${resource_group}-search" | cut -c1-24)}"
+search_sku="${search_sku:-basic}"
+search_replicas="${search_replicas:-1}"
+search_partitions="${search_partitions:-1}"
+foundry_account_name="${foundry_account_name:-$(slugify "${resource_group}-foundry" | cut -c1-24)}"
+foundry_project_name="${foundry_project_name:-proj-$(slugify "$resource_group" | cut -c1-18)}"
+search_connection_name="${search_connection_name:-search-connection}"
+storage_container_name="${storage_container_name:-bidlibrary}"
+search_datasource_name="${search_datasource_name:-bidlibrary-datasource}"
+search_index_name="${search_index_name:-}"
+search_indexer_name="${search_indexer_name:-bidlibrary-indexer}"
+agent_name="${agent_name:-talentsuite-agent}"
+agent_instructions="${agent_instructions:-You are a helpful bid-writing assistant. Give concise, accurate answers and cite sources when search results are available.}"
+
+if [ "$auto_index_blob_storage" = "true" ] && [ -z "$search_index_name" ]; then
+  search_index_name="bidlibrary-index"
+fi
+
+az account set --subscription "$subscription"
+
+az group create \
+  --name "$resource_group" \
+  --location "$location" >/dev/null
+
+echo "Ensuring Azure OpenAI account $openai_account_name"
+if ! az cognitiveservices account show --name "$openai_account_name" --resource-group "$resource_group" >/dev/null 2>&1; then
+  az cognitiveservices account create \
+    --name "$openai_account_name" \
+    --resource-group "$resource_group" \
+    --location "$location" \
+    --kind OpenAI \
+    --sku "$openai_sku" \
+    --custom-domain "$openai_account_name" \
+    --yes >/dev/null
+fi
+
+echo "Ensuring Azure OpenAI deployment $openai_model_deployment"
+if ! az cognitiveservices account deployment show \
+  --name "$openai_account_name" \
+  --resource-group "$resource_group" \
+  --deployment-name "$openai_model_deployment" >/dev/null 2>&1; then
+  az cognitiveservices account deployment create \
+    --name "$openai_account_name" \
+    --resource-group "$resource_group" \
+    --deployment-name "$openai_model_deployment" \
+    --model-format OpenAI \
+    --model-name "$openai_model_name" \
+    --model-version "$openai_model_version" \
+    --sku-name Standard \
+    --sku-capacity "$openai_model_capacity" >/dev/null
+fi
+
+echo "Ensuring Azure AI Search service $search_service_name"
+if ! az search service show --name "$search_service_name" --resource-group "$resource_group" >/dev/null 2>&1; then
+  az search service create \
+    --name "$search_service_name" \
+    --resource-group "$resource_group" \
+    --location "$location" \
+    --sku "$search_sku" \
+    --replica-count "$search_replicas" \
+    --partition-count "$search_partitions" >/dev/null
+fi
+
+echo "Ensuring Azure AI Foundry account $foundry_account_name"
+if ! az cognitiveservices account show --name "$foundry_account_name" --resource-group "$resource_group" >/dev/null 2>&1; then
+  az cognitiveservices account create \
+    --name "$foundry_account_name" \
+    --resource-group "$resource_group" \
+    --location "$location" \
+    --kind AIServices \
+    --sku S0 \
+    --allow-project-management \
+    --yes >/dev/null
+
+  az cognitiveservices account update \
+    --name "$foundry_account_name" \
+    --resource-group "$resource_group" \
+    --custom-domain "$foundry_account_name" >/dev/null
+fi
+
+echo "Ensuring Azure AI Foundry project $foundry_project_name"
+if ! az cognitiveservices account project show \
+  --name "$foundry_account_name" \
+  --resource-group "$resource_group" \
+  --project-name "$foundry_project_name" >/dev/null 2>&1; then
+  az cognitiveservices account project create \
+    --name "$foundry_account_name" \
+    --resource-group "$resource_group" \
+    --project-name "$foundry_project_name" \
+    --location "$location" >/dev/null
+fi
+
+search_endpoint="https://${search_service_name}.search.windows.net"
+search_primary_key="$(az search admin-key show \
+  --service-name "$search_service_name" \
+  --resource-group "$resource_group" \
+  --query primaryKey -o tsv)"
+storage_connection_id=""
+storage_account_key=""
+storage_connection_string=""
+if [ "$auto_index_blob_storage" = "true" ]; then
+  if [ -z "$storage_account_name" ]; then
+    storage_account_name="$(resolve_aspire_storage_account "$resource_group")"
+  fi
+
+  require_value "--storage-account (or discoverable Aspire bid content storage account)" "$storage_account_name"
+
+  storage_account_key="$(az storage account keys list \
+    --account-name "$storage_account_name" \
+    --resource-group "$resource_group" \
+    --query '[0].value' -o tsv)"
+
+  storage_connection_string="DefaultEndpointsProtocol=https;AccountName=${storage_account_name};AccountKey=${storage_account_key};EndpointSuffix=core.windows.net"
+
+  echo "Ensuring blob container $storage_container_name in storage account $storage_account_name"
+  az storage container create \
+    --name "$storage_container_name" \
+    --account-name "$storage_account_name" \
+    --account-key "$storage_account_key" >/dev/null
+
+  echo "Ensuring Azure AI Search datasource $search_datasource_name"
+  datasource_payload="$(jq -n \
+    --arg name "$search_datasource_name" \
+    --arg connectionString "$storage_connection_string" \
+    --arg containerName "$storage_container_name" \
+    '{
+      name: $name,
+      type: "azureblob",
+      credentials: {
+        connectionString: $connectionString
+      },
+      container: {
+        name: $containerName
+      },
+      dataChangeDetectionPolicy: {
+        "@odata.type": "#Microsoft.Azure.Search.HighWaterMarkChangeDetectionPolicy",
+        highWaterMarkColumnName: "metadata_storage_last_modified"
+      }
+    }')"
+  search_api PUT \
+    "$search_endpoint/datasources/$search_datasource_name?api-version=2024-07-01" \
+    "$search_primary_key" \
+    "$datasource_payload" >/dev/null
+
+  echo "Ensuring Azure AI Search index $search_index_name"
+  index_payload="$(jq -n \
+    --arg name "$search_index_name" \
+    '{
+      name: $name,
+      fields: [
+        {
+          name: "id",
+          type: "Edm.String",
+          key: true,
+          searchable: false,
+          filterable: true,
+          retrievable: true,
+          sortable: false,
+          facetable: false
+        },
+        {
+          name: "content",
+          type: "Edm.String",
+          searchable: true,
+          filterable: false,
+          retrievable: true,
+          sortable: false,
+          facetable: false
+        },
+        {
+          name: "metadata_storage_name",
+          type: "Edm.String",
+          searchable: true,
+          filterable: true,
+          retrievable: true,
+          sortable: true,
+          facetable: false
+        },
+        {
+          name: "metadata_storage_path",
+          type: "Edm.String",
+          searchable: false,
+          filterable: true,
+          retrievable: true,
+          sortable: false,
+          facetable: false
+        },
+        {
+          name: "metadata_storage_last_modified",
+          type: "Edm.DateTimeOffset",
+          searchable: false,
+          filterable: true,
+          retrievable: true,
+          sortable: true,
+          facetable: false
+        },
+        {
+          name: "metadata_storage_content_type",
+          type: "Edm.String",
+          searchable: false,
+          filterable: true,
+          retrievable: true,
+          sortable: false,
+          facetable: true
+        }
+      ]
+    }')"
+  search_api PUT \
+    "$search_endpoint/indexes/$search_index_name?api-version=2024-07-01" \
+    "$search_primary_key" \
+    "$index_payload" >/dev/null
+
+  echo "Ensuring Azure AI Search indexer $search_indexer_name"
+  indexer_payload="$(jq -n \
+    --arg name "$search_indexer_name" \
+    --arg dataSourceName "$search_datasource_name" \
+    --arg targetIndexName "$search_index_name" \
+    '{
+      name: $name,
+      dataSourceName: $dataSourceName,
+      targetIndexName: $targetIndexName,
+      schedule: {
+        interval: "PT30M"
+      },
+      parameters: {
+        configuration: {
+          dataToExtract: "contentAndMetadata",
+          parsingMode: "default"
+        }
+      },
+      fieldMappings: [
+        {
+          sourceFieldName: "metadata_storage_path",
+          targetFieldName: "id",
+          mappingFunction: {
+            name: "base64Encode"
+          }
+        }
+      ]
+    }')"
+  search_api PUT \
+    "$search_endpoint/indexers/$search_indexer_name?api-version=2024-07-01" \
+    "$search_primary_key" \
+    "$indexer_payload" >/dev/null
+
+  echo "Running Azure AI Search indexer $search_indexer_name"
+  search_api POST \
+    "$search_endpoint/indexers/$search_indexer_name/run?api-version=2024-07-01" \
+    "$search_primary_key" >/dev/null
+fi
+openai_endpoint="$(az cognitiveservices account show \
+  --name "$openai_account_name" \
+  --resource-group "$resource_group" \
+  --query properties.endpoint -o tsv)"
+openai_api_key="$(az cognitiveservices account keys list \
+  --name "$openai_account_name" \
+  --resource-group "$resource_group" \
+  --query key1 -o tsv)"
+foundry_project_endpoint="https://${foundry_account_name}.services.ai.azure.com/api/projects/${foundry_project_name}"
+
+connection_id=""
+if [ -n "$search_index_name" ]; then
+  echo "Ensuring project connection $search_connection_name to Azure AI Search"
+  connection_file="$(mktemp)"
+  cat > "$connection_file" <<EOF
+{
+  "properties": {
+    "category": "CognitiveSearch",
+    "target": "$search_endpoint",
+    "authType": "ApiKey",
+    "credentials": {
+      "key": "$search_primary_key"
+    }
+  }
+}
+EOF
+
+  if ! az cognitiveservices account project connection show \
+    --name "$foundry_account_name" \
+    --resource-group "$resource_group" \
+    --project-name "$foundry_project_name" \
+    --connection-name "$search_connection_name" >/dev/null 2>&1; then
+    az cognitiveservices account project connection create \
+      --name "$foundry_account_name" \
+      --resource-group "$resource_group" \
+      --project-name "$foundry_project_name" \
+      --connection-name "$search_connection_name" \
+      --file "$connection_file" >/dev/null
+  fi
+
+  rm -f "$connection_file"
+
+  connection_id="$(az cognitiveservices account project connection show \
+    --name "$foundry_account_name" \
+    --resource-group "$resource_group" \
+    --project-name "$foundry_project_name" \
+    --connection-name "$search_connection_name" \
+    --query id -o tsv)"
+fi
+
+echo "Ensuring Foundry agent $agent_name"
+agent_token="$(az account get-access-token --scope "https://ai.azure.com/.default" --query accessToken -o tsv)"
+existing_agent_id="$(curl -fsS \
+  -H "Authorization: Bearer $agent_token" \
+  "$foundry_project_endpoint/assistants?api-version=v1" \
+  | jq -r --arg name "$agent_name" '.data[]? | select(.name == $name) | .id' \
+  | head -n 1 || true)"
+
+if [ -n "$existing_agent_id" ]; then
+  agent_id="$existing_agent_id"
+else
+  agent_payload="$(jq -n \
+    --arg model "$openai_model_deployment" \
+    --arg name "$agent_name" \
+    --arg instructions "$agent_instructions" \
+    --arg connectionId "$connection_id" \
+    --arg indexName "$search_index_name" '
+    if $connectionId != "" and $indexName != "" then
+      {
+        model: $model,
+        name: $name,
+        instructions: $instructions,
+        tools: [
+          {
+            type: "azure_ai_search"
+          }
+        ],
+        tool_resources: {
+          azure_ai_search: {
+            indexes: [
+              {
+                project_connection_id: $connectionId,
+                index_name: $indexName,
+                query_type: "simple"
+              }
+            ]
+          }
+        }
+      }
+    else
+      {
+        model: $model,
+        name: $name,
+        instructions: $instructions
+      }
+    end
+  ')"
+
+  agent_id="$(curl -fsS \
+    -X POST \
+    -H "Authorization: Bearer $agent_token" \
+    -H "Content-Type: application/json" \
+    "$foundry_project_endpoint/assistants?api-version=v1" \
+    --data "$agent_payload" \
+    | jq -r '.id')"
+fi
+
+echo
+echo "Created resources:"
+echo "  Azure OpenAI account: $openai_account_name"
+echo "  Azure OpenAI endpoint: $openai_endpoint"
+echo "  Azure OpenAI deployment: $openai_model_deployment"
+echo "  Azure AI Search service: $search_service_name"
+echo "  Azure AI Search endpoint: $search_endpoint"
+if [ -n "$storage_account_name" ]; then
+  echo "  Aspire blob storage account: $storage_account_name"
+  echo "  Aspire blob storage container: $storage_container_name"
+fi
+echo "  Azure AI Foundry account: $foundry_account_name"
+echo "  Azure AI Foundry project: $foundry_project_name"
+echo "  Azure AI Foundry project endpoint: $foundry_project_endpoint"
+if [ -n "$connection_id" ]; then
+  echo "  Azure AI Search project connection: $search_connection_name"
+  echo "  Azure AI Search project connection id: $connection_id"
+fi
+if [ "$auto_index_blob_storage" = "true" ]; then
+  echo "  Azure AI Search datasource: $search_datasource_name"
+  echo "  Azure AI Search index: $search_index_name"
+  echo "  Azure AI Search indexer: $search_indexer_name"
+fi
+echo "  Azure AI Foundry agent name: $agent_name"
+echo "  Azure AI Foundry agent id: $agent_id"
+
+echo
+echo "App configuration values:"
+echo "  AzureOpenAI__Endpoint=$openai_endpoint"
+echo "  AzureOpenAI__ApiKey=$openai_api_key"
+echo "  AzureOpenAI__ChatDeployment=$openai_model_deployment"
+echo "  AzureAIFoundry__ProjectEndpoint=$foundry_project_endpoint"
+echo "  Agents__AgentId=$agent_id"
+
+if [ "$emit_azd_env" = "true" ]; then
+  echo
+  echo "azd env commands:"
+  echo "  azd env set AZURE_OPENAI_ENDPOINT \"$openai_endpoint\""
+  echo "  azd env set AZURE_OPENAI_CHAT_DEPLOYMENT \"$openai_model_deployment\""
+  echo "  azd env set AZURE_AI_FOUNDRY_PROJECT_ENDPOINT \"$foundry_project_endpoint\""
+  echo "  azd env set AGENTS_AGENT_ID \"$agent_id\""
+fi

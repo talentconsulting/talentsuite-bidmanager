@@ -1,0 +1,159 @@
+name: Azure AI Bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: Azure resource group to create/update
+        required: true
+        type: string
+      location:
+        description: Azure region for new resources
+        required: true
+        default: swedencentral
+        type: string
+      foundry_account:
+        description: Azure AI Foundry account name
+        required: true
+        type: string
+      foundry_project:
+        description: Azure AI Foundry project name
+        required: true
+        type: string
+      agent_name:
+        description: Azure AI Foundry agent name
+        required: true
+        default: talentsuite-agent
+        type: string
+      openai_account:
+        description: Azure OpenAI account name override
+        required: false
+        type: string
+      openai_model_deployment:
+        description: Azure OpenAI deployment name
+        required: false
+        default: gpt-4-1
+        type: string
+      openai_model_name:
+        description: Azure OpenAI model name
+        required: false
+        default: gpt-4.1
+        type: string
+      openai_model_version:
+        description: Azure OpenAI model version
+        required: false
+        default: 2025-04-14
+        type: string
+      search_service:
+        description: Azure AI Search service name override
+        required: false
+        type: string
+      search_index_name:
+        description: Existing or desired Azure AI Search index name
+        required: false
+        type: string
+      auto_index_blob_storage:
+        description: Discover Aspire bid blob storage and build Search datasource/index/indexer
+        required: true
+        default: true
+        type: boolean
+      storage_account:
+        description: Optional storage account override for blob indexing
+        required: false
+        type: string
+      storage_container:
+        description: Optional blob container override for blob indexing
+        required: false
+        default: bidlibrary
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap-azure-ai:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate required inputs
+        run: |
+          test -n "${{ secrets.AZURE_CLIENT_ID }}" || (echo "AZURE_CLIENT_ID missing" && exit 1)
+          test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
+          test -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
+          test -n "${{ github.event.inputs.resource_group }}" || (echo "resource_group input missing" && exit 1)
+          test -n "${{ github.event.inputs.location }}" || (echo "location input missing" && exit 1)
+          test -n "${{ github.event.inputs.foundry_account }}" || (echo "foundry_account input missing" && exit 1)
+          test -n "${{ github.event.inputs.foundry_project }}" || (echo "foundry_project input missing" && exit 1)
+          test -n "${{ github.event.inputs.agent_name }}" || (echo "agent_name input missing" && exit 1)
+
+      - name: Bootstrap Azure AI resources
+        id: bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/ci/provision-foundry-agent-stack.sh
+
+          args=(
+            --subscription "${AZURE_SUBSCRIPTION_ID}"
+            --resource-group "${{ github.event.inputs.resource_group }}"
+            --location "${{ github.event.inputs.location }}"
+            --foundry-account "${{ github.event.inputs.foundry_account }}"
+            --foundry-project "${{ github.event.inputs.foundry_project }}"
+            --agent-name "${{ github.event.inputs.agent_name }}"
+            --openai-model-deployment "${{ github.event.inputs.openai_model_deployment }}"
+            --openai-model-name "${{ github.event.inputs.openai_model_name }}"
+            --openai-model-version "${{ github.event.inputs.openai_model_version }}"
+            --emit-azd-env
+          )
+
+          if [ -n "${{ github.event.inputs.openai_account }}" ]; then
+            args+=(--openai-account "${{ github.event.inputs.openai_account }}")
+          fi
+
+          if [ -n "${{ github.event.inputs.search_service }}" ]; then
+            args+=(--search-service "${{ github.event.inputs.search_service }}")
+          fi
+
+          if [ -n "${{ github.event.inputs.search_index_name }}" ]; then
+            args+=(--search-index-name "${{ github.event.inputs.search_index_name }}")
+          fi
+
+          if [ "${{ github.event.inputs.auto_index_blob_storage }}" = "true" ]; then
+            args+=(--auto-index-blob-storage)
+          fi
+
+          if [ -n "${{ github.event.inputs.storage_account }}" ]; then
+            args+=(--storage-account "${{ github.event.inputs.storage_account }}")
+          fi
+
+          if [ -n "${{ github.event.inputs.storage_container }}" ]; then
+            args+=(--storage-container "${{ github.event.inputs.storage_container }}")
+          fi
+
+          output_file="$(mktemp)"
+          scripts/ci/provision-foundry-agent-stack.sh "${args[@]}" | tee "$output_file"
+
+          {
+            echo "## Azure AI Bootstrap"
+            echo
+            echo '```text'
+            cat "$output_file"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+

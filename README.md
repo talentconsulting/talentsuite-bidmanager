@@ -306,6 +306,36 @@ Function settings (in `local.settings.json` / app settings):
 
 ## Azure AI Usage
 
+### Bootstrap Resources
+Use `scripts/ci/provision-foundry-agent-stack.sh` to create the baseline Azure AI resources for this app:
+- Azure OpenAI account
+- Azure OpenAI model deployment
+- Azure AI Search service
+- Azure AI Foundry account
+- Azure AI Foundry project
+- Azure AI Foundry agent
+- Optional Foundry project connection to Azure AI Search when you pass a search index name
+
+Example:
+
+```bash
+scripts/ci/provision-foundry-agent-stack.sh \
+  --subscription "<subscription-id-or-name>" \
+  --resource-group "<resource-group>" \
+  --location "swedencentral" \
+  --foundry-account "tsfoundrydev" \
+  --foundry-project "proj-talentsuite" \
+  --agent-name "talentsuite-agent" \
+  --auto-index-blob-storage \
+  --emit-azd-env
+```
+
+Notes:
+- `--auto-index-blob-storage` discovers the Aspire-created bid content storage account in Azure, targets the `bidlibrary` container by default, creates Search datasource/index/indexer resources, runs the indexer, and wires the resulting index into the agent.
+- If you omit both `--auto-index-blob-storage` and `--search-index-name`, the script still creates the Foundry agent, but without Azure AI Search tool wiring.
+- The script prints the resulting `AzureOpenAI__*`, `AzureAIFoundry__ProjectEndpoint`, and `Agents__AgentId` values for app configuration.
+- It depends on current Azure CLI support for `az cognitiveservices account project` and `az cognitiveservices account project connection`.
+
 ### Azure OpenAI (direct in code)
 - Used by bid document ingestion in `src/TalentSuite.Server/Bids/Services/DocumentIngestionService.cs`.
 - Flow:
