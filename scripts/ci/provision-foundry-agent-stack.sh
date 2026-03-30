@@ -204,12 +204,14 @@ foundry_api() {
       -X "$method" \
       -H "Authorization: Bearer $token" \
       -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
       "$url" \
       --data "$payload"
   else
     curl -fsS \
       -X "$method" \
       -H "Authorization: Bearer $token" \
+      -H "Accept: application/json" \
       "$url"
   fi
 }
@@ -645,7 +647,7 @@ openai_api_key="$(az cognitiveservices account keys list \
   --name "$openai_account_name" \
   --resource-group "$resource_group" \
   --query key1 -o tsv)"
-foundry_project_endpoint="https://${foundry_account_name}.services.ai.azure.com/api/projects/${foundry_project_name}"
+foundry_project_endpoint="https://${foundry_account_name}.ai.azure.com/api/projects/${foundry_project_name}"
 
 connection_id=""
 if [ -n "$search_index_name" ]; then
@@ -681,9 +683,16 @@ fi
 echo "Ensuring Foundry agent $agent_name"
 agent_token="$(get_foundry_access_token)"
 require_value "Foundry access token" "$agent_token"
-existing_agent_id="$(foundry_api GET \
+assistants_response="$(foundry_api GET \
   "$foundry_project_endpoint/assistants?api-version=v1" \
-  "$agent_token" \
+  "$agent_token" || true)"
+if [ -n "$assistants_response" ] && ! printf '%s' "$assistants_response" | jq -e . >/dev/null 2>&1; then
+  echo "Foundry assistants API returned a non-JSON response:"
+  printf '%s\n' "$assistants_response" | head -c 1000
+  echo
+  exit 1
+fi
+existing_agent_id="$(printf '%s' "$assistants_response" \
   | jq -r --arg name "$agent_name" '.data[]? | select(.name == $name) | .id' \
   | head -n 1 || true)"
 
@@ -727,11 +736,17 @@ else
     end
   ')"
 
-  agent_id="$(foundry_api POST \
+  agent_response="$(foundry_api POST \
     "$foundry_project_endpoint/assistants?api-version=v1" \
     "$agent_token" \
-    "$agent_payload" \
-    | jq -r '.id')"
+    "$agent_payload")"
+  if ! printf '%s' "$agent_response" | jq -e . >/dev/null 2>&1; then
+    echo "Foundry agent create API returned a non-JSON response:"
+    printf '%s\n' "$agent_response" | head -c 1000
+    echo
+    exit 1
+  fi
+  agent_id="$(printf '%s' "$agent_response" | jq -r '.id')"
 fi
 
 echo
