@@ -712,7 +712,24 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           sortable: false,
           facetable: true
         }
-      ]
+      ],
+      semantic: {
+        configurations: [
+          {
+            name: "default-semantic",
+            prioritizedFields: {
+              titleField: {
+                fieldName: "metadata_storage_name"
+              },
+              prioritizedContentFields: [
+                {
+                  fieldName: "content"
+                }
+              ]
+            }
+          }
+        ]
+      }
     }')"
   search_api_with_retry PUT \
     "$search_endpoint/indexes/$search_index_name?api-version=2024-07-01" \
