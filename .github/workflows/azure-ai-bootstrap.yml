@@ -18,6 +18,19 @@ on:
         required: false
         default: docintelligence-talentsuite-dev
         type: string
+      document_intelligence_custom_domain:
+        description: Azure AI Document Intelligence custom domain
+        required: false
+        default: docintelligence-talentsuite-dev
+        type: string
+      document_intelligence_sku:
+        description: Azure AI Document Intelligence SKU
+        required: true
+        default: S0
+        type: choice
+        options:
+          - S0
+          - F0
       foundry_account:
         description: Azure AI Foundry account name
         required: false
@@ -132,6 +145,14 @@ jobs:
 
           if [ -n "${{ github.event.inputs.document_intelligence_account }}" ]; then
             args+=(--document-intelligence-account "${{ github.event.inputs.document_intelligence_account }}")
+          fi
+
+          if [ -n "${{ github.event.inputs.document_intelligence_custom_domain }}" ]; then
+            args+=(--document-intelligence-custom-domain "${{ github.event.inputs.document_intelligence_custom_domain }}")
+          fi
+
+          if [ -n "${{ github.event.inputs.document_intelligence_sku }}" ]; then
+            args+=(--document-intelligence-sku "${{ github.event.inputs.document_intelligence_sku }}")
           fi
 
           if [ -n "${{ github.event.inputs.foundry_account }}" ]; then

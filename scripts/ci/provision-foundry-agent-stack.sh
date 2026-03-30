@@ -11,6 +11,7 @@ Usage:
     --location <azure-region> \
     [--document-intelligence-account <name>] \
     [--document-intelligence-sku <sku>] \
+    [--document-intelligence-custom-domain <name>] \
     [--openai-account <name>] \
     [--openai-sku <sku>] \
     [--openai-model-deployment <deployment-name>] \
@@ -328,6 +329,7 @@ resource_group=""
 location=""
 document_intelligence_account_name=""
 document_intelligence_sku=""
+document_intelligence_custom_domain=""
 openai_account_name=""
 openai_sku=""
 openai_model_deployment=""
@@ -373,6 +375,10 @@ while [ $# -gt 0 ]; do
       ;;
     --document-intelligence-sku)
       document_intelligence_sku="${2:-}"
+      shift 2
+      ;;
+    --document-intelligence-custom-domain)
+      document_intelligence_custom_domain="${2:-}"
       shift 2
       ;;
     --openai-account)
@@ -489,6 +495,7 @@ require_value "--location" "$location"
 
 document_intelligence_account_name="${document_intelligence_account_name:-docintelligence-talentsuite-dev}"
 document_intelligence_sku="${document_intelligence_sku:-S0}"
+document_intelligence_custom_domain="${document_intelligence_custom_domain:-$document_intelligence_account_name}"
 openai_account_name="${openai_account_name:-$(slugify "${resource_group}-openai" | cut -c1-24)}"
 openai_sku="${openai_sku:-S0}"
 openai_model_deployment="${openai_model_deployment:-gpt-4-1}"
@@ -529,8 +536,15 @@ if ! az cognitiveservices account show --name "$document_intelligence_account_na
     --location "$location" \
     --kind FormRecognizer \
     --sku "$document_intelligence_sku" \
+    --custom-domain "$document_intelligence_custom_domain" \
     --yes >/dev/null
 fi
+
+echo "Ensuring Azure AI Document Intelligence custom subdomain $document_intelligence_custom_domain"
+az cognitiveservices account update \
+  --name "$document_intelligence_account_name" \
+  --resource-group "$resource_group" \
+  --custom-domain "$document_intelligence_custom_domain" >/dev/null
 
 echo "Ensuring Azure OpenAI account $openai_account_name"
 if ! az cognitiveservices account show --name "$openai_account_name" --resource-group "$resource_group" >/dev/null 2>&1; then
@@ -1042,6 +1056,7 @@ fi
 echo
 echo "Created resources:"
 echo "  Azure AI Document Intelligence account: $document_intelligence_account_name"
+echo "  Azure AI Document Intelligence custom domain: $document_intelligence_custom_domain"
 echo "  Azure AI Document Intelligence endpoint: $document_intelligence_endpoint"
 echo "  Azure OpenAI account: $openai_account_name"
 echo "  Azure OpenAI endpoint: $openai_endpoint"
