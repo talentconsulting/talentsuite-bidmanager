@@ -9,6 +9,8 @@ Usage:
     --subscription <subscription-id-or-name> \
     --resource-group <resource-group> \
     --location <azure-region> \
+    [--document-intelligence-account <name>] \
+    [--document-intelligence-sku <sku>] \
     [--openai-account <name>] \
     [--openai-sku <sku>] \
     [--openai-model-deployment <deployment-name>] \
@@ -36,6 +38,7 @@ Usage:
 
 Purpose:
   Creates the Azure AI resources this application needs:
+  - Azure AI Document Intelligence resource
   - Azure OpenAI account and model deployment
   - Azure AI Search service
   - Azure AI Foundry resource
@@ -323,6 +326,8 @@ is_foundry_search_tool_schema_error() {
 subscription=""
 resource_group=""
 location=""
+document_intelligence_account_name=""
+document_intelligence_sku=""
 openai_account_name=""
 openai_sku=""
 openai_model_deployment=""
@@ -360,6 +365,14 @@ while [ $# -gt 0 ]; do
       ;;
     --location)
       location="${2:-}"
+      shift 2
+      ;;
+    --document-intelligence-account)
+      document_intelligence_account_name="${2:-}"
+      shift 2
+      ;;
+    --document-intelligence-sku)
+      document_intelligence_sku="${2:-}"
       shift 2
       ;;
     --openai-account)
@@ -474,6 +487,8 @@ require_value "--subscription" "$subscription"
 require_value "--resource-group" "$resource_group"
 require_value "--location" "$location"
 
+document_intelligence_account_name="${document_intelligence_account_name:-docintelligence-talentsuite-dev}"
+document_intelligence_sku="${document_intelligence_sku:-S0}"
 openai_account_name="${openai_account_name:-$(slugify "${resource_group}-openai" | cut -c1-24)}"
 openai_sku="${openai_sku:-S0}"
 openai_model_deployment="${openai_model_deployment:-gpt-4-1}"
@@ -505,6 +520,17 @@ az account set --subscription "$subscription"
 az group create \
   --name "$resource_group" \
   --location "$location" >/dev/null
+
+echo "Ensuring Azure AI Document Intelligence account $document_intelligence_account_name"
+if ! az cognitiveservices account show --name "$document_intelligence_account_name" --resource-group "$resource_group" >/dev/null 2>&1; then
+  az cognitiveservices account create \
+    --name "$document_intelligence_account_name" \
+    --resource-group "$resource_group" \
+    --location "$location" \
+    --kind FormRecognizer \
+    --sku "$document_intelligence_sku" \
+    --yes >/dev/null
+fi
 
 echo "Ensuring Azure OpenAI account $openai_account_name"
 if ! az cognitiveservices account show --name "$openai_account_name" --resource-group "$resource_group" >/dev/null 2>&1; then
@@ -774,6 +800,14 @@ if [ "$auto_index_blob_storage" = "true" ]; then
     "$search_endpoint/indexers/$search_indexer_name/run?api-version=2024-07-01" \
     "$search_primary_key" >/dev/null
 fi
+document_intelligence_endpoint="$(az cognitiveservices account show \
+  --name "$document_intelligence_account_name" \
+  --resource-group "$resource_group" \
+  --query properties.endpoint -o tsv)"
+document_intelligence_api_key="$(az cognitiveservices account keys list \
+  --name "$document_intelligence_account_name" \
+  --resource-group "$resource_group" \
+  --query key1 -o tsv)"
 openai_endpoint="$(az cognitiveservices account show \
   --name "$openai_account_name" \
   --resource-group "$resource_group" \
@@ -1007,6 +1041,8 @@ fi
 
 echo
 echo "Created resources:"
+echo "  Azure AI Document Intelligence account: $document_intelligence_account_name"
+echo "  Azure AI Document Intelligence endpoint: $document_intelligence_endpoint"
 echo "  Azure OpenAI account: $openai_account_name"
 echo "  Azure OpenAI endpoint: $openai_endpoint"
 echo "  Azure OpenAI deployment: $openai_model_deployment"
@@ -1042,6 +1078,8 @@ fi
 
 echo
 echo "App configuration values:"
+echo "  DocumentIntelligence__Endpoint=$document_intelligence_endpoint"
+echo "  DocumentIntelligence__ApiKey=$document_intelligence_api_key"
 echo "  AzureOpenAI__Endpoint=$openai_endpoint"
 echo "  AzureOpenAI__ApiKey=$openai_api_key"
 echo "  AzureOpenAI__ChatDeployment=$openai_model_deployment"

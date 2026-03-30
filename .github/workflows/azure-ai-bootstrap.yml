@@ -13,6 +13,11 @@ on:
         required: true
         default: uksouth
         type: string
+      document_intelligence_account:
+        description: Azure AI Document Intelligence account name
+        required: false
+        default: docintelligence-talentsuite-dev
+        type: string
       foundry_account:
         description: Azure AI Foundry account name
         required: false
@@ -124,6 +129,10 @@ jobs:
             --openai-model-version "${{ github.event.inputs.openai_model_version }}"
             --emit-azd-env
           )
+
+          if [ -n "${{ github.event.inputs.document_intelligence_account }}" ]; then
+            args+=(--document-intelligence-account "${{ github.event.inputs.document_intelligence_account }}")
+          fi
 
           if [ -n "${{ github.event.inputs.foundry_account }}" ]; then
             args+=(--foundry-account "${{ github.event.inputs.foundry_account }}")
