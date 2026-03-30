@@ -10,15 +10,15 @@ on:
       location:
         description: Azure region for new resources
         required: true
-        default: swedencentral
+        default: uksouth
         type: string
       foundry_account:
         description: Azure AI Foundry account name
-        required: true
+        required: false
         type: string
       foundry_project:
         description: Azure AI Foundry project name
-        required: true
+        required: false
         type: string
       agent_name:
         description: Azure AI Foundry agent name
@@ -98,8 +98,6 @@ jobs:
           test -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
           test -n "${{ github.event.inputs.resource_group }}" || (echo "resource_group input missing" && exit 1)
           test -n "${{ github.event.inputs.location }}" || (echo "location input missing" && exit 1)
-          test -n "${{ github.event.inputs.foundry_account }}" || (echo "foundry_account input missing" && exit 1)
-          test -n "${{ github.event.inputs.foundry_project }}" || (echo "foundry_project input missing" && exit 1)
           test -n "${{ github.event.inputs.agent_name }}" || (echo "agent_name input missing" && exit 1)
 
       - name: Bootstrap Azure AI resources
@@ -113,14 +111,20 @@ jobs:
             --subscription "${AZURE_SUBSCRIPTION_ID}"
             --resource-group "${{ github.event.inputs.resource_group }}"
             --location "${{ github.event.inputs.location }}"
-            --foundry-account "${{ github.event.inputs.foundry_account }}"
-            --foundry-project "${{ github.event.inputs.foundry_project }}"
             --agent-name "${{ github.event.inputs.agent_name }}"
             --openai-model-deployment "${{ github.event.inputs.openai_model_deployment }}"
             --openai-model-name "${{ github.event.inputs.openai_model_name }}"
             --openai-model-version "${{ github.event.inputs.openai_model_version }}"
             --emit-azd-env
           )
+
+          if [ -n "${{ github.event.inputs.foundry_account }}" ]; then
+            args+=(--foundry-account "${{ github.event.inputs.foundry_account }}")
+          fi
+
+          if [ -n "${{ github.event.inputs.foundry_project }}" ]; then
+            args+=(--foundry-project "${{ github.event.inputs.foundry_project }}")
+          fi
 
           if [ -n "${{ github.event.inputs.openai_account }}" ]; then
             args+=(--openai-account "${{ github.event.inputs.openai_account }}")
@@ -156,4 +160,3 @@ jobs:
             cat "$output_file"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-
