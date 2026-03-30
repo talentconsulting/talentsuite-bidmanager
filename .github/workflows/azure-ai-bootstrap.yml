@@ -149,12 +149,12 @@ jobs:
             args+=(--auto-index-blob-storage)
           fi
 
-          if [ -n "${{ github.event.inputs.storage_account }}" ]; then
-            args+=(--storage-account "${{ github.event.inputs.storage_account }}")
+          if [ -n "${{ github.event.inputs.storage_account || 'bidcontentstoragemwfumoe' }}" ]; then
+            args+=(--storage-account "${{ github.event.inputs.storage_account || 'bidcontentstoragemwfumoe' }}")
           fi
 
-          if [ -n "${{ github.event.inputs.storage_container }}" ]; then
-            args+=(--storage-container "${{ github.event.inputs.storage_container }}")
+          if [ -n "${{ github.event.inputs.storage_container || 'bidlibrary' }}" ]; then
+            args+=(--storage-container "${{ github.event.inputs.storage_container || 'bidlibrary' }}")
           fi
 
           output_file="$(mktemp)"
