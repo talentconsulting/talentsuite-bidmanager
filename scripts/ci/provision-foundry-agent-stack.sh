@@ -762,10 +762,6 @@ if [ "$auto_index_blob_storage" = "true" ]; then
   echo "Ensuring Azure AI Search index $search_index_name"
   index_payload="$(jq -n \
     --arg name "$search_index_name" \
-    --arg openAiEndpoint "$openai_endpoint" \
-    --arg openAiApiKey "$openai_api_key" \
-    --arg embeddingDeployment "$openai_embedding_deployment" \
-    --arg embeddingModelName "$openai_embedding_model_name" \
     '{
       name: $name,
       fields: [
@@ -846,20 +842,8 @@ if [ "$auto_index_blob_storage" = "true" ]; then
         profiles: [
           {
             name: "content-vector-profile",
-            algorithm: "content-vector-hnsw",
-            vectorizer: "content-vectorizer"
+            algorithm: "content-vector-hnsw"
           }
-        ],
-        vectorizers: [
-          {
-            name: "content-vectorizer",
-            kind: "azureOpenAI",
-            azureOpenAIParameters: {
-              resourceUri: $openAiEndpoint,
-              apiKey: $openAiApiKey,
-              deploymentId: $embeddingDeployment,
-              modelName: $embeddingModelName
-            }
           }
         ]
       },
@@ -881,10 +865,16 @@ if [ "$auto_index_blob_storage" = "true" ]; then
         ]
       }
     }')"
-  search_api_with_retry PUT \
+  index_response="$(search_api_with_retry PUT \
     "$search_endpoint/indexes/$search_index_name?api-version=2024-07-01" \
     "$search_primary_key" \
-    "$index_payload" >/dev/null
+    "$index_payload" || true)"
+  if [ -n "$index_response" ] && ! printf '%s' "$index_response" | jq -e . >/dev/null 2>&1; then
+    echo "Azure AI Search index API returned a non-JSON response:"
+    printf '%s\n' "$index_response" | head -c 1000
+    echo
+    exit 1
+  fi
 
   echo "Ensuring Azure AI Search skillset $search_skillset_name"
   skillset_payload="$(jq -n \
