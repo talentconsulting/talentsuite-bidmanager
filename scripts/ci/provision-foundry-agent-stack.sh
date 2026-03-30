@@ -75,6 +75,7 @@ command -v jq >/dev/null || (echo "jq is required." && exit 1)
 
 search_api_version="2025-09-01"
 search_knowledge_api_version="2025-11-01-preview"
+foundry_api_version="2025-11-15-preview"
 
 require_value() {
   local name="$1"
@@ -1263,18 +1264,19 @@ fi
 echo "Ensuring Foundry agent $agent_name"
 agent_token="$(get_foundry_access_token)"
 require_value "Foundry access token" "$agent_token"
-assistants_response="$(foundry_api_with_retry GET \
-  "$foundry_project_endpoint/assistants?api-version=v1" \
+existing_agent_response="$(foundry_api GET \
+  "$foundry_project_endpoint/agents/$agent_name?api-version=$foundry_api_version" \
   "$agent_token" || true)"
-if [ -n "$assistants_response" ] && ! printf '%s' "$assistants_response" | jq -e . >/dev/null 2>&1; then
-  echo "Foundry assistants API returned a non-JSON response:"
-  printf '%s\n' "$assistants_response" | head -c 1000
+if [ -n "$existing_agent_response" ] && printf '%s' "$existing_agent_response" | grep -q "^HTTP 404"; then
+  existing_agent_id=""
+elif [ -n "$existing_agent_response" ] && ! printf '%s' "$existing_agent_response" | jq -e . >/dev/null 2>&1; then
+  echo "Foundry agents API returned a non-JSON response:"
+  printf '%s\n' "$existing_agent_response" | head -c 1000
   echo
   exit 1
+else
+  existing_agent_id="$(printf '%s' "$existing_agent_response" | jq -r '.id // empty')"
 fi
-existing_agent_id="$(printf '%s' "$assistants_response" \
-  | jq -r --arg name "$agent_name" '.data[]? | select(.name == $name) | .id' \
-  | head -n 1 || true)"
 
 if [ -n "$existing_agent_id" ]; then
   agent_id="$existing_agent_id"
@@ -1288,35 +1290,41 @@ else
     --arg indexName "$search_index_name" '
     if $connectionId != "" and $indexName != "" then
       {
-        model: $model,
         name: $name,
-        instructions: $instructions,
-        tools: [
-          {
-            type: "azure_ai_search",
-            azure_ai_search: {
-              indexes: [
-                {
-                  project_connection_id: $connectionId,
-                  index_name: $indexName,
-                  query_type: "simple"
-                }
-              ]
+        definition: {
+          kind: "prompt",
+          model: $model,
+          instructions: $instructions,
+          tools: [
+            {
+              type: "azure_ai_search",
+              azure_ai_search: {
+                indexes: [
+                  {
+                    project_connection_id: $connectionId,
+                    index_name: $indexName,
+                    query_type: "simple"
+                  }
+                ]
+              }
             }
-          }
-        ]
+          ]
+        }
       }
     else
       {
-        model: $model,
         name: $name,
-        instructions: $instructions
+        definition: {
+          kind: "prompt",
+          model: $model,
+          instructions: $instructions
+        }
       }
     end
   ')"
 
   agent_response="$(foundry_api_with_retry POST \
-    "$foundry_project_endpoint/assistants?api-version=v1" \
+    "$foundry_project_endpoint/agents?api-version=$foundry_api_version" \
     "$agent_token" \
     "$agent_payload" || true)"
   if ! printf '%s' "$agent_response" | jq -e . >/dev/null 2>&1; then
@@ -1332,12 +1340,15 @@ else
         --arg name "$agent_name" \
         --arg instructions "$agent_instructions" \
         '{
-          model: $model,
           name: $name,
-          instructions: $instructions
+          definition: {
+            kind: "prompt",
+            model: $model,
+            instructions: $instructions
+          }
         }')"
       agent_response="$(foundry_api_with_retry POST \
-        "$foundry_project_endpoint/assistants?api-version=v1" \
+        "$foundry_project_endpoint/agents?api-version=$foundry_api_version" \
         "$agent_token" \
         "$plain_agent_payload" || true)"
       if ! printf '%s' "$agent_response" | jq -e . >/dev/null 2>&1; then
