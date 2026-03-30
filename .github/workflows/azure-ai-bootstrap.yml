@@ -6,6 +6,7 @@ on:
       resource_group:
         description: Azure resource group to create/update
         required: true
+        default: rg-dev
         type: string
       location:
         description: Azure region for new resources
@@ -15,10 +16,12 @@ on:
       foundry_account:
         description: Azure AI Foundry account name
         required: false
+        default: foundry-talentsuite
         type: string
       foundry_project:
         description: Azure AI Foundry project name
         required: false
+        default: foundry-prj-talentsuite-dev
         type: string
       agent_name:
         description: Azure AI Foundry agent name
@@ -28,6 +31,7 @@ on:
       openai_account:
         description: Azure OpenAI account name override
         required: false
+        default: ""
         type: string
       openai_model_deployment:
         description: Azure OpenAI deployment name
@@ -47,10 +51,12 @@ on:
       search_service:
         description: Azure AI Search service name override
         required: false
+        default: aisearch-talentsuite-dev
         type: string
       search_index_name:
         description: Existing or desired Azure AI Search index name
         required: false
+        default: index-talentsuite-dev
         type: string
       auto_index_blob_storage:
         description: Discover Aspire bid blob storage and build Search datasource/index/indexer
@@ -60,6 +66,7 @@ on:
       storage_account:
         description: Optional storage account override for blob indexing
         required: false
+        default: bidcontentstoragemwfumoe
         type: string
       storage_container:
         description: Optional blob container override for blob indexing
