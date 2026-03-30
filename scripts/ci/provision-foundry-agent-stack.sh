@@ -176,7 +176,7 @@ get_foundry_access_token() {
   local token=""
 
   token="$(az account get-access-token \
-    --resource "https://cognitiveservices.azure.com" \
+    --resource "https://ai.azure.com" \
     --query accessToken -o tsv 2>/dev/null || true)"
   if [ -n "$token" ]; then
     printf '%s' "$token"
@@ -185,6 +185,14 @@ get_foundry_access_token() {
 
   token="$(az account get-access-token \
     --scope "https://ai.azure.com/.default" \
+    --query accessToken -o tsv 2>/dev/null || true)"
+  if [ -n "$token" ]; then
+    printf '%s' "$token"
+    return 0
+  fi
+
+  token="$(az account get-access-token \
+    --resource "https://cognitiveservices.azure.com" \
     --query accessToken -o tsv 2>/dev/null || true)"
   printf '%s' "$token"
 }
