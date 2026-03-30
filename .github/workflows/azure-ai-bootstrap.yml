@@ -66,6 +66,21 @@ on:
         required: false
         default: 2025-04-14
         type: string
+      openai_secondary_deployment:
+        description: Azure OpenAI secondary deployment name
+        required: false
+        default: gpt-4o
+        type: string
+      openai_secondary_model_name:
+        description: Azure OpenAI secondary model name
+        required: false
+        default: gpt-4o
+        type: string
+      openai_secondary_model_version:
+        description: Azure OpenAI secondary model version
+        required: false
+        default: 2024-11-20
+        type: string
       search_service:
         description: Azure AI Search service name override
         required: false
@@ -140,6 +155,9 @@ jobs:
             --openai-model-deployment "${{ github.event.inputs.openai_model_deployment }}"
             --openai-model-name "${{ github.event.inputs.openai_model_name }}"
             --openai-model-version "${{ github.event.inputs.openai_model_version }}"
+            --openai-secondary-deployment "${{ github.event.inputs.openai_secondary_deployment }}"
+            --openai-secondary-model-name "${{ github.event.inputs.openai_secondary_model_name }}"
+            --openai-secondary-model-version "${{ github.event.inputs.openai_secondary_model_version }}"
             --emit-azd-env
           )
 

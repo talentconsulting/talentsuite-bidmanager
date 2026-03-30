@@ -18,6 +18,10 @@ Usage:
     [--openai-model-name <model-name>] \
     [--openai-model-version <version>] \
     [--openai-model-capacity <capacity>] \
+    [--openai-secondary-deployment <deployment-name>] \
+    [--openai-secondary-model-name <model-name>] \
+    [--openai-secondary-model-version <version>] \
+    [--openai-secondary-model-capacity <capacity>] \
     [--openai-embedding-deployment <deployment-name>] \
     [--openai-embedding-model-name <model-name>] \
     [--openai-embedding-model-version <version>] \
@@ -381,6 +385,10 @@ openai_model_deployment=""
 openai_model_name=""
 openai_model_version=""
 openai_model_capacity=""
+openai_secondary_deployment=""
+openai_secondary_model_name=""
+openai_secondary_model_version=""
+openai_secondary_model_capacity=""
 openai_embedding_deployment=""
 openai_embedding_model_name=""
 openai_embedding_model_version=""
@@ -453,6 +461,22 @@ while [ $# -gt 0 ]; do
       ;;
     --openai-model-capacity)
       openai_model_capacity="${2:-}"
+      shift 2
+      ;;
+    --openai-secondary-deployment)
+      openai_secondary_deployment="${2:-}"
+      shift 2
+      ;;
+    --openai-secondary-model-name)
+      openai_secondary_model_name="${2:-}"
+      shift 2
+      ;;
+    --openai-secondary-model-version)
+      openai_secondary_model_version="${2:-}"
+      shift 2
+      ;;
+    --openai-secondary-model-capacity)
+      openai_secondary_model_capacity="${2:-}"
       shift 2
       ;;
     --openai-embedding-deployment)
@@ -572,6 +596,10 @@ openai_model_deployment="${openai_model_deployment:-gpt-4-1}"
 openai_model_name="${openai_model_name:-gpt-4.1}"
 openai_model_version="${openai_model_version:-2025-04-14}"
 openai_model_capacity="${openai_model_capacity:-10}"
+openai_secondary_deployment="${openai_secondary_deployment:-gpt-4o}"
+openai_secondary_model_name="${openai_secondary_model_name:-gpt-4o}"
+openai_secondary_model_version="${openai_secondary_model_version:-2024-11-20}"
+openai_secondary_model_capacity="${openai_secondary_model_capacity:-10}"
 openai_embedding_deployment="${openai_embedding_deployment:-text-embedding-3-small}"
 openai_embedding_model_name="${openai_embedding_model_name:-text-embedding-3-small}"
 openai_embedding_model_version="${openai_embedding_model_version:-1}"
@@ -647,6 +675,24 @@ if ! az cognitiveservices account deployment show \
     --model-version "$openai_model_version" \
     --sku-name GlobalStandard \
     --sku-capacity "$openai_model_capacity" >/dev/null
+fi
+
+if [ -n "$openai_secondary_deployment" ]; then
+  echo "Ensuring Azure OpenAI secondary deployment $openai_secondary_deployment"
+  if ! az cognitiveservices account deployment show \
+    --name "$openai_account_name" \
+    --resource-group "$resource_group" \
+    --deployment-name "$openai_secondary_deployment" >/dev/null 2>&1; then
+    az cognitiveservices account deployment create \
+      --name "$openai_account_name" \
+      --resource-group "$resource_group" \
+      --deployment-name "$openai_secondary_deployment" \
+      --model-format OpenAI \
+      --model-name "$openai_secondary_model_name" \
+      --model-version "$openai_secondary_model_version" \
+      --sku-name GlobalStandard \
+      --sku-capacity "$openai_secondary_model_capacity" >/dev/null
+  fi
 fi
 
 echo "Ensuring Azure OpenAI embedding deployment $openai_embedding_deployment"
@@ -1317,6 +1363,9 @@ echo "  Azure AI Document Intelligence endpoint: $document_intelligence_endpoint
 echo "  Azure OpenAI account: $openai_account_name"
 echo "  Azure OpenAI endpoint: $openai_endpoint"
 echo "  Azure OpenAI deployment: $openai_model_deployment"
+if [ -n "$openai_secondary_deployment" ]; then
+  echo "  Azure OpenAI secondary deployment: $openai_secondary_deployment"
+fi
 echo "  Azure AI Search service: $search_service_name"
 echo "  Azure AI Search endpoint: $search_endpoint"
 if [ -n "$storage_account_name" ]; then
