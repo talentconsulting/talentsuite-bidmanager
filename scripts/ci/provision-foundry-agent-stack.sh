@@ -146,24 +146,42 @@ search_api() {
   local url="$2"
   local api_key="$3"
   local payload="${4:-}"
+  local response_file
+  local http_code
+
+  response_file="$(mktemp)"
 
   if [ -n "$payload" ] || [ "$method" = "POST" ] || [ "$method" = "PUT" ] || [ "$method" = "PATCH" ]; then
     if [ -z "$payload" ]; then
       payload='{}'
     fi
 
-    curl -fsS \
+    http_code="$(curl -sS \
       -X "$method" \
       -H "Content-Type: application/json" \
       -H "api-key: $api_key" \
       "$url" \
-      --data "$payload"
+      --data "$payload" \
+      -o "$response_file" \
+      -w '%{http_code}')"
   else
-    curl -fsS \
+    http_code="$(curl -sS \
       -X "$method" \
       -H "api-key: $api_key" \
-      "$url"
+      "$url" \
+      -o "$response_file" \
+      -w '%{http_code}')"
   fi
+
+  if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+    echo "HTTP $http_code"
+    cat "$response_file"
+    rm -f "$response_file"
+    return 1
+  fi
+
+  cat "$response_file"
+  rm -f "$response_file"
 }
 
 search_api_with_retry() {
@@ -694,27 +712,7 @@ if [ "$auto_index_blob_storage" = "true" ]; then
           sortable: false,
           facetable: true
         }
-      ],
-      semantic: {
-        defaultConfiguration: "default-semantic",
-        configurations: [
-          {
-            name: "default-semantic",
-            prioritizedFields: {
-              contentFields: [
-                {
-                  fieldName: "content"
-                }
-              ],
-              keywordsFields: [
-                {
-                  fieldName: "metadata_storage_name"
-                }
-              ]
-            }
-          }
-        ]
-      }
+      ]
     }')"
   search_api_with_retry PUT \
     "$search_endpoint/indexes/$search_index_name?api-version=2024-07-01" \
@@ -795,7 +793,7 @@ if [ -n "$search_index_name" ]; then
       description: "Knowledge source backed by the Azure AI Search index for TalentSuite.",
       searchIndexParameters: {
         searchIndexName: $indexName,
-        semanticConfigurationName: "default-semantic",
+        semanticConfigurationName: null,
         sourceDataFields: [
           { name: "content" },
           { name: "metadata_storage_name" },
