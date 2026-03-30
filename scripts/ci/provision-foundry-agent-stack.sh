@@ -1285,7 +1285,7 @@ if [ -n "$existing_agent_id" ]; then
 else
   agent_created_without_search_tool="false"
   agent_payload="$(jq -n \
-    --arg model "$openai_model_deployment" \
+    --arg model "$foundry_model_deployment" \
     --arg name "$agent_name" \
     --arg instructions "$agent_instructions" \
     --arg connectionId "$connection_id" \
@@ -1334,7 +1334,7 @@ else
       echo "Foundry agent create endpoint does not accept Azure AI Search tool wiring in this API shape."
       echo "Falling back to creating a plain agent without search tool configuration."
       plain_agent_payload="$(jq -n \
-        --arg model "$openai_model_deployment" \
+        --arg model "$foundry_model_deployment" \
         --arg name "$agent_name" \
         --arg instructions "$agent_instructions" \
         '{
