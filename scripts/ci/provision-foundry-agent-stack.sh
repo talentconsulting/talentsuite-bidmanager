@@ -608,42 +608,32 @@ foundry_project_endpoint="https://${foundry_account_name}.services.ai.azure.com/
 connection_id=""
 if [ -n "$search_index_name" ]; then
   echo "Ensuring project connection $search_connection_name to Azure AI Search"
-  connection_file="$(mktemp)"
-  cat > "$connection_file" <<EOF
-{
-  "type": "ApiKey",
-  "properties": {
-    "category": "CognitiveSearch",
-    "target": "$search_endpoint",
-    "authType": "ApiKey",
-    "credentials": {
-      "key": "$search_primary_key"
-    }
-  }
-}
-EOF
+  subscription_id="$(az account show --query id -o tsv)"
+  management_token="$(az account get-access-token \
+    --resource "https://management.azure.com" \
+    --query accessToken -o tsv)"
+  connection_id="/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.CognitiveServices/accounts/${foundry_account_name}/projects/${foundry_project_name}/connections/${search_connection_name}"
+  connection_url="https://management.azure.com${connection_id}?api-version=2025-06-01"
+  connection_payload="$(jq -n \
+    --arg target "$search_endpoint" \
+    --arg searchKey "$search_primary_key" \
+    '{
+      properties: {
+        category: "CognitiveSearch",
+        target: $target,
+        authType: "ApiKey",
+        credentials: {
+          key: $searchKey
+        }
+      }
+    }')"
 
-  if ! az cognitiveservices account project connection show \
-    --name "$foundry_account_name" \
-    --resource-group "$resource_group" \
-    --project-name "$foundry_project_name" \
-    --connection-name "$search_connection_name" >/dev/null 2>&1; then
-    az cognitiveservices account project connection create \
-      --name "$foundry_account_name" \
-      --resource-group "$resource_group" \
-      --project-name "$foundry_project_name" \
-      --connection-name "$search_connection_name" \
-      --file "$connection_file" >/dev/null
-  fi
-
-  rm -f "$connection_file"
-
-  connection_id="$(az cognitiveservices account project connection show \
-    --name "$foundry_account_name" \
-    --resource-group "$resource_group" \
-    --project-name "$foundry_project_name" \
-    --connection-name "$search_connection_name" \
-    --query id -o tsv)"
+  curl -fsS \
+    -X PUT \
+    -H "Authorization: Bearer $management_token" \
+    -H "Content-Type: application/json" \
+    "$connection_url" \
+    --data "$connection_payload" >/dev/null
 fi
 
 echo "Ensuring Foundry agent $agent_name"
