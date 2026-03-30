@@ -189,6 +189,45 @@ get_foundry_access_token() {
   printf '%s' "$token"
 }
 
+get_current_principal_object_id() {
+  local arm_token payload padding principal_id
+
+  arm_token="$(az account get-access-token --resource-type arm --query accessToken -o tsv 2>/dev/null || true)"
+  if [ -z "$arm_token" ]; then
+    return 1
+  fi
+
+  payload="$(printf '%s' "$arm_token" | cut -d'.' -f2 | tr '_-' '/+')"
+  padding=$(( (4 - ${#payload} % 4) % 4 ))
+  payload="${payload}$(printf '=%.0s' $(seq 1 "$padding"))"
+  principal_id="$(printf '%s' "$payload" | base64 --decode --ignore-garbage 2>/dev/null | jq -r '.oid // empty')"
+
+  if [ -n "$principal_id" ]; then
+    printf '%s' "$principal_id"
+    return 0
+  fi
+
+  return 1
+}
+
+ensure_role_assignment() {
+  local principal_id="$1"
+  local role_name="$2"
+  local scope="$3"
+
+  if ! az role assignment list \
+    --assignee-object-id "$principal_id" \
+    --scope "$scope" \
+    --query "[?roleDefinitionName=='${role_name}'][0].id" \
+    -o tsv | grep -q .; then
+    az role assignment create \
+      --assignee-object-id "$principal_id" \
+      --assignee-principal-type ServicePrincipal \
+      --role "$role_name" \
+      --scope "$scope" >/dev/null
+  fi
+}
+
 foundry_api() {
   local method="$1"
   local url="$2"
@@ -653,6 +692,20 @@ foundry_base_endpoint="$(az cognitiveservices account show \
   --query properties.endpoint -o tsv)"
 require_value "Azure AI Foundry endpoint" "$foundry_base_endpoint"
 foundry_project_endpoint="${foundry_base_endpoint%/}/api/projects/${foundry_project_name}"
+foundry_account_id="$(az cognitiveservices account show \
+  --name "$foundry_account_name" \
+  --resource-group "$resource_group" \
+  --query id -o tsv)"
+require_value "Azure AI Foundry account resource id" "$foundry_account_id"
+foundry_project_id="${foundry_account_id}/projects/${foundry_project_name}"
+current_principal_id="$(get_current_principal_object_id || true)"
+if [ -n "$current_principal_id" ]; then
+  echo "Ensuring current principal has Azure AI User on Foundry account and project"
+  ensure_role_assignment "$current_principal_id" "Azure AI User" "$foundry_account_id"
+  ensure_role_assignment "$current_principal_id" "Azure AI User" "$foundry_project_id"
+  echo "Waiting for Azure AI User role assignment to propagate"
+  sleep 30
+fi
 
 connection_id=""
 if [ -n "$search_index_name" ]; then
