@@ -647,7 +647,12 @@ openai_api_key="$(az cognitiveservices account keys list \
   --name "$openai_account_name" \
   --resource-group "$resource_group" \
   --query key1 -o tsv)"
-foundry_project_endpoint="https://${foundry_account_name}.ai.azure.com/api/projects/${foundry_project_name}"
+foundry_base_endpoint="$(az cognitiveservices account show \
+  --name "$foundry_account_name" \
+  --resource-group "$resource_group" \
+  --query properties.endpoint -o tsv)"
+require_value "Azure AI Foundry endpoint" "$foundry_base_endpoint"
+foundry_project_endpoint="${foundry_base_endpoint%/}/api/projects/${foundry_project_name}"
 
 connection_id=""
 if [ -n "$search_index_name" ]; then
