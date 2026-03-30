@@ -75,6 +75,27 @@ json_escape() {
   printf '%s' "$1" | jq -Rs .
 }
 
+retry_command() {
+  local attempts="$1"
+  local delay_seconds="$2"
+  shift 2
+
+  local attempt=1
+  while true; do
+    if "$@"; then
+      return 0
+    fi
+
+    if [ "$attempt" -ge "$attempts" ]; then
+      return 1
+    fi
+
+    echo "Retry $attempt/$attempts failed. Waiting ${delay_seconds}s before retry."
+    sleep "$delay_seconds"
+    attempt=$((attempt + 1))
+  done
+}
+
 resolve_aspire_storage_account() {
   local rg="$1"
   local resolved=""
@@ -136,6 +157,15 @@ search_api() {
       -H "api-key: $api_key" \
       "$url"
   fi
+}
+
+search_api_with_retry() {
+  local method="$1"
+  local url="$2"
+  local api_key="$3"
+  local payload="${4:-}"
+
+  retry_command 6 20 search_api "$method" "$url" "$api_key" "$payload"
 }
 
 subscription=""
@@ -422,6 +452,9 @@ if [ "$auto_index_blob_storage" = "true" ]; then
       --scope "$storage_resource_id" >/dev/null
   fi
 
+  echo "Waiting for Storage Blob Data Reader role assignment to propagate"
+  sleep 30
+
   echo "Ensuring blob container $storage_container_name in storage account $storage_account_name"
   az storage container create \
     --name "$storage_container_name" \
@@ -447,7 +480,7 @@ if [ "$auto_index_blob_storage" = "true" ]; then
         highWaterMarkColumnName: "metadata_storage_last_modified"
       }
     }')"
-  search_api PUT \
+  search_api_with_retry PUT \
     "$search_endpoint/datasources/$search_datasource_name?api-version=2024-07-01" \
     "$search_primary_key" \
     "$datasource_payload" >/dev/null
@@ -515,7 +548,7 @@ if [ "$auto_index_blob_storage" = "true" ]; then
         }
       ]
     }')"
-  search_api PUT \
+  search_api_with_retry PUT \
     "$search_endpoint/indexes/$search_index_name?api-version=2024-07-01" \
     "$search_primary_key" \
     "$index_payload" >/dev/null
@@ -548,13 +581,13 @@ if [ "$auto_index_blob_storage" = "true" ]; then
         }
       ]
     }')"
-  search_api PUT \
+  search_api_with_retry PUT \
     "$search_endpoint/indexers/$search_indexer_name?api-version=2024-07-01" \
     "$search_primary_key" \
     "$indexer_payload" >/dev/null
 
   echo "Running Azure AI Search indexer $search_indexer_name"
-  search_api POST \
+  search_api_with_retry POST \
     "$search_endpoint/indexers/$search_indexer_name/run?api-version=2024-07-01" \
     "$search_primary_key" >/dev/null
 fi
