@@ -205,6 +205,28 @@ search_api_with_retry() {
   retry_command 6 20 search_api "$method" "$url" "$api_key" "$payload"
 }
 
+delete_search_resource_if_exists() {
+  local resource_type="$1"
+  local resource_name="$2"
+  local search_endpoint="$3"
+  local api_key="$4"
+
+  local status
+  status="$(curl -sS \
+    -o /dev/null \
+    -w '%{http_code}' \
+    -H "api-key: $api_key" \
+    "$search_endpoint/$resource_type/$resource_name?api-version=$search_api_version")"
+
+  if [ "$status" = "404" ]; then
+    return 0
+  fi
+
+  search_api DELETE \
+    "$search_endpoint/$resource_type/$resource_name?api-version=$search_api_version" \
+    "$api_key" >/dev/null
+}
+
 get_foundry_access_token() {
   local token=""
 
@@ -853,6 +875,19 @@ if [ "$auto_index_blob_storage" = "true" ]; then
     "$search_endpoint/indexes/$search_index_name?api-version=$search_api_version" \
     "$search_primary_key" \
     "$index_payload" || true)"
+  if [ -n "$index_response" ] && ! printf '%s' "$index_response" | jq -e . >/dev/null 2>&1; then
+    if printf '%s' "$index_response" | grep -q "CannotDeleteExistingField"; then
+      echo "Existing Azure AI Search index $search_index_name uses an incompatible schema. Recreating index, skillset, and indexer."
+      delete_search_resource_if_exists "indexers" "$search_indexer_name" "$search_endpoint" "$search_primary_key"
+      delete_search_resource_if_exists "skillsets" "$search_skillset_name" "$search_endpoint" "$search_primary_key"
+      delete_search_resource_if_exists "indexes" "$search_index_name" "$search_endpoint" "$search_primary_key"
+
+      index_response="$(search_api_with_retry PUT \
+        "$search_endpoint/indexes/$search_index_name?api-version=$search_api_version" \
+        "$search_primary_key" \
+        "$index_payload" || true)"
+    fi
+  fi
   if [ -n "$index_response" ] && ! printf '%s' "$index_response" | jq -e . >/dev/null 2>&1; then
     echo "Azure AI Search index API returned a non-JSON response:"
     printf '%s\n' "$index_response" | head -c 1000
