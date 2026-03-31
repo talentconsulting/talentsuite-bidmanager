@@ -31,15 +31,15 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
 
     public AzureOpenAiChatService(IConfiguration config)
     {
-        var projectEndpoint = config["AzureAIFoundry:ProjectEndpoint"]
-            ?? throw new InvalidOperationException("Missing config: AzureAIFoundry:ProjectEndpoint");
+        var projectEndpoint = (config["AzureAIFoundry:ProjectEndpoint"]
+            ?? throw new InvalidOperationException("Missing config: AzureAIFoundry:ProjectEndpoint")).Trim();
 
-        _agentId = config["Agents:AgentId"]
-            ?? throw new InvalidOperationException("Missing config: Agents:AgentId");
+        _agentId = (config["Agents:AgentId"]
+            ?? throw new InvalidOperationException("Missing config: Agents:AgentId")).Trim();
 
-        var clientId = config["AzureAIFoundry:ClientId"]
+        var clientId = (config["AzureAIFoundry:ClientId"]
                        ?? config["AzureAIFoundry__ClientId"]
-                       ?? Environment.GetEnvironmentVariable("AzureAIFoundry__ClientId");
+                       ?? Environment.GetEnvironmentVariable("AzureAIFoundry__ClientId"))?.Trim();
 
         // Prefer the app's managed identity in Azure. Fall back to developer credentials locally.
         TokenCredential credential = new ChainedTokenCredential(
