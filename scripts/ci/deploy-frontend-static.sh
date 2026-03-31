@@ -348,6 +348,24 @@ az storage blob upload-batch \
   --source /tmp/talentsuite-frontend-publish/wwwroot \
   --overwrite
 
+az storage blob upload \
+  --account-name "$storage_account" \
+  --auth-mode login \
+  --container-name '$web' \
+  --name appsettings.json \
+  --file /tmp/talentsuite-frontend-publish/wwwroot/appsettings.json \
+  --overwrite true \
+  --content-cache-control "no-store, no-cache, must-revalidate"
+
+az storage blob upload \
+  --account-name "$storage_account" \
+  --auth-mode login \
+  --container-name '$web' \
+  --name index.html \
+  --file /tmp/talentsuite-frontend-publish/wwwroot/index.html \
+  --overwrite true \
+  --content-cache-control "no-store, no-cache, must-revalidate"
+
 # Ensure browsers always fetch the latest runtime config and entrypoint.
 az storage blob update \
   --account-name "$storage_account" \
