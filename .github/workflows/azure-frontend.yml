@@ -24,6 +24,7 @@ jobs:
 
       AuthenticationEnabled: ${{ vars.AUTHENTICATION_ENABLED }}
       ApiPublicOrigin: ${{ vars.API_PUBLIC_ORIGIN }}
+      FrontendPublicOrigin: ${{ vars.FRONTEND_PUBLIC_ORIGIN }}
       UseInMemoryData: ${{ vars.USE_IN_MEMORY_DATA }}
       KeycloakClientId: ${{ vars.KEYCLOAK_CLIENT_ID }}
       KeycloakDbUsername: ${{ vars.KEYCLOAK_DB_USERNAME }}
