@@ -1209,7 +1209,10 @@ jobs:
           }
 
           ensure_role_assignment "$foundry_account_id"
-          ensure_role_assignment "$foundry_project_id"
+
+          if ! ensure_role_assignment "$foundry_project_id"; then
+            echo "Project-scope Azure AI User assignment could not be verified. Continuing because account-scope assignment succeeded."
+          fi
 
       - name: Enable talentserver ingress
         if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') }}
