@@ -8,7 +8,7 @@ namespace TalentSuite.Server.Bids.Controllers;
 
 [ApiController]
 [Authorize(Policy = "RequireAdminRole")]
-[Route("api/ai/questions/{Uri.EscapeDataString(q.Id)}")]
+[Route("api/ai/questions")]
 public class ChatQuestionController : ControllerBase   
 {
     private readonly IBidService _bidService;
@@ -20,9 +20,12 @@ public class ChatQuestionController : ControllerBase
         _azureOpenAiChatService = azureOpenAiChatService;
     }
 
-    [HttpPost]
-    public async Task<IActionResult> AskQuestions([FromBody] ChatQuestionRequest chatQuestionRequest)
+    [HttpPost("{questionId}")]
+    public async Task<IActionResult> AskQuestions(string questionId, [FromBody] ChatQuestionRequest chatQuestionRequest)
     {
+        if (!string.Equals(questionId, chatQuestionRequest.QuestionId, StringComparison.OrdinalIgnoreCase))
+            return BadRequest("Route question id does not match request body.");
+
         var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, chatQuestionRequest.QuestionId);
 
         var userId = ResolveCurrentUserKey();
