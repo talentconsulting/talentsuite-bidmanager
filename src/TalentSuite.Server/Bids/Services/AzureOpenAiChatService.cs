@@ -1,5 +1,6 @@
 using System.Text;
 using Azure.AI.Agents.Persistent;
+using Azure.Core;
 using Azure.Identity;
 
 namespace TalentSuite.Server.Bids.Services;
@@ -36,8 +37,21 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
         _agentId = config["Agents:AgentId"]
             ?? throw new InvalidOperationException("Missing config: Agents:AgentId");
 
-        // Keyless auth via Entra ID
-        _client = new PersistentAgentsClient(projectEndpoint, new DefaultAzureCredential());
+        var clientId = config["AzureAIFoundry:ClientId"]
+                       ?? config["AzureAIFoundry__ClientId"]
+                       ?? Environment.GetEnvironmentVariable("AzureAIFoundry__ClientId");
+
+        // Prefer the app's managed identity in Azure. Fall back to developer credentials locally.
+        TokenCredential credential = new ChainedTokenCredential(
+            string.IsNullOrWhiteSpace(clientId)
+                ? new ManagedIdentityCredential()
+                : new ManagedIdentityCredential(clientId),
+            new DefaultAzureCredential(new DefaultAzureCredentialOptions
+            {
+                ExcludeManagedIdentityCredential = true
+            }));
+
+        _client = new PersistentAgentsClient(projectEndpoint, credential);
     }
 
     public async Task<ChatAnswerResult> AskAsync(

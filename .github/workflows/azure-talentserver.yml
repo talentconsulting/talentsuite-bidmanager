@@ -335,18 +335,43 @@ jobs:
           echo "Waiting for managed identity service principal to propagate"
           sleep 30
 
-          for scope in "$foundry_account_id" "$foundry_project_id"; do
-            echo "Ensuring Azure AI User on scope: $scope"
-            az role assignment create \
-              --assignee-object-id "$identity_principal_id" \
-              --assignee-principal-type ServicePrincipal \
-              --role "Azure AI User" \
-              --scope "$scope" \
-              --only-show-errors >/dev/null 2>&1 || true
-          done
+          ensure_role_assignment() {
+            local scope="$1"
+            local attempt
+            for attempt in 1 2 3 4 5 6; do
+              echo "Ensuring Azure AI User on scope: $scope (attempt $attempt/6)"
+              az role assignment create \
+                --assignee-object-id "$identity_principal_id" \
+                --assignee-principal-type ServicePrincipal \
+                --role "Azure AI User" \
+                --scope "$scope" \
+                --only-show-errors >/dev/null 2>&1 || true
 
-          echo "Waiting for Azure AI User role assignments to propagate"
-          sleep 30
+              if az role assignment list \
+                --assignee-object-id "$identity_principal_id" \
+                --scope "$scope" \
+                --query "[?roleDefinitionName=='Azure AI User'] | length(@)" \
+                -o tsv | grep -qx '1'; then
+                echo "Verified Azure AI User on $scope"
+                return 0
+              fi
+
+              if [ "$attempt" -lt 6 ]; then
+                echo "Role assignment not visible yet on $scope. Waiting 15s."
+                sleep 15
+              fi
+            done
+
+            echo "Failed to verify Azure AI User role assignment on $scope for principal $identity_principal_id"
+            az role assignment list \
+              --assignee-object-id "$identity_principal_id" \
+              --scope "$scope" \
+              -o table || true
+            return 1
+          }
+
+          ensure_role_assignment "$foundry_account_id"
+          ensure_role_assignment "$foundry_project_id"
 
       - name: Enable talentserver ingress
         if: ${{ success() }}
