@@ -279,10 +279,10 @@ find_env_value() {
   return 1
 }
 
-authentication_enabled="$(find_env_value AUTHENTICATION_ENABLED AZURE_AUTHENTICATION_ENABLED || true)"
-keycloak_client_id="$(find_env_value KEYCLOAK_CLIENT_ID || true)"
-frontend_public_origin="$(find_env_value FRONTEND_PUBLIC_ORIGIN || true)"
-keycloak_public_origin="$(find_env_value KEYCLOAK_PUBLIC_ORIGIN KEYCLOAK_BASE_URL || true)"
+authentication_enabled="${AuthenticationEnabled:-$(find_env_value AUTHENTICATION_ENABLED AZURE_AUTHENTICATION_ENABLED || true)}"
+keycloak_client_id="${KeycloakClientId:-$(find_env_value KEYCLOAK_CLIENT_ID || true)}"
+frontend_public_origin="${FrontendPublicOrigin:-$(find_env_value FRONTEND_PUBLIC_ORIGIN || true)}"
+keycloak_public_origin="${KeycloakPublicOrigin:-$(find_env_value KEYCLOAK_PUBLIC_ORIGIN KEYCLOAK_BASE_URL || true)}"
 
 keycloak_fqdn="$(az containerapp show \
   --resource-group "$resource_group" \
