@@ -298,6 +298,10 @@ talentserver_base_url=""
 [ -n "$keycloak_fqdn" ] && keycloak_base_url="https://${keycloak_fqdn}"
 [ -n "$talentserver_fqdn" ] && talentserver_base_url="https://${talentserver_fqdn}"
 
+if [ -n "$frontend_public_origin" ]; then
+  talentserver_base_url="${frontend_public_origin%/}/api"
+fi
+
 test -n "$keycloak_base_url" || (echo "Could not resolve Keycloak endpoint from azd environment values" && exit 1)
 test -n "$talentserver_base_url" || (echo "Could not resolve talentserver endpoint from azd environment values" && exit 1)
 test -n "$authentication_enabled" || (echo "Could not resolve AUTHENTICATION_ENABLED from azd environment values" && exit 1)
