@@ -41,11 +41,6 @@ on:
         required: true
         default: "/*"
         type: string
-      api_patterns:
-        description: "Route patterns for the API origin"
-        required: true
-        default: "/api/*,/api/*/*,/api/*/*/*,/api/*/*/*/*"
-        type: string
       custom_domain:
         description: "Optional custom domain to attach, e.g. dev.talentsuite.uk"
         required: false
@@ -111,7 +106,6 @@ jobs:
           grafana_endpoint_name="${{ github.event.inputs.grafana_endpoint_name }}"
           sku="${{ github.event.inputs.sku }}"
           frontend_patterns="${{ github.event.inputs.frontend_patterns }}"
-          api_patterns="${{ github.event.inputs.api_patterns }}"
 
           frontend_origin_group="frontend-og"
           frontend_origin_name="frontend-origin"
@@ -424,30 +418,39 @@ jobs:
               --forwarding-protocol MatchRequest >/dev/null
           fi
 
-          if az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" --route-name "$api_route_name" >/dev/null 2>&1; then
-            az afd route update \
+          if [ -z "$api_domain" ]; then
+            if az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" --route-name "$api_route_name" >/dev/null 2>&1; then
+              az afd route update \
+                --resource-group "$resource_group" \
+                --profile-name "$profile_name" \
+                --endpoint-name "$endpoint_name" \
+                --route-name "$api_route_name" \
+                --origin-group "$api_origin_group" \
+                --patterns-to-match "/api/*,/api/*/*,/api/*/*/*,/api/*/*/*/*" \
+                --supported-protocols Https \
+                --link-to-default-domain Enabled \
+                --https-redirect Enabled \
+                --forwarding-protocol MatchRequest >/dev/null
+            else
+              az afd route create \
+                --resource-group "$resource_group" \
+                --profile-name "$profile_name" \
+                --endpoint-name "$endpoint_name" \
+                --route-name "$api_route_name" \
+                --origin-group "$api_origin_group" \
+                --patterns-to-match "/api/*,/api/*/*,/api/*/*/*,/api/*/*/*/*" \
+                --supported-protocols Https \
+                --link-to-default-domain Enabled \
+                --https-redirect Enabled \
+                --forwarding-protocol MatchRequest >/dev/null
+            fi
+          elif az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" --route-name "$api_route_name" >/dev/null 2>&1; then
+            az afd route delete \
               --resource-group "$resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$endpoint_name" \
               --route-name "$api_route_name" \
-              --origin-group "$api_origin_group" \
-              --patterns-to-match "$api_patterns" \
-              --supported-protocols Https \
-              --link-to-default-domain Enabled \
-              --https-redirect Enabled \
-              --forwarding-protocol MatchRequest >/dev/null
-          else
-            az afd route create \
-              --resource-group "$resource_group" \
-              --profile-name "$profile_name" \
-              --endpoint-name "$endpoint_name" \
-              --route-name "$api_route_name" \
-              --origin-group "$api_origin_group" \
-              --patterns-to-match "$api_patterns" \
-              --supported-protocols Https \
-              --link-to-default-domain Enabled \
-              --https-redirect Enabled \
-              --forwarding-protocol MatchRequest >/dev/null
+              --yes >/dev/null
           fi
 
           if [ -n "$api_domain" ] && az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$api_endpoint_name" --route-name "$api_route_name" >/dev/null 2>&1; then
@@ -565,13 +568,6 @@ jobs:
               --profile-name "$profile_name" \
               --endpoint-name "$endpoint_name" \
               --route-name "frontend-route" \
-              --custom-domains "$custom_domain_name" >/dev/null
-
-            az afd route update \
-              --resource-group "$resource_group" \
-              --profile-name "$profile_name" \
-              --endpoint-name "$endpoint_name" \
-              --route-name "api-route" \
               --custom-domains "$custom_domain_name" >/dev/null
 
             validation_token="$(az afd custom-domain show \
