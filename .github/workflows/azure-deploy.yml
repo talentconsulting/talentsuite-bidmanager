@@ -1153,6 +1153,7 @@ jobs:
             --resource-group "$resource_group" \
             --query identity.principalId -o tsv)"
           test -n "$identity_principal_id" || (echo "Could not resolve managed identity principalId for $app_name" && exit 1)
+          echo "talentserver principalId: $identity_principal_id"
 
           foundry_account_name="$(printf '%s' "$project_endpoint" | sed -E 's#https://([^./]+)\.services\.ai\.azure\.com/.*#\1#')"
           foundry_project_name="$(printf '%s' "$project_endpoint" | sed -E 's#.*/api/projects/([^/?]+).*#\1#')"
@@ -1168,20 +1169,17 @@ jobs:
 
           foundry_project_id="${foundry_account_id}/projects/${foundry_project_name}"
 
-          for scope in "$foundry_account_id" "$foundry_project_id"; do
-            assignment_id="$(az role assignment list \
-              --assignee-object-id "$identity_principal_id" \
-              --scope "$scope" \
-              --query "[?roleDefinitionName=='Azure AI User'][0].id" \
-              -o tsv)"
+          echo "Waiting for managed identity service principal to propagate"
+          sleep 30
 
-            if [ -z "$assignment_id" ]; then
-              az role assignment create \
-                --assignee-object-id "$identity_principal_id" \
-                --assignee-principal-type ServicePrincipal \
-                --role "Azure AI User" \
-                --scope "$scope" >/dev/null
-            fi
+          for scope in "$foundry_account_id" "$foundry_project_id"; do
+            echo "Ensuring Azure AI User on scope: $scope"
+            az role assignment create \
+              --assignee-object-id "$identity_principal_id" \
+              --assignee-principal-type ServicePrincipal \
+              --role "Azure AI User" \
+              --scope "$scope" \
+              --only-show-errors >/dev/null 2>&1 || true
           done
 
           echo "Waiting for Azure AI User role assignments to propagate"
