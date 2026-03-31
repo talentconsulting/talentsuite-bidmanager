@@ -281,6 +281,7 @@ find_env_value() {
 
 authentication_enabled="${AuthenticationEnabled:-$(find_env_value AUTHENTICATION_ENABLED AZURE_AUTHENTICATION_ENABLED || true)}"
 keycloak_client_id="${KeycloakClientId:-$(find_env_value KEYCLOAK_CLIENT_ID || true)}"
+api_public_origin="${ApiPublicOrigin:-$(find_env_value API_PUBLIC_ORIGIN || true)}"
 frontend_public_origin="${FrontendPublicOrigin:-$(find_env_value FRONTEND_PUBLIC_ORIGIN || true)}"
 keycloak_public_origin="${KeycloakPublicOrigin:-$(find_env_value KEYCLOAK_PUBLIC_ORIGIN KEYCLOAK_BASE_URL || true)}"
 
@@ -298,7 +299,9 @@ talentserver_base_url=""
 [ -n "$keycloak_fqdn" ] && keycloak_base_url="https://${keycloak_fqdn}"
 [ -n "$talentserver_fqdn" ] && talentserver_base_url="https://${talentserver_fqdn}"
 
-if [ -n "$frontend_public_origin" ]; then
+if [ -n "$api_public_origin" ]; then
+  talentserver_base_url="${api_public_origin%/}"
+elif [ -n "$frontend_public_origin" ]; then
   talentserver_base_url="${frontend_public_origin%/}/api"
 fi
 
@@ -333,6 +336,9 @@ jq -n \
     TALENTSERVER_HTTPS: $apiBase,
     STRICT_CONFIGURATION: $strict
   }' > /tmp/talentsuite-frontend-publish/wwwroot/appsettings.json
+
+echo "Generated frontend appsettings.json:"
+cat /tmp/talentsuite-frontend-publish/wwwroot/appsettings.json
 
 az storage blob service-properties update \
   --account-name "$storage_account" \

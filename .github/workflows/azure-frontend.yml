@@ -23,6 +23,7 @@ jobs:
       TALENTSUITE_INFRA_MODE: "azure"
 
       AuthenticationEnabled: ${{ vars.AUTHENTICATION_ENABLED }}
+      ApiPublicOrigin: ${{ vars.API_PUBLIC_ORIGIN }}
       UseInMemoryData: ${{ vars.USE_IN_MEMORY_DATA }}
       KeycloakClientId: ${{ vars.KEYCLOAK_CLIENT_ID }}
       KeycloakDbUsername: ${{ vars.KEYCLOAK_DB_USERNAME }}
@@ -133,6 +134,10 @@ jobs:
           azd env set GoogleDriveSyncSourceContainerName "${GoogleDriveSyncSourceContainerName}" --environment "${AZURE_ENV_NAME}"
           azd env set GoogleDriveSyncDriveFolderId "${GoogleDriveSyncDriveFolderId}" --environment "${AZURE_ENV_NAME}"
           azd env set GoogleDriveSyncServiceAccountJsonBase64 "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
+          azd env set ApiPublicOrigin "${ApiPublicOrigin}" --environment "${AZURE_ENV_NAME}"
+          azd env set API_PUBLIC_ORIGIN "${ApiPublicOrigin}" --environment "${AZURE_ENV_NAME}"
+          azd env set FrontendPublicOrigin "${FrontendPublicOrigin}" --environment "${AZURE_ENV_NAME}"
+          azd env set FRONTEND_PUBLIC_ORIGIN "${FrontendPublicOrigin}" --environment "${AZURE_ENV_NAME}"
           azd env set KeycloakPublicOrigin "${KeycloakPublicOrigin}" --environment "${AZURE_ENV_NAME}"
           azd env set KEYCLOAK_PUBLIC_ORIGIN "${KeycloakPublicOrigin}" --environment "${AZURE_ENV_NAME}"
           azd env set GrafanaEntraEnabled "${GrafanaEntraEnabled}" --environment "${AZURE_ENV_NAME}"

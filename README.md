@@ -502,6 +502,33 @@ Why this order:
 - `Azure Functions` comes last because it depends on the shared infra and Service Bus wiring.
 - `Azure Front Door` comes after app deployment so its origins can point at live frontend, API, Keycloak, and Grafana endpoints.
 
+### Split API Host
+The production-style browser setup uses a dedicated API domain instead of routing API calls through the frontend host path.
+
+Required GitHub variable:
+- `API_PUBLIC_ORIGIN=https://dev-api.talentsuite.uk`
+
+Expected browser-facing hosts:
+- Frontend: `https://dev.talentsuite.uk`
+- API: `https://dev-api.talentsuite.uk`
+- Keycloak: `https://auth-dev.talentsuite.uk`
+
+Relevant workflows:
+- `Azure Front Door`
+  - provisions the dedicated API endpoint/domain (`dev-api.talentsuite.uk`)
+- `Azure Frontend`
+  - publishes `TALENTSERVER_HTTPS` into frontend `appsettings.json`
+  - when `API_PUBLIC_ORIGIN` is set, it uses that value directly
+
+Recommended run order after changing public domains:
+1. `Azure Front Door`
+2. `Azure Frontend`
+
+Verification:
+- Open `https://dev.talentsuite.uk/appsettings.json`
+- Confirm:
+  - `TALENTSERVER_HTTPS = https://dev-api.talentsuite.uk`
+
 ### Azure Secret Handling (CI)
 The workflow uses explicit GitHub `vars` and `secrets` (no JSON blob). It:
 

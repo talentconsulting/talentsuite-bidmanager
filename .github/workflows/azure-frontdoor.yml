@@ -18,6 +18,11 @@ on:
         required: false
         default: "talentsuite-auth-dev"
         type: string
+      api_endpoint_name:
+        description: "Azure Front Door endpoint name for the optional API domain"
+        required: false
+        default: "talentsuite-api-dev"
+        type: string
       grafana_endpoint_name:
         description: "Azure Front Door endpoint name for the optional Grafana domain"
         required: false
@@ -39,7 +44,7 @@ on:
       api_patterns:
         description: "Route patterns for the API origin"
         required: true
-        default: "/api/*"
+        default: "/api/*,/api/*/*,/api/*/*/*,/api/*/*/*/*"
         type: string
       custom_domain:
         description: "Optional custom domain to attach, e.g. dev.talentsuite.uk"
@@ -50,6 +55,11 @@ on:
         description: "Keycloak custom domain to attach, e.g. auth-dev.talentsuite.uk"
         required: true
         default: "auth-dev.talentsuite.uk"
+        type: string
+      api_domain:
+        description: "API custom domain to attach, e.g. dev-api.talentsuite.uk"
+        required: true
+        default: "dev-api.talentsuite.uk"
         type: string
       grafana_domain:
         description: "Grafana custom domain to attach, e.g. grafana-dev.talentsuite.uk"
@@ -97,6 +107,7 @@ jobs:
           profile_name="${{ github.event.inputs.profile_name }}"
           endpoint_name="${{ github.event.inputs.endpoint_name }}"
           auth_endpoint_name="${{ github.event.inputs.auth_endpoint_name }}"
+          api_endpoint_name="${{ github.event.inputs.api_endpoint_name }}"
           grafana_endpoint_name="${{ github.event.inputs.grafana_endpoint_name }}"
           sku="${{ github.event.inputs.sku }}"
           frontend_patterns="${{ github.event.inputs.frontend_patterns }}"
@@ -115,6 +126,7 @@ jobs:
           grafana_origin_name="grafana-origin"
           grafana_route_name="grafana-route"
           auth_domain="${{ github.event.inputs.auth_domain }}"
+          api_domain="${{ github.event.inputs.api_domain }}"
           grafana_domain="${{ github.event.inputs.grafana_domain }}"
 
           azd_values="$(azd env get-values --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
@@ -195,6 +207,14 @@ jobs:
               --resource-group "$resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$auth_endpoint_name" \
+              --enabled-state Enabled >/dev/null
+          fi
+
+          if [ -n "$api_domain" ] && ! az afd endpoint show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$api_endpoint_name" >/dev/null 2>&1; then
+            az afd endpoint create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$api_endpoint_name" \
               --enabled-state Enabled >/dev/null
           fi
 
@@ -430,6 +450,32 @@ jobs:
               --forwarding-protocol MatchRequest >/dev/null
           fi
 
+          if [ -n "$api_domain" ] && az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$api_endpoint_name" --route-name "$api_route_name" >/dev/null 2>&1; then
+            az afd route update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$api_endpoint_name" \
+              --route-name "$api_route_name" \
+              --origin-group "$api_origin_group" \
+              --patterns-to-match "/*" \
+              --supported-protocols Https \
+              --link-to-default-domain Enabled \
+              --https-redirect Enabled \
+              --forwarding-protocol MatchRequest >/dev/null
+          elif [ -n "$api_domain" ]; then
+            az afd route create \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$api_endpoint_name" \
+              --route-name "$api_route_name" \
+              --origin-group "$api_origin_group" \
+              --patterns-to-match "/*" \
+              --supported-protocols Https \
+              --link-to-default-domain Enabled \
+              --https-redirect Enabled \
+              --forwarding-protocol MatchRequest >/dev/null
+          fi
+
           if [ -n "$auth_domain" ] && az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$auth_endpoint_name" --route-name "$keycloak_route_name" >/dev/null 2>&1; then
             az afd route update \
               --resource-group "$resource_group" \
@@ -483,7 +529,7 @@ jobs:
           fi
 
       - name: Configure custom domains
-        if: ${{ github.event.inputs.custom_domain != '' || github.event.inputs.auth_domain != '' || github.event.inputs.grafana_domain != '' }}
+        if: ${{ github.event.inputs.custom_domain != '' || github.event.inputs.api_domain != '' || github.event.inputs.auth_domain != '' || github.event.inputs.grafana_domain != '' }}
         run: |
           set -euo pipefail
 
@@ -491,9 +537,11 @@ jobs:
           profile_name="${{ github.event.inputs.profile_name }}"
           endpoint_name="${{ github.event.inputs.endpoint_name }}"
           auth_endpoint_name="${{ github.event.inputs.auth_endpoint_name }}"
+          api_endpoint_name="${{ github.event.inputs.api_endpoint_name }}"
           grafana_endpoint_name="${{ github.event.inputs.grafana_endpoint_name }}"
           custom_domain_host="${{ github.event.inputs.custom_domain }}"
           auth_domain_host="${{ github.event.inputs.auth_domain }}"
+          api_domain_host="${{ github.event.inputs.api_domain }}"
           grafana_domain_host="${{ github.event.inputs.grafana_domain }}"
 
           if [ -n "$custom_domain_host" ]; then
@@ -535,6 +583,41 @@ jobs:
 
             echo "Created or reused Front Door custom domain $custom_domain_host"
             echo "Cloudflare DNS validation token: $validation_token"
+          fi
+
+          if [ -n "$api_domain_host" ]; then
+            api_domain_name="$(printf '%s' "$api_domain_host" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-')"
+
+            if ! az afd custom-domain show \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --custom-domain-name "$api_domain_name" >/dev/null 2>&1; then
+              az afd custom-domain create \
+                --resource-group "$resource_group" \
+                --profile-name "$profile_name" \
+                --custom-domain-name "$api_domain_name" \
+                --host-name "$api_domain_host" \
+                --certificate-type ManagedCertificate \
+                --minimum-tls-version TLS12 >/dev/null
+            fi
+
+            az afd route update \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --endpoint-name "$api_endpoint_name" \
+              --route-name "api-route" \
+              --custom-domains "$api_domain_name" \
+              --link-to-default-domain Disabled >/dev/null
+
+            api_validation_token="$(az afd custom-domain show \
+              --resource-group "$resource_group" \
+              --profile-name "$profile_name" \
+              --custom-domain-name "$api_domain_name" \
+              --query 'validationProperties.validationToken' \
+              -o tsv)"
+
+            echo "Created or reused Front Door API custom domain $api_domain_host"
+            echo "Cloudflare DNS validation token: $api_validation_token"
           fi
 
           if [ -n "$auth_domain_host" ]; then
@@ -625,6 +708,16 @@ jobs:
             --resource-group "rg-${AZURE_ENV_NAME}" \
             --profile-name "${{ github.event.inputs.profile_name }}" \
             --endpoint-name "${{ github.event.inputs.auth_endpoint_name }}" \
+            --query hostName \
+            -o tsv
+
+      - name: Show API Front Door endpoint
+        if: ${{ github.event.inputs.api_domain != '' }}
+        run: |
+          az afd endpoint show \
+            --resource-group "rg-${AZURE_ENV_NAME}" \
+            --profile-name "${{ github.event.inputs.profile_name }}" \
+            --endpoint-name "${{ github.event.inputs.api_endpoint_name }}" \
             --query hostName \
             -o tsv
 
