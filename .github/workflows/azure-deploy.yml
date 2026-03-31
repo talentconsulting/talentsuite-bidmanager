@@ -1139,6 +1139,54 @@ jobs:
             echo "No Azure AI settings configured for $app_name"
           fi
 
+      - name: Grant talentserver managed identity access to Azure AI Foundry
+        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') && env.AzureAIFoundryProjectEndpoint != '' }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          app_name="talentserver"
+          project_endpoint="${AzureAIFoundryProjectEndpoint}"
+
+          identity_principal_id="$(az containerapp show \
+            --name "$app_name" \
+            --resource-group "$resource_group" \
+            --query identity.principalId -o tsv)"
+          test -n "$identity_principal_id" || (echo "Could not resolve managed identity principalId for $app_name" && exit 1)
+
+          foundry_account_name="$(printf '%s' "$project_endpoint" | sed -E 's#https://([^./]+)\.services\.ai\.azure\.com/.*#\1#')"
+          foundry_project_name="$(printf '%s' "$project_endpoint" | sed -E 's#.*/api/projects/([^/?]+).*#\1#')"
+
+          test -n "$foundry_account_name" || (echo "Could not parse Foundry account name from AzureAIFoundryProjectEndpoint" && exit 1)
+          test -n "$foundry_project_name" || (echo "Could not parse Foundry project name from AzureAIFoundryProjectEndpoint" && exit 1)
+
+          foundry_account_id="$(az cognitiveservices account show \
+            --name "$foundry_account_name" \
+            --resource-group "$resource_group" \
+            --query id -o tsv)"
+          test -n "$foundry_account_id" || (echo "Could not resolve Foundry account resource id" && exit 1)
+
+          foundry_project_id="${foundry_account_id}/projects/${foundry_project_name}"
+
+          for scope in "$foundry_account_id" "$foundry_project_id"; do
+            assignment_id="$(az role assignment list \
+              --assignee-object-id "$identity_principal_id" \
+              --scope "$scope" \
+              --query "[?roleDefinitionName=='Azure AI User'][0].id" \
+              -o tsv)"
+
+            if [ -z "$assignment_id" ]; then
+              az role assignment create \
+                --assignee-object-id "$identity_principal_id" \
+                --assignee-principal-type ServicePrincipal \
+                --role "Azure AI User" \
+                --scope "$scope" >/dev/null
+            fi
+          done
+
+          echo "Waiting for Azure AI User role assignments to propagate"
+          sleep 30
+
       - name: Enable talentserver ingress
         if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') }}
         run: |
