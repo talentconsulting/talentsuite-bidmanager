@@ -258,6 +258,7 @@ jobs:
           manifest_dir="$(mktemp -d /tmp/apphost-manifest-preflight.XXXXXX)"
           manifest_file="$manifest_dir/manifest.json"
 
+          dotnet restore TalentSuite.AppHost/TalentSuite.AppHost.csproj
           dotnet build TalentSuite.AppHost/TalentSuite.AppHost.csproj --no-restore
           dotnet TalentSuite.AppHost/bin/Debug/net10.0/TalentSuite.AppHost.dll \
             --publisher manifest \
