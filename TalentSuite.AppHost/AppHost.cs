@@ -205,8 +205,8 @@ if (useLocalInfrastructure)
         .WithReference(appDb)
         .WithReference(keycloak)
         .WithReference(messaging)
-        .WithEnvironment(context => context.EnvironmentVariables["KEYCLOAK_HTTP"] = keycloakHttpEndpoint.Url)
-        .WithEnvironment(context => context.EnvironmentVariables["KEYCLOAK_AUTHORITY"] = $"{keycloakHttpEndpoint.Url}/realms/TalentConsulting")
+        .WithEnvironment("KEYCLOAK_HTTP", keycloakHttpEndpoint)
+        .WithEnvironment("KEYCLOAK_AUTHORITY", ReferenceExpression.Create($"{keycloakHttpEndpoint}/realms/TalentConsulting"))
         .WithEnvironment("AUTHENTICATION_ENABLED", authenticationEnabled)
         .WithEnvironment("USE_IN_MEMORY_DATA", useInMemoryData)
         .WithEnvironment("AzureServiceBus__InviteUserEntityName", "invite-user")
@@ -429,11 +429,9 @@ var grafanaHttpEndpoint = grafana.GetEndpoint("http");
 
 if (useLocalInfrastructure)
 {
-    grafana.WithEnvironment(context =>
-    {
-        context.EnvironmentVariables["GF_SERVER_ROOT_URL"] = grafanaHttpEndpoint.Url;
-        context.EnvironmentVariables["GF_SERVER_DOMAIN"] = new Uri(grafanaHttpEndpoint.Url).Authority;
-    });
+    grafana
+        .WithEnvironment("GF_SERVER_ROOT_URL", grafanaHttpEndpoint)
+        .WithEnvironment("GF_SERVER_DOMAIN", grafanaHttpEndpoint.Property(EndpointProperty.Host));
     grafana.WithEnvironment(context =>
     {
         var tenantId = context.EnvironmentVariables.TryGetValue("GF_AUTH_AZUREAD_ALLOWED_ORGANIZATIONS", out var value)
@@ -498,8 +496,8 @@ if (useLocalInfrastructure)
     builder.AddProject<TalentSuite_FrontEnd>("talentfrontend")
         .WithEnvironment("AUTHENTICATION_ENABLED", authenticationEnabled)
         .WithEnvironment("USE_IN_MEMORY_DATA", useInMemoryData)
-        .WithEnvironment(context => context.EnvironmentVariables["KEYCLOAK_HTTP"] = keycloakHttpEndpoint.Url)
-        .WithEnvironment(context => context.EnvironmentVariables["KEYCLOAK_AUTHORITY"] = $"{keycloakHttpEndpoint.Url}/realms/TalentConsulting")
+        .WithEnvironment("KEYCLOAK_HTTP", keycloakHttpEndpoint)
+        .WithEnvironment("KEYCLOAK_AUTHORITY", ReferenceExpression.Create($"{keycloakHttpEndpoint}/realms/TalentConsulting"))
         .WithReference(keycloak)
         .WithReference(server)
         .WaitFor(keycloak)

@@ -99,7 +99,7 @@ jobs:
       - name: Setup azd
         uses: Azure/setup-azd@v2
         with:
-          version: 1.23.13
+          version: 1.23.10
 
       - name: Enable azd operations alpha feature
         run: |
