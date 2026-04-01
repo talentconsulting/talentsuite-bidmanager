@@ -6,6 +6,7 @@ using Azure.Provisioning.Network;
 using Azure.Provisioning.PrivateDns;
 using Azure.Provisioning.Resources;
 using Aspire.Hosting.ApplicationModel;
+using Aspire.Hosting.Azure;
 using Azure.Core;
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -187,6 +188,7 @@ var bidStorage = useLocalInfrastructure
     ? storage.AddBlobs("bidstorage")
     : builder.AddAzureStorage("bidcontentstorage").AddBlobs("bidstorage");
 IResourceBuilder<ProjectResource> server;
+IResourceBuilder<AzureSqlServerResource>? sql = null;
 if (useLocalInfrastructure)
 {
     var sql = builder.AddSqlServer("sql", password: sqlPassword, port: 14330)
@@ -266,8 +268,6 @@ else
                 InfrastructureSubnetId = acaInfrastructureSubnet.Id
             };
 
-            var sqlServer = infra.GetProvisionableResources().OfType<SqlServer>().Single();
-
             var sqlPrivateDnsZone = new PrivateDnsZone("sqlPrivateDnsZone", PrivateDnsZone.ResourceVersions.V2020_06_01)
             {
                 Name = "privatelink.database.windows.net",
@@ -288,14 +288,14 @@ else
             var sqlPrivateEndpoint = new PrivateEndpoint("sqlPrivateEndpoint", PrivateEndpoint.ResourceVersions.V2024_07_01)
             {
                 Name = "pep-sql-talentsuite-dev",
-                Location = sqlServer.Location,
+                Location = sql!.Resource.Location,
                 Subnet = sqlPrivateEndpointSubnet,
                 PrivateLinkServiceConnections =
                 [
                     new NetworkPrivateLinkServiceConnection
                     {
                         Name = "sqlServerConnection",
-                        PrivateLinkServiceId = sqlServer.Id,
+                        PrivateLinkServiceId = sql!.Resource.Id,
                         GroupIds =
                         [
                             "sqlServer"
@@ -322,7 +322,7 @@ else
         });
 #pragma warning restore AZPROVISION001
 
-    var sql = builder.AddAzureSqlServer("sql")
+    sql = builder.AddAzureSqlServer("sql")
         .ConfigureInfrastructure(infra =>
         {
             var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
