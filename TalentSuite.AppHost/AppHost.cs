@@ -243,9 +243,9 @@ else
                     {
                         ServiceName = "Microsoft.App/environments",
                         Actions =
-                        [
+                        {
                             "Microsoft.Network/virtualNetworks/subnets/join/action"
-                        ]
+                        }
                     }
                 ]
             };
@@ -308,7 +308,7 @@ else
                     {
                         Name = "sqlServerConnection",
                         PrivateLinkServiceId = new ResourceIdentifier(
-                            "/subscriptions/66ddccda-2556-46ba-aadb-d7687b237110/resourceGroups/rg-dev/providers/Microsoft.Sql/servers/sql-mwfumoeok4u5c"),
+                            $"[concat(resourceGroup().id, '/providers/Microsoft.Sql/servers/', {sql!.Resource.NameOutputReference})]"),
                         GroupIds =
                         [
                             "sqlServer"
