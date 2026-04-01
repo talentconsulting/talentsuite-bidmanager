@@ -191,10 +191,10 @@ IResourceBuilder<ProjectResource> server;
 IResourceBuilder<AzureSqlServerResource>? sql = null;
 if (useLocalInfrastructure)
 {
-    var sql = builder.AddSqlServer("sql", password: sqlPassword, port: 14330)
+    var localSql = builder.AddSqlServer("sql", password: sqlPassword, port: 14330)
         .WithDataVolume("talentsuite-sql-data", isReadOnly: false);
-    var appDb = sql.AddDatabase("talentconsultingdb");
-    var keycloakDb = sql.AddDatabase("keycloakdb");
+    var appDb = localSql.AddDatabase("talentconsultingdb");
+    var keycloakDb = localSql.AddDatabase("keycloakdb");
 
     keycloak
         .WithEnvironment("KC_DB_URL",
@@ -288,14 +288,15 @@ else
             var sqlPrivateEndpoint = new PrivateEndpoint("sqlPrivateEndpoint", PrivateEndpoint.ResourceVersions.V2024_07_01)
             {
                 Name = "pep-sql-talentsuite-dev",
-                Location = sql!.Resource.Location,
+                Location = new AzureLocation("uksouth"),
                 Subnet = sqlPrivateEndpointSubnet,
                 PrivateLinkServiceConnections =
                 [
                     new NetworkPrivateLinkServiceConnection
                     {
                         Name = "sqlServerConnection",
-                        PrivateLinkServiceId = sql!.Resource.Id,
+                        PrivateLinkServiceId = new Azure.Provisioning.BicepValue<ResourceIdentifier>(
+                            sql!.Resource.NameOutputReference.ValueExpression),
                         GroupIds =
                         [
                             "sqlServer"
