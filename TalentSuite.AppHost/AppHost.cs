@@ -241,11 +241,7 @@ else
                 [
                     new ServiceDelegation
                     {
-                        ServiceName = "Microsoft.App/environments",
-                        Actions =
-                        {
-                            "Microsoft.Network/virtualNetworks/subnets/join/action"
-                        }
+                        ServiceName = "Microsoft.App/environments"
                     }
                 ]
             };
