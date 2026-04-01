@@ -236,6 +236,18 @@ else
             {
                 Name = "aca-infrastructure",
                 AddressPrefix = "10.42.0.0/23"
+                ,
+                Delegations =
+                [
+                    new ServiceDelegation
+                    {
+                        ServiceName = "Microsoft.App/environments",
+                        Actions =
+                        [
+                            "Microsoft.Network/virtualNetworks/subnets/join/action"
+                        ]
+                    }
+                ]
             };
 
             var sqlPrivateEndpointSubnet = new SubnetResource("sqlPrivateEndpointSubnet")
@@ -295,8 +307,8 @@ else
                     new NetworkPrivateLinkServiceConnection
                     {
                         Name = "sqlServerConnection",
-                        PrivateLinkServiceId = new Azure.Provisioning.BicepValue<ResourceIdentifier>(
-                            sql!.Resource.NameOutputReference.ValueExpression),
+                        PrivateLinkServiceId = new ResourceIdentifier(
+                            "/subscriptions/66ddccda-2556-46ba-aadb-d7687b237110/resourceGroups/rg-dev/providers/Microsoft.Sql/servers/sql-mwfumoeok4u5c"),
                         GroupIds =
                         [
                             "sqlServer"
