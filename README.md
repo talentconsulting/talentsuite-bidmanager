@@ -354,19 +354,24 @@ Notes:
   - `src/TalentSuite.Server/Bids/Services/AzureOpenAiChatService.cs`
 - The agent’s retrieval behavior (including AI Search/knowledge connections/tools) is configured in Azure AI Foundry, not in this code.
 - Chat API endpoint:
-  - `POST /api/ai/questions/{Uri.EscapeDataString(q.Id)}` (`src/TalentSuite.Server/Bids/Controllers/ChatQuestionController.cs`)
+  - `POST /api/ai/questions/{questionId}` (`src/TalentSuite.Server/Bids/Controllers/ChatQuestionController.cs`)
 - Required config:
   - `AzureAIFoundry:ProjectEndpoint`
   - `Agents:AgentId`
+- Current runtime expectations:
+  - `Agents:AgentId` must be the assistant-compatible `asst_...` id, not the newer project agent name.
+  - In Azure, `talentserver` authenticates to Foundry with managed identity.
+  - The managed identity needs `Azure AI User` on the Foundry account. The deploy workflows now apply and verify this automatically.
 
 ### How Foundry Project, Agent, Knowledge Source, OpenAI and AI Search work together
 - `AzureAIFoundry:ProjectEndpoint` identifies the Azure AI Foundry Project that hosts your AI app assets and runtime resources.
 - `Agents:AgentId` identifies the Persistent Agent inside that project.
-- Chat requests come to `POST /api/ai/questions/{Uri.EscapeDataString(q.Id)}` and the backend calls `AzureOpenAiChatService`.
+- Chat requests come to `POST /api/ai/questions/{questionId}` and the backend calls `AzureOpenAiChatService`.
 - The service creates or reuses a thread, adds the user message, and executes a run against the configured agent.
 - Inside Foundry, the agent uses its configured knowledge/tool connections to retrieve relevant content (for example, via Azure AI Search over indexed documents).
 - The retrieved context plus prompt are sent to the configured OpenAI model to generate the final answer.
 - The backend returns the response text and thread id; the thread id is persisted so follow-up questions keep conversation context.
+- If a persisted Foundry thread has been deleted or expired, the backend now recreates the thread automatically and continues.
 - In this repository, orchestration is in code, while retrieval/tool behavior is mostly configured in Foundry.
 
 ### Ingestion fallback behavior
@@ -429,6 +434,9 @@ Required GitHub Actions configuration for environment `dev`:
 - `AZURE_ENV_NAME`
 - `AZURE_LOCATION`
 - `AUTHENTICATION_ENABLED`
+- `FRONTEND_PUBLIC_ORIGIN`
+- `KEYCLOAK_PUBLIC_ORIGIN`
+- `API_PUBLIC_ORIGIN`
 - `USE_IN_MEMORY_DATA`
 - `KEYCLOAK_CLIENT_ID`
 - `KEYCLOAK_DB_USERNAME`
@@ -442,6 +450,11 @@ Required GitHub Actions configuration for environment `dev`:
 - `GOOGLE_DRIVE_SYNC_ENABLED`
 - `GOOGLE_DRIVE_SYNC_SOURCE_CONTAINER_NAME`
 - `GOOGLE_DRIVE_SYNC_DRIVE_FOLDER_ID`
+- `DOCUMENT_INTELLIGENCE_ENDPOINT`
+- `AZURE_OPENAI_ENDPOINT`
+- `AZURE_OPENAI_CHAT_DEPLOYMENT`
+- `AZURE_AI_FOUNDRY_PROJECT_ENDPOINT`
+- `AGENTS_AGENT_ID`
 - `GRAFANA_ENTRA_ENABLED`
 - `GRAFANA_ENTRA_CLIENT_ID`
 - `GRAFANA_ENTRA_TENANT_ID`
@@ -456,6 +469,8 @@ Required GitHub Actions configuration for environment `dev`:
 - `KEYCLOAK_DB_PASSWORD`
 - `INVITE_SMTP_PASSWORD`
 - `GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64`
+- `DOCUMENT_INTELLIGENCE_API_KEY`
+- `AZURE_OPENAI_API_KEY`
 - `GRAFANA_ENTRA_CLIENT_SECRET`
 
 No JSON secret is required.
@@ -502,6 +517,13 @@ Why this order:
 - `Azure Functions` comes last because it depends on the shared infra and Service Bus wiring.
 - `Azure Front Door` comes after app deployment so its origins can point at live frontend, API, Keycloak, and Grafana endpoints.
 
+For incremental changes:
+- frontend config or public host changes:
+  1. `Azure Front Door`
+  2. `Azure Frontend`
+- server / Foundry / chat changes:
+  1. `Azure TalentServer`
+
 ### Split API Host
 The production-style browser setup uses a dedicated API domain instead of routing API calls through the frontend host path.
 
@@ -528,6 +550,29 @@ Verification:
 - Open `https://dev.talentsuite.uk/appsettings.json`
 - Confirm:
   - `TALENTSERVER_HTTPS = https://dev-api.talentsuite.uk`
+- Validate API routing directly:
+  - `curl -i https://dev-api.talentsuite.uk/health`
+- Validate browser preflight directly:
+  - `curl -i -X OPTIONS "https://dev-api.talentsuite.uk/api/tasks/my-question-assignments" -H "Origin: https://dev.talentsuite.uk" -H "Access-Control-Request-Method: GET" -H "Access-Control-Request-Headers: authorization,content-type"`
+
+Notes:
+- `dev.talentsuite.uk` is frontend-only once the split API host is enabled.
+- `dev-api.talentsuite.uk` is API-only.
+- `FRONTEND_PUBLIC_ORIGIN` must stay set to `https://dev.talentsuite.uk` on `talentserver` so CORS allows the browser origin.
+
+### Azure TalentServer / Foundry Notes
+- `Azure TalentServer` now:
+  - sets `AzureAIFoundry__ProjectEndpoint`
+  - sets `Agents__AgentId`
+  - grants `Azure AI User` to the live `talentserver` managed identity on the Foundry account
+  - attempts project-scope assignment as well, but only account-scope verification is required for deploy success
+- `AzureOpenAiChatService` now:
+  - trims Foundry config values before use
+  - prefers managed identity explicitly in Azure instead of a bare `DefaultAzureCredential()`
+  - falls back to local developer credentials only after managed identity
+  - recreates stale Foundry threads automatically when Foundry returns `No thread found`
+- If chat fails in Azure, the most useful diagnostic is:
+  - `az containerapp logs show --name talentserver --resource-group rg-dev --tail 200`
 
 ### Azure Secret Handling (CI)
 The workflow uses explicit GitHub `vars` and `secrets` (no JSON blob). It:
