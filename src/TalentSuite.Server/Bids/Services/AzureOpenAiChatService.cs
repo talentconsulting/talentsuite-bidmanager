@@ -1,4 +1,5 @@
 using System.Text;
+using Azure;
 using Azure.AI.Agents.Persistent;
 using Azure.Core;
 using Azure.Identity;
