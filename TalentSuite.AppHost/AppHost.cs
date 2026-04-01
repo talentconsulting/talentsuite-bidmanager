@@ -8,6 +8,8 @@ using Azure.Provisioning.Resources;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Azure;
 using Azure.Core;
+using Azure.Provisioning;
+using Azure.Provisioning.Expressions;
 
 var builder = DistributedApplication.CreateBuilder(args);
 const string InfrastructureModeVariable = "TALENTSUITE_INFRA_MODE";
@@ -303,8 +305,8 @@ else
                     new NetworkPrivateLinkServiceConnection
                     {
                         Name = "sqlServerConnection",
-                        PrivateLinkServiceId = new ResourceIdentifier(
-                            $"[concat(resourceGroup().id, '/providers/Microsoft.Sql/servers/', {sql!.Resource.NameOutputReference})]"),
+                        PrivateLinkServiceId = new BicepValue<ResourceIdentifier>(
+                            $"resourceId('Microsoft.Sql/servers', {sql!.Resource.NameOutputReference.ValueExpression})"),
                         GroupIds =
                         [
                             "sqlServer"
