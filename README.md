@@ -43,6 +43,21 @@ Infrastructure mode is controlled by one variable in `TalentSuite.AppHost`:
 
 When `TALENTSUITE_INFRA_MODE=azure`, Aspire derives the Keycloak JDBC URL from the provisioned Azure SQL `keycloakdb` resource automatically.
 
+### Azure Private SQL Phase 1
+Azure mode now provisions the first step of private SQL networking:
+- a shared VNet for the environment
+- a parallel Azure Container Apps environment for the private-network path
+- an ACA infrastructure subnet
+- a private-endpoints subnet
+- a private endpoint for the Azure SQL logical server
+- a private DNS zone link for `privatelink.database.windows.net`
+
+This phase is intentionally not a full lock-down yet:
+- `talentserver` / `keycloak` can resolve Azure SQL privately from the VNet-backed Container Apps environment
+- Azure SQL public network access is still left enabled for now so the current GitHub-hosted CI/bootstrap path can continue to manage SQL
+
+The next phase, when ready, is to move deployment/bootstrap SQL access behind the VNet as well, and only then disable public SQL access.
+
 For local secret overrides used by `set-env.sh`, create:
 - `.env.local`
 - `.env.azure.local` (for azure mode only)

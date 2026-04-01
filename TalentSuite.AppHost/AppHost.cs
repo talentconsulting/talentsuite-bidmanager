@@ -2,7 +2,11 @@ using Projects;
 using Azure.Provisioning.ServiceBus;
 using Azure.Provisioning.Sql;
 using Azure.Provisioning.AppContainers;
+using Azure.Provisioning.Network;
+using Azure.Provisioning.PrivateDns;
+using Azure.Provisioning.Resources;
 using Aspire.Hosting.ApplicationModel;
+using Azure.Core;
 
 var builder = DistributedApplication.CreateBuilder(args);
 const string InfrastructureModeVariable = "TALENTSUITE_INFRA_MODE";
@@ -218,7 +222,105 @@ if (useLocalInfrastructure)
 }
 else
 {
-    builder.AddAzureContainerAppEnvironment("aca-dev");
+#pragma warning disable AZPROVISION001
+    builder.AddAzureContainerAppEnvironment("aca-dev-private")
+        .ConfigureInfrastructure(infra =>
+        {
+            var containerAppEnvironment = infra.GetProvisionableResources()
+                .OfType<ContainerAppManagedEnvironment>()
+                .Single();
+
+            var acaInfrastructureSubnet = new SubnetResource("acaInfrastructureSubnet")
+            {
+                Name = "aca-infrastructure",
+                AddressPrefix = "10.42.0.0/23"
+            };
+
+            var sqlPrivateEndpointSubnet = new SubnetResource("sqlPrivateEndpointSubnet")
+            {
+                Name = "private-endpoints",
+                AddressPrefix = "10.42.2.0/24",
+                PrivateEndpointNetworkPolicy = VirtualNetworkPrivateEndpointNetworkPolicy.Disabled
+            };
+
+            var vnet = new VirtualNetwork("talentSuiteNetwork", VirtualNetwork.ResourceVersions.V2021_08_01)
+            {
+                Name = "vnet-talentsuite-dev",
+                AddressSpace = new VirtualNetworkAddressSpace
+                {
+                    AddressPrefixes =
+                    [
+                        "10.42.0.0/16"
+                    ]
+                },
+                Subnets =
+                [
+                    acaInfrastructureSubnet,
+                    sqlPrivateEndpointSubnet
+                ]
+            };
+            infra.Add(vnet);
+
+            containerAppEnvironment.VnetConfiguration = new ContainerAppVnetConfiguration
+            {
+                InfrastructureSubnetId = acaInfrastructureSubnet.Id
+            };
+
+            var sqlServer = infra.GetProvisionableResources().OfType<SqlServer>().Single();
+
+            var sqlPrivateDnsZone = new PrivateDnsZone("sqlPrivateDnsZone", PrivateDnsZone.ResourceVersions.V2020_06_01)
+            {
+                Name = "privatelink.database.windows.net",
+                Location = new AzureLocation("global")
+            };
+            infra.Add(sqlPrivateDnsZone);
+
+            var sqlPrivateDnsLink = new VirtualNetworkLink("sqlPrivateDnsZoneLink", VirtualNetworkLink.ResourceVersions.V2020_06_01)
+            {
+                Parent = sqlPrivateDnsZone,
+                Name = "vnet-talentsuite-dev-link",
+                Location = new AzureLocation("global"),
+                RegistrationEnabled = false,
+                VirtualNetworkId = vnet.Id
+            };
+            infra.Add(sqlPrivateDnsLink);
+
+            var sqlPrivateEndpoint = new PrivateEndpoint("sqlPrivateEndpoint", PrivateEndpoint.ResourceVersions.V2024_07_01)
+            {
+                Name = "pep-sql-talentsuite-dev",
+                Location = sqlServer.Location,
+                Subnet = sqlPrivateEndpointSubnet,
+                PrivateLinkServiceConnections =
+                [
+                    new NetworkPrivateLinkServiceConnection
+                    {
+                        Name = "sqlServerConnection",
+                        PrivateLinkServiceId = sqlServer.Id,
+                        GroupIds =
+                        [
+                            "sqlServer"
+                        ]
+                    }
+                ]
+            };
+            infra.Add(sqlPrivateEndpoint);
+
+            var sqlPrivateDnsZoneGroup = new PrivateDnsZoneGroup("sqlPrivateDnsZoneGroup", PrivateDnsZoneGroup.ResourceVersions.V2024_07_01)
+            {
+                Parent = sqlPrivateEndpoint,
+                Name = "default",
+                PrivateDnsZoneConfigs =
+                [
+                    new PrivateDnsZoneConfig
+                    {
+                        Name = "sqlServerDnsZone",
+                        PrivateDnsZoneId = sqlPrivateDnsZone.Id
+                    }
+                ]
+            };
+            infra.Add(sqlPrivateDnsZoneGroup);
+        });
+#pragma warning restore AZPROVISION001
 
     var sql = builder.AddAzureSqlServer("sql")
         .ConfigureInfrastructure(infra =>
