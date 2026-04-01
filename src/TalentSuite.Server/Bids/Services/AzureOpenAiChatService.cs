@@ -63,21 +63,12 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
         if (string.IsNullOrWhiteSpace(userPrompt))
             throw new ArgumentException("User prompt is required.", nameof(userPrompt));
 
-        // 1) Reuse existing thread when provided, otherwise create a new one
+        // Reuse an existing thread when possible, but recover if Foundry has discarded it.
         var effectiveThreadId = threadId;
         if (string.IsNullOrWhiteSpace(effectiveThreadId))
-        {
-            PersistentAgentThread newThread = await _client.Threads.CreateThreadAsync(cancellationToken: ct);
-            effectiveThreadId = newThread.Id;
-        }
+            effectiveThreadId = await CreateThreadAsync(ct);
 
-        // 2) Add user message
-        await _client.Messages.CreateMessageAsync(
-            threadId: effectiveThreadId,
-            role: MessageRole.User,
-            content: userPrompt,
-            cancellationToken: ct
-        );
+        effectiveThreadId = await AddUserMessageAsync(effectiveThreadId, userPrompt, ct);
 
         // 3) Run the agent
         ThreadRun run = await _client.Runs.CreateRunAsync(
@@ -128,5 +119,37 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
             Response = lastAgentText ?? "(No agent text response returned.)",
             ThreadId = effectiveThreadId
         };
+    }
+
+    private async Task<string> AddUserMessageAsync(string threadId, string userPrompt, CancellationToken ct)
+    {
+        try
+        {
+            await _client.Messages.CreateMessageAsync(
+                threadId: threadId,
+                role: MessageRole.User,
+                content: userPrompt,
+                cancellationToken: ct);
+
+            return threadId;
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404 && ex.Message.Contains("No thread found", StringComparison.OrdinalIgnoreCase))
+        {
+            var newThreadId = await CreateThreadAsync(ct);
+
+            await _client.Messages.CreateMessageAsync(
+                threadId: newThreadId,
+                role: MessageRole.User,
+                content: userPrompt,
+                cancellationToken: ct);
+
+            return newThreadId;
+        }
+    }
+
+    private async Task<string> CreateThreadAsync(CancellationToken ct)
+    {
+        PersistentAgentThread newThread = await _client.Threads.CreateThreadAsync(cancellationToken: ct);
+        return newThread.Id;
     }
 }
