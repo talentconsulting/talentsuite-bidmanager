@@ -306,6 +306,22 @@ jobs:
           echo "SQL module excerpt:"
           sed -n '1,220p' "$sql_module"
 
+      - name: Preflight AppHost manifest generation
+        if: ${{ github.event.inputs.deployment_mode != 'apps-only' }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+          manifest_dir="$(mktemp -d /tmp/apphost-manifest-preflight.XXXXXX)"
+          manifest_file="$manifest_dir/manifest.json"
+
+          dotnet build TalentSuite.AppHost/TalentSuite.AppHost.csproj --no-restore
+          dotnet TalentSuite.AppHost/bin/Debug/net10.0/TalentSuite.AppHost.dll \
+            --publisher manifest \
+            --output-path "$manifest_file"
+
+          test -f "$manifest_file" || (echo "AppHost manifest was not generated at $manifest_file" && exit 1)
+          echo "Generated AppHost manifest at $manifest_file"
+
       - name: Provision
         if: ${{ github.event.inputs.deployment_mode != 'apps-only' }}
         id: provision
