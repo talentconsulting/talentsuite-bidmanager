@@ -256,23 +256,8 @@ else
                 };
             }
         });
-    var privateNetwork = builder.AddBicepTemplate("private-network", "Infrastructure/private-network.bicep")
+    builder.AddBicepTemplate("private-network", "Infrastructure/private-network.bicep")
         .WithParameter("sqlServerName", sql.Resource.NameOutputReference);
-
-    builder.AddAzureContainerAppEnvironment("aca-dev-private")
-        .ConfigureInfrastructure(infra =>
-        {
-            var containerAppEnvironment = infra.GetProvisionableResources()
-                .OfType<ContainerAppManagedEnvironment>()
-                .Single();
-
-            containerAppEnvironment.VnetConfiguration = new ContainerAppVnetConfiguration
-            {
-                InfrastructureSubnetId = privateNetwork
-                    .GetOutput("acaInfrastructureSubnetId")
-                    .AsProvisioningParameter(infra, "acaInfrastructureSubnetId")
-            };
-        });
     var appDb = sql.AddDatabase("talentconsultingdb");
     var keycloakDb = sql.AddDatabase("keycloakdb");
 
