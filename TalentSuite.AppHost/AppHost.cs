@@ -1,14 +1,9 @@
-﻿#pragma warning disable AZPROVISION001
 using Projects;
 using Azure.Provisioning.ServiceBus;
 using Azure.Provisioning.Sql;
 using Azure.Provisioning.AppContainers;
-using Azure.Provisioning.Network;
-using Azure.Provisioning.PrivateDns;
-using Azure.Provisioning.Resources;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Azure;
-using Azure.Core;
 using Azure.Provisioning;
 using Azure.Provisioning.Expressions;
 
@@ -192,10 +187,6 @@ var bidStorage = useLocalInfrastructure
     : builder.AddAzureStorage("bidcontentstorage").AddBlobs("bidstorage");
 IResourceBuilder<ProjectResource> server;
 IResourceBuilder<AzureSqlServerResource>? sql = null;
-SubnetResource? acaInfrastructureSubnet = null;
-SubnetResource? sqlPrivateEndpointSubnet = null;
-VirtualNetwork? vnet = null;
-PrivateDnsZone? sqlPrivateDnsZone = null;
 if (useLocalInfrastructure)
 {
     var localSql = builder.AddSqlServer("sql", password: sqlPassword, port: 14330)
@@ -231,74 +222,6 @@ if (useLocalInfrastructure)
 }
 else
 {
-    builder.AddAzureContainerAppEnvironment("aca-dev-private")
-        .ConfigureInfrastructure(infra =>
-        {
-            var containerAppEnvironment = infra.GetProvisionableResources()
-                .OfType<ContainerAppManagedEnvironment>()
-                .Single();
-
-            acaInfrastructureSubnet = new SubnetResource("acaInfrastructureSubnet")
-            {
-                Name = "aca-infrastructure",
-                AddressPrefix = "10.42.0.0/23"
-                ,
-                Delegations =
-                [
-                    new ServiceDelegation
-                    {
-                        ServiceName = "Microsoft.App/environments"
-                    }
-                ]
-            };
-
-            sqlPrivateEndpointSubnet = new SubnetResource("sqlPrivateEndpointSubnet")
-            {
-                Name = "private-endpoints",
-                AddressPrefix = "10.42.2.0/24",
-                PrivateEndpointNetworkPolicy = VirtualNetworkPrivateEndpointNetworkPolicy.Disabled
-            };
-
-            vnet = new VirtualNetwork("talentSuiteNetwork", VirtualNetwork.ResourceVersions.V2021_08_01)
-            {
-                Name = "vnet-talentsuite-dev",
-                AddressSpace = new VirtualNetworkAddressSpace
-                {
-                    AddressPrefixes =
-                    [
-                        "10.42.0.0/16"
-                    ]
-                },
-                Subnets =
-                [
-                    acaInfrastructureSubnet,
-                    sqlPrivateEndpointSubnet
-                ]
-            };
-            infra.Add(vnet);
-
-            containerAppEnvironment.VnetConfiguration = new ContainerAppVnetConfiguration
-            {
-                InfrastructureSubnetId = acaInfrastructureSubnet.Id
-            };
-
-            sqlPrivateDnsZone = new PrivateDnsZone("sqlPrivateDnsZone", PrivateDnsZone.ResourceVersions.V2020_06_01)
-            {
-                Name = "privatelink.database.windows.net",
-                Location = new AzureLocation("global")
-            };
-            infra.Add(sqlPrivateDnsZone);
-
-            var sqlPrivateDnsLink = new VirtualNetworkLink("sqlPrivateDnsZoneLink", VirtualNetworkLink.ResourceVersions.V2020_06_01)
-            {
-                Parent = sqlPrivateDnsZone,
-                Name = "vnet-talentsuite-dev-link",
-                Location = new AzureLocation("global"),
-                RegistrationEnabled = false,
-                VirtualNetworkId = vnet.Id
-            };
-            infra.Add(sqlPrivateDnsLink);
-        });
     sql = builder.AddAzureSqlServer("sql")
         .ConfigureInfrastructure(infra =>
         {
@@ -332,41 +255,23 @@ else
                     IsAzureADOnlyAuthenticationEnabled = false
                 };
             }
+        });
+    var privateNetwork = builder.AddBicepTemplate("private-network", "Infrastructure/private-network.bicep")
+        .WithParameter("sqlServerName", sql.Resource.NameOutputReference);
 
-            var sqlPrivateEndpoint = new PrivateEndpoint("sqlPrivateEndpoint", PrivateEndpoint.ResourceVersions.V2024_07_01)
-            {
-                Name = "pep-sql-talentsuite-dev",
-                Location = new AzureLocation("uksouth"),
-                Subnet = sqlPrivateEndpointSubnet!,
-                PrivateLinkServiceConnections =
-                [
-                    new NetworkPrivateLinkServiceConnection
-                    {
-                        Name = "sqlServerConnection",
-                        PrivateLinkServiceId = server.Id,
-                        GroupIds =
-                        [
-                            "sqlServer"
-                        ]
-                    }
-                ]
-            };
-            infra.Add(sqlPrivateEndpoint);
+    builder.AddAzureContainerAppEnvironment("aca-dev-private")
+        .ConfigureInfrastructure(infra =>
+        {
+            var containerAppEnvironment = infra.GetProvisionableResources()
+                .OfType<ContainerAppManagedEnvironment>()
+                .Single();
 
-            var sqlPrivateDnsZoneGroup = new PrivateDnsZoneGroup("sqlPrivateDnsZoneGroup", PrivateDnsZoneGroup.ResourceVersions.V2024_07_01)
+            containerAppEnvironment.VnetConfiguration = new ContainerAppVnetConfiguration
             {
-                Parent = sqlPrivateEndpoint,
-                Name = "default",
-                PrivateDnsZoneConfigs =
-                [
-                    new PrivateDnsZoneConfig
-                    {
-                        Name = "sqlServerDnsZone",
-                        PrivateDnsZoneId = sqlPrivateDnsZone!.Id
-                    }
-                ]
+                InfrastructureSubnetId = privateNetwork
+                    .GetOutput("acaInfrastructureSubnetId")
+                    .AsProvisioningParameter(infra, "acaInfrastructureSubnetId")
             };
-            infra.Add(sqlPrivateDnsZoneGroup);
         });
     var appDb = sql.AddDatabase("talentconsultingdb");
     var keycloakDb = sql.AddDatabase("keycloakdb");
