@@ -189,6 +189,7 @@ var bidStorage = useLocalInfrastructure
     : builder.AddAzureStorage("bidcontentstorage").AddBlobs("bidstorage");
 IResourceBuilder<ProjectResource> server;
 IResourceBuilder<AzureSqlServerResource>? sql = null;
+IResourceBuilder<AzureContainerAppEnvironmentResource>? defaultAcaEnvironment = null;
 IResourceBuilder<AzureContainerAppEnvironmentResource>? privateAcaEnvironment = null;
 if (useLocalInfrastructure)
 {
@@ -225,7 +226,7 @@ if (useLocalInfrastructure)
 }
 else
 {
-    builder.AddAzureContainerAppEnvironment("aca-dev");
+    defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev");
 
     sql = builder.AddAzureSqlServer("sql")
         .ConfigureInfrastructure(infra =>
@@ -339,6 +340,11 @@ var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
     .WithEnvironment("GoogleDriveSync__ServiceAccountJsonBase64", googleDriveSyncServiceAccountJsonBase64)
     .WaitFor(messaging)
     .WaitFor(server);
+
+if (!useLocalInfrastructure)
+{
+    functions.WithComputeEnvironment(defaultAcaEnvironment!);
+}
 
 var grafana = builder.AddDockerfile("grafana", "../ops/grafana")
     .WithHttpEndpoint(targetPort: 3000, name: "http")
