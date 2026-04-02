@@ -289,9 +289,11 @@ else
         .WithComputeEnvironment(privateAcaEnvironment)
         .PublishAsAzureContainerApp((infra, app) =>
         {
+            var privateEnvironmentName = privateAcaEnvironment!.Resource.NameOutputReference
+                .AsProvisioningParameter(infra, "privateContainerAppsEnvironmentName");
             app.EnvironmentId = new BicepValue<ResourceIdentifier>(
                 (BicepExpression)BicepFunction.Interpolate(
-                    $"resourceId('Microsoft.App/managedEnvironments', {privateAcaEnvironment!.Resource.NameOutputReference})"));
+                    $"resourceId('Microsoft.App/managedEnvironments', {privateEnvironmentName})"));
         })
         .WaitFor(keycloakDb);
     
@@ -312,9 +314,11 @@ else
         .WithComputeEnvironment(privateAcaEnvironment)
         .PublishAsAzureContainerApp((infra, app) =>
         {
+            var privateEnvironmentName = privateAcaEnvironment!.Resource.NameOutputReference
+                .AsProvisioningParameter(infra, "privateContainerAppsEnvironmentName");
             app.EnvironmentId = new BicepValue<ResourceIdentifier>(
                 (BicepExpression)BicepFunction.Interpolate(
-                    $"resourceId('Microsoft.App/managedEnvironments', {privateAcaEnvironment!.Resource.NameOutputReference})"));
+                    $"resourceId('Microsoft.App/managedEnvironments', {privateEnvironmentName})"));
         })
         .WaitFor(appDb)
         .WaitFor(keycloak);
@@ -415,9 +419,11 @@ else
         .WithComputeEnvironment(privateAcaEnvironment)
         .PublishAsAzureContainerApp((infra, app) =>
         {
+            var privateEnvironmentName = privateAcaEnvironment!.Resource.NameOutputReference
+                .AsProvisioningParameter(infra, "privateContainerAppsEnvironmentName");
             app.EnvironmentId = new BicepValue<ResourceIdentifier>(
                 (BicepExpression)BicepFunction.Interpolate(
-                    $"resourceId('Microsoft.App/managedEnvironments', {privateAcaEnvironment!.Resource.NameOutputReference})"));
+                    $"resourceId('Microsoft.App/managedEnvironments', {privateEnvironmentName})"));
             app.Configuration ??= new();
             app.Configuration.Ingress ??= new();
             app.Configuration.Ingress.External = true;
