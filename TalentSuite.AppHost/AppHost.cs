@@ -1,3 +1,4 @@
+﻿#pragma warning disable AZPROVISION001
 using Projects;
 using Azure.Provisioning.ServiceBus;
 using Azure.Provisioning.Sql;
@@ -191,6 +192,10 @@ var bidStorage = useLocalInfrastructure
     : builder.AddAzureStorage("bidcontentstorage").AddBlobs("bidstorage");
 IResourceBuilder<ProjectResource> server;
 IResourceBuilder<AzureSqlServerResource>? sql = null;
+SubnetResource? acaInfrastructureSubnet = null;
+SubnetResource? sqlPrivateEndpointSubnet = null;
+VirtualNetwork? vnet = null;
+PrivateDnsZone? sqlPrivateDnsZone = null;
 if (useLocalInfrastructure)
 {
     var localSql = builder.AddSqlServer("sql", password: sqlPassword, port: 14330)
@@ -226,7 +231,6 @@ if (useLocalInfrastructure)
 }
 else
 {
-#pragma warning disable AZPROVISION001
     builder.AddAzureContainerAppEnvironment("aca-dev-private")
         .ConfigureInfrastructure(infra =>
         {
@@ -234,7 +238,7 @@ else
                 .OfType<ContainerAppManagedEnvironment>()
                 .Single();
 
-            var acaInfrastructureSubnet = new SubnetResource("acaInfrastructureSubnet")
+            acaInfrastructureSubnet = new SubnetResource("acaInfrastructureSubnet")
             {
                 Name = "aca-infrastructure",
                 AddressPrefix = "10.42.0.0/23"
@@ -248,14 +252,14 @@ else
                 ]
             };
 
-            var sqlPrivateEndpointSubnet = new SubnetResource("sqlPrivateEndpointSubnet")
+            sqlPrivateEndpointSubnet = new SubnetResource("sqlPrivateEndpointSubnet")
             {
                 Name = "private-endpoints",
                 AddressPrefix = "10.42.2.0/24",
                 PrivateEndpointNetworkPolicy = VirtualNetworkPrivateEndpointNetworkPolicy.Disabled
             };
 
-            var vnet = new VirtualNetwork("talentSuiteNetwork", VirtualNetwork.ResourceVersions.V2021_08_01)
+            vnet = new VirtualNetwork("talentSuiteNetwork", VirtualNetwork.ResourceVersions.V2021_08_01)
             {
                 Name = "vnet-talentsuite-dev",
                 AddressSpace = new VirtualNetworkAddressSpace
@@ -278,7 +282,7 @@ else
                 InfrastructureSubnetId = acaInfrastructureSubnet.Id
             };
 
-            var sqlPrivateDnsZone = new PrivateDnsZone("sqlPrivateDnsZone", PrivateDnsZone.ResourceVersions.V2020_06_01)
+            sqlPrivateDnsZone = new PrivateDnsZone("sqlPrivateDnsZone", PrivateDnsZone.ResourceVersions.V2020_06_01)
             {
                 Name = "privatelink.database.windows.net",
                 Location = new AzureLocation("global")
@@ -294,46 +298,7 @@ else
                 VirtualNetworkId = vnet.Id
             };
             infra.Add(sqlPrivateDnsLink);
-
-            var sqlPrivateEndpoint = new PrivateEndpoint("sqlPrivateEndpoint", PrivateEndpoint.ResourceVersions.V2024_07_01)
-            {
-                Name = "pep-sql-talentsuite-dev",
-                Location = new AzureLocation("uksouth"),
-                Subnet = sqlPrivateEndpointSubnet,
-                PrivateLinkServiceConnections =
-                [
-                    new NetworkPrivateLinkServiceConnection
-                    {
-                        Name = "sqlServerConnection",
-                        PrivateLinkServiceId = new BicepValue<ResourceIdentifier>(
-                            (BicepExpression)BicepFunction.Interpolate(
-                                $"[resourceId('Microsoft.Sql/servers', {sql!.Resource.NameOutputReference.ValueExpression})]")),
-                        GroupIds =
-                        [
-                            "sqlServer"
-                        ]
-                    }
-                ]
-            };
-            infra.Add(sqlPrivateEndpoint);
-
-            var sqlPrivateDnsZoneGroup = new PrivateDnsZoneGroup("sqlPrivateDnsZoneGroup", PrivateDnsZoneGroup.ResourceVersions.V2024_07_01)
-            {
-                Parent = sqlPrivateEndpoint,
-                Name = "default",
-                PrivateDnsZoneConfigs =
-                [
-                    new PrivateDnsZoneConfig
-                    {
-                        Name = "sqlServerDnsZone",
-                        PrivateDnsZoneId = sqlPrivateDnsZone.Id
-                    }
-                ]
-            };
-            infra.Add(sqlPrivateDnsZoneGroup);
         });
-#pragma warning restore AZPROVISION001
-
     sql = builder.AddAzureSqlServer("sql")
         .ConfigureInfrastructure(infra =>
         {
@@ -367,8 +332,42 @@ else
                     IsAzureADOnlyAuthenticationEnabled = false
                 };
             }
+
+            var sqlPrivateEndpoint = new PrivateEndpoint("sqlPrivateEndpoint", PrivateEndpoint.ResourceVersions.V2024_07_01)
+            {
+                Name = "pep-sql-talentsuite-dev",
+                Location = new AzureLocation("uksouth"),
+                Subnet = sqlPrivateEndpointSubnet!,
+                PrivateLinkServiceConnections =
+                [
+                    new NetworkPrivateLinkServiceConnection
+                    {
+                        Name = "sqlServerConnection",
+                        PrivateLinkServiceId = server.Id,
+                        GroupIds =
+                        [
+                            "sqlServer"
+                        ]
+                    }
+                ]
+            };
+            infra.Add(sqlPrivateEndpoint);
+
+            var sqlPrivateDnsZoneGroup = new PrivateDnsZoneGroup("sqlPrivateDnsZoneGroup", PrivateDnsZoneGroup.ResourceVersions.V2024_07_01)
+            {
+                Parent = sqlPrivateEndpoint,
+                Name = "default",
+                PrivateDnsZoneConfigs =
+                [
+                    new PrivateDnsZoneConfig
+                    {
+                        Name = "sqlServerDnsZone",
+                        PrivateDnsZoneId = sqlPrivateDnsZone!.Id
+                    }
+                ]
+            };
+            infra.Add(sqlPrivateDnsZoneGroup);
         });
-    
     var appDb = sql.AddDatabase("talentconsultingdb");
     var keycloakDb = sql.AddDatabase("keycloakdb");
 
