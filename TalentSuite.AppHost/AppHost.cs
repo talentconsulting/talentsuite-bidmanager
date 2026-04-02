@@ -191,6 +191,7 @@ var bidStorage = useLocalInfrastructure
     : builder.AddAzureStorage("bidcontentstorage").AddBlobs("bidstorage");
 IResourceBuilder<ProjectResource> server;
 IResourceBuilder<AzureSqlServerResource>? sql = null;
+SqlServer? azureSqlServer = null;
 if (useLocalInfrastructure)
 {
     var localSql = builder.AddSqlServer("sql", password: sqlPassword, port: 14330)
@@ -305,9 +306,7 @@ else
                     new NetworkPrivateLinkServiceConnection
                     {
                         Name = "sqlServerConnection",
-                        PrivateLinkServiceId = new BicepValue<ResourceIdentifier>(
-                            (BicepExpression)BicepFunction.Interpolate(
-                                $"[resourceId('Microsoft.Sql/servers', {sql!.Resource.NameOutputReference})]")),
+                        PrivateLinkServiceId = azureSqlServer!.Id,
                         GroupIds =
                         [
                             "sqlServer"
@@ -338,6 +337,7 @@ else
         .ConfigureInfrastructure(infra =>
         {
             var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
+            azureSqlServer = server;
             server.AdministratorLogin = "sqladm72";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
 
