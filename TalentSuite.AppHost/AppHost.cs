@@ -285,6 +285,7 @@ else
         .WithEnvironment("KC_DB_USERNAME", keycloakDbUsername)
         .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", keycloakContainerAdminPassword)
         .WithEnvironment("KC_DB_PASSWORD", keycloakContainerDbPassword)
+        .WithComputeEnvironment(privateAcaEnvironment)
         .PublishAsAzureContainerApp((infra, app) =>
         {
             app.EnvironmentId = new BicepValue<ResourceIdentifier>(
@@ -307,6 +308,7 @@ else
         .WithEnvironment("KEYCLOAK_ADMIN_USERNAME", "admin")
         .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", keycloakPassword)
         .WithEnvironment("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
+        .WithComputeEnvironment(privateAcaEnvironment)
         .PublishAsAzureContainerApp((infra, app) =>
         {
             app.EnvironmentId = new BicepValue<ResourceIdentifier>(
@@ -404,6 +406,7 @@ else
             context.EnvironmentVariables["GF_AUTH_AZUREAD_TOKEN_URL"] =
                 $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token";
         })
+        .WithComputeEnvironment(privateAcaEnvironment)
         .PublishAsAzureContainerApp((infra, app) =>
         {
             app.EnvironmentId = new BicepValue<ResourceIdentifier>(
