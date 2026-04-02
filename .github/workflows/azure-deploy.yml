@@ -24,7 +24,7 @@ on:
           - grafana
           - frontend
       migrate_private_aca_apps:
-        description: "Delete keycloak, talentserver, and grafana before deploy so they can be recreated in the private ACA environment."
+        description: "Delete keycloak, talentserver, grafana, and talentfunctions before deploy so they can be recreated in the private ACA environment."
         required: true
         default: false
         type: boolean
@@ -545,7 +545,7 @@ jobs:
           scripts/ci/sync-containerapp-secrets-keyvault.sh
 
       - name: Migrate apps to private ACA environment
-        if: ${{ github.event.inputs.migrate_private_aca_apps == 'true' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak' || github.event.inputs.deploy_target == 'talentserver' || github.event.inputs.deploy_target == 'grafana') }}
+        if: ${{ github.event.inputs.migrate_private_aca_apps == 'true' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak' || github.event.inputs.deploy_target == 'talentserver' || github.event.inputs.deploy_target == 'grafana' || github.event.inputs.deploy_target == 'talentfunctions') }}
         run: |
           set -euo pipefail
           resource_group="rg-${AZURE_ENV_NAME}"
@@ -568,7 +568,7 @@ jobs:
             return 1
           }
 
-          for app_name in keycloak talentserver grafana; do
+          for app_name in keycloak talentserver grafana talentfunctions; do
             if ! should_delete "$app_name"; then
               continue
             fi

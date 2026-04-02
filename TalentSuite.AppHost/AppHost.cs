@@ -331,7 +331,7 @@ var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
 
 if (!useLocalInfrastructure)
 {
-    functions.WithComputeEnvironment(defaultAcaEnvironment!);
+    functions.WithComputeEnvironment(privateAcaEnvironment!);
 }
 
 var grafana = builder.AddDockerfile("grafana", "../ops/grafana")
