@@ -222,6 +222,9 @@ if (useLocalInfrastructure)
 }
 else
 {
+    builder.AddAzureContainerAppEnvironment("aca-dev")
+        .WithAzdResourceNaming();
+
     sql = builder.AddAzureSqlServer("sql")
         .ConfigureInfrastructure(infra =>
         {
