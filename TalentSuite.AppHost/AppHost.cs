@@ -306,7 +306,8 @@ else
                     {
                         Name = "sqlServerConnection",
                         PrivateLinkServiceId = new BicepValue<ResourceIdentifier>(
-                            $"resourceId('Microsoft.Sql/servers', {sql!.Resource.NameOutputReference.ValueExpression})"),
+                            (BicepExpression)BicepFunction.Interpolate(
+                                $"[resourceId('Microsoft.Sql/servers', {sql!.Resource.NameOutputReference})]")),
                         GroupIds =
                         [
                             "sqlServer"
