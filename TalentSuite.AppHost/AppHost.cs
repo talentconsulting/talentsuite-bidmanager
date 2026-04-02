@@ -289,11 +289,8 @@ else
         .WithComputeEnvironment(privateAcaEnvironment)
         .PublishAsAzureContainerApp((infra, app) =>
         {
-            var privateEnvironmentName = privateAcaEnvironment!.Resource.NameOutputReference
-                .AsProvisioningParameter(infra, "privateContainerAppsEnvironmentName");
-            app.EnvironmentId = new BicepValue<ResourceIdentifier>(
-                (BicepExpression)BicepFunction.Interpolate(
-                    $"resourceId('Microsoft.App/managedEnvironments', {privateEnvironmentName})"));
+            app.EnvironmentId = ((AzureContainerAppEnvironmentResource)privateAcaEnvironment!.Resource)
+                .ContainerAppEnvironmentId;
         })
         .WaitFor(keycloakDb);
     
@@ -314,11 +311,8 @@ else
         .WithComputeEnvironment(privateAcaEnvironment)
         .PublishAsAzureContainerApp((infra, app) =>
         {
-            var privateEnvironmentName = privateAcaEnvironment!.Resource.NameOutputReference
-                .AsProvisioningParameter(infra, "privateContainerAppsEnvironmentName");
-            app.EnvironmentId = new BicepValue<ResourceIdentifier>(
-                (BicepExpression)BicepFunction.Interpolate(
-                    $"resourceId('Microsoft.App/managedEnvironments', {privateEnvironmentName})"));
+            app.EnvironmentId = ((AzureContainerAppEnvironmentResource)privateAcaEnvironment!.Resource)
+                .ContainerAppEnvironmentId;
         })
         .WaitFor(appDb)
         .WaitFor(keycloak);
@@ -419,11 +413,8 @@ else
         .WithComputeEnvironment(privateAcaEnvironment)
         .PublishAsAzureContainerApp((infra, app) =>
         {
-            var privateEnvironmentName = privateAcaEnvironment!.Resource.NameOutputReference
-                .AsProvisioningParameter(infra, "privateContainerAppsEnvironmentName");
-            app.EnvironmentId = new BicepValue<ResourceIdentifier>(
-                (BicepExpression)BicepFunction.Interpolate(
-                    $"resourceId('Microsoft.App/managedEnvironments', {privateEnvironmentName})"));
+            app.EnvironmentId = ((AzureContainerAppEnvironmentResource)privateAcaEnvironment!.Resource)
+                .ContainerAppEnvironmentId;
             app.Configuration ??= new();
             app.Configuration.Ingress ??= new();
             app.Configuration.Ingress.External = true;
