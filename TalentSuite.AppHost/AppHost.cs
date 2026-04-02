@@ -148,11 +148,6 @@ var grafanaAzureMonitorSubscriptionId = builder.AddParameter(
                                 value: "",
                                 secret: false,
                                 publishValueAsDefault: true);
-var sqlPrivateEndpointServiceId = builder.AddParameter(
-                                "SqlPrivateEndpointServiceId",
-                                value: "",
-                                secret: false,
-                                publishValueAsDefault: false);
 var keycloakContainerAdminPassword = keycloakPassword;
 var keycloakContainerDbPassword = keycloakDbPassword;
 
@@ -310,7 +305,9 @@ else
                     new NetworkPrivateLinkServiceConnection
                     {
                         Name = "sqlServerConnection",
-                        PrivateLinkServiceId = sqlPrivateEndpointServiceId,
+                        PrivateLinkServiceId = new BicepValue<ResourceIdentifier>(
+                            (BicepExpression)BicepFunction.Interpolate(
+                                $"[resourceId('Microsoft.Sql/servers', {sql!.Resource.NameOutputReference.ValueExpression})]")),
                         GroupIds =
                         [
                             "sqlServer"
