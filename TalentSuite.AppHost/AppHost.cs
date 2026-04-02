@@ -148,6 +148,11 @@ var grafanaAzureMonitorSubscriptionId = builder.AddParameter(
                                 value: "",
                                 secret: false,
                                 publishValueAsDefault: true);
+var sqlPrivateEndpointServiceId = builder.AddParameter(
+                                "SqlPrivateEndpointServiceId",
+                                value: "",
+                                secret: false,
+                                publishValueAsDefault: false);
 var keycloakContainerAdminPassword = keycloakPassword;
 var keycloakContainerDbPassword = keycloakDbPassword;
 
@@ -191,7 +196,6 @@ var bidStorage = useLocalInfrastructure
     : builder.AddAzureStorage("bidcontentstorage").AddBlobs("bidstorage");
 IResourceBuilder<ProjectResource> server;
 IResourceBuilder<AzureSqlServerResource>? sql = null;
-SqlServer? azureSqlServer = null;
 if (useLocalInfrastructure)
 {
     var localSql = builder.AddSqlServer("sql", password: sqlPassword, port: 14330)
@@ -306,7 +310,7 @@ else
                     new NetworkPrivateLinkServiceConnection
                     {
                         Name = "sqlServerConnection",
-                        PrivateLinkServiceId = azureSqlServer!.Id,
+                        PrivateLinkServiceId = sqlPrivateEndpointServiceId,
                         GroupIds =
                         [
                             "sqlServer"
@@ -337,7 +341,6 @@ else
         .ConfigureInfrastructure(infra =>
         {
             var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
-            azureSqlServer = server;
             server.AdministratorLogin = "sqladm72";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
 
