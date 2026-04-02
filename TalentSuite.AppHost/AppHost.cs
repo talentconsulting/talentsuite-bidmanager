@@ -4,6 +4,7 @@ using Azure.Provisioning.Sql;
 using Azure.Provisioning.AppContainers;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Azure;
+using Aspire.Hosting.Azure.AppContainers;
 using Azure.Provisioning;
 using Azure.Provisioning.Expressions;
 
@@ -187,6 +188,7 @@ var bidStorage = useLocalInfrastructure
     : builder.AddAzureStorage("bidcontentstorage").AddBlobs("bidstorage");
 IResourceBuilder<ProjectResource> server;
 IResourceBuilder<AzureSqlServerResource>? sql = null;
+IResourceBuilder<AzureContainerAppEnvironmentResource>? privateAcaEnvironment = null;
 if (useLocalInfrastructure)
 {
     var localSql = builder.AddSqlServer("sql", password: sqlPassword, port: 14330)
@@ -258,8 +260,22 @@ else
                 };
             }
         });
-    builder.AddBicepTemplate("private-network", "Infrastructure/private-network.bicep")
+    var privateNetwork = builder.AddBicepTemplate("private-network", "Infrastructure/private-network.bicep")
         .WithParameter("sqlServerName", sql.Resource.NameOutputReference);
+    privateAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev-private")
+        .ConfigureInfrastructure(infra =>
+        {
+            var containerAppEnvironment = infra.GetProvisionableResources()
+                .OfType<ContainerAppManagedEnvironment>()
+                .Single();
+
+            containerAppEnvironment.VnetConfiguration = new ContainerAppVnetConfiguration
+            {
+                InfrastructureSubnetId = privateNetwork
+                    .GetOutput("acaInfrastructureSubnetId")
+                    .AsProvisioningParameter(infra, "acaInfrastructureSubnetId")
+            };
+        });
     var appDb = sql.AddDatabase("talentconsultingdb");
     var keycloakDb = sql.AddDatabase("keycloakdb");
 
@@ -268,6 +284,11 @@ else
         .WithEnvironment("KC_DB_USERNAME", keycloakDbUsername)
         .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", keycloakContainerAdminPassword)
         .WithEnvironment("KC_DB_PASSWORD", keycloakContainerDbPassword)
+        .PublishAsAzureContainerApp((infra, app) =>
+        {
+            app.EnvironmentId = privateAcaEnvironment.Resource.ContainerAppEnvironmentId
+                .AsProvisioningParameter(infra, "privateContainerAppsEnvironmentId");
+        })
         .WaitFor(keycloakDb);
     
     server = builder.AddProject<TalentSuite_Server>("talentserver")
@@ -284,6 +305,11 @@ else
         .WithEnvironment("KEYCLOAK_ADMIN_USERNAME", "admin")
         .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", keycloakPassword)
         .WithEnvironment("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
+        .PublishAsAzureContainerApp((infra, app) =>
+        {
+            app.EnvironmentId = privateAcaEnvironment.Resource.ContainerAppEnvironmentId
+                .AsProvisioningParameter(infra, "privateContainerAppsEnvironmentId");
+        })
         .WaitFor(appDb)
         .WaitFor(keycloak);
 }
@@ -375,8 +401,10 @@ else
             context.EnvironmentVariables["GF_AUTH_AZUREAD_TOKEN_URL"] =
                 $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token";
         })
-        .PublishAsAzureContainerApp((_, app) =>
+        .PublishAsAzureContainerApp((infra, app) =>
         {
+            app.EnvironmentId = privateAcaEnvironment!.Resource.ContainerAppEnvironmentId
+                .AsProvisioningParameter(infra, "privateContainerAppsEnvironmentId");
             app.Configuration ??= new();
             app.Configuration.Ingress ??= new();
             app.Configuration.Ingress.External = true;

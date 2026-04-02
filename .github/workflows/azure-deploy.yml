@@ -23,6 +23,11 @@ on:
           - talentfunctions
           - grafana
           - frontend
+      migrate_private_aca_apps:
+        description: "Delete keycloak, talentserver, and grafana before deploy so they can be recreated in the private ACA environment."
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -538,6 +543,44 @@ jobs:
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
+
+      - name: Migrate apps to private ACA environment
+        if: ${{ github.event.inputs.migrate_private_aca_apps == 'true' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak' || github.event.inputs.deploy_target == 'talentserver' || github.event.inputs.deploy_target == 'grafana') }}
+        run: |
+          set -euo pipefail
+          resource_group="rg-${AZURE_ENV_NAME}"
+          deploy_target="${{ github.event.inputs.deploy_target }}"
+
+          should_delete() {
+            local app_name="$1"
+            [ "$deploy_target" = "all" ] || [ "$deploy_target" = "$app_name" ]
+          }
+
+          wait_for_deletion() {
+            local app_name="$1"
+            for _ in $(seq 1 40); do
+              if ! az containerapp show --name "$app_name" --resource-group "$resource_group" >/dev/null 2>&1; then
+                return 0
+              fi
+              sleep 15
+            done
+            echo "Timed out waiting for '$app_name' to be deleted from $resource_group"
+            return 1
+          }
+
+          for app_name in keycloak talentserver grafana; do
+            if ! should_delete "$app_name"; then
+              continue
+            fi
+
+            if az containerapp show --name "$app_name" --resource-group "$resource_group" >/dev/null 2>&1; then
+              echo "Deleting '$app_name' so it can be recreated in the private ACA environment"
+              az containerapp delete --name "$app_name" --resource-group "$resource_group" --yes
+              wait_for_deletion "$app_name"
+            else
+              echo "'$app_name' does not exist in $resource_group"
+            fi
+          done
 
       - name: Deploy
         if: ${{ github.event.inputs.deploy_target != 'frontend' }}
