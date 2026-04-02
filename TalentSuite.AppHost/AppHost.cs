@@ -5,6 +5,7 @@ using Azure.Provisioning.AppContainers;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Azure;
 using Aspire.Hosting.Azure.AppContainers;
+using Azure.Core;
 using Azure.Provisioning;
 using Azure.Provisioning.Expressions;
 
@@ -286,8 +287,9 @@ else
         .WithEnvironment("KC_DB_PASSWORD", keycloakContainerDbPassword)
         .PublishAsAzureContainerApp((infra, app) =>
         {
-            app.EnvironmentId = privateAcaEnvironment.Resource.ContainerAppEnvironmentId
-                .AsProvisioningParameter(infra, "privateContainerAppsEnvironmentId");
+            app.EnvironmentId = new BicepValue<ResourceIdentifier>(
+                (BicepExpression)BicepFunction.Interpolate(
+                    $"resourceId('Microsoft.App/managedEnvironments', {privateAcaEnvironment!.Resource.NameOutputReference})"));
         })
         .WaitFor(keycloakDb);
     
@@ -307,8 +309,9 @@ else
         .WithEnvironment("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
         .PublishAsAzureContainerApp((infra, app) =>
         {
-            app.EnvironmentId = privateAcaEnvironment.Resource.ContainerAppEnvironmentId
-                .AsProvisioningParameter(infra, "privateContainerAppsEnvironmentId");
+            app.EnvironmentId = new BicepValue<ResourceIdentifier>(
+                (BicepExpression)BicepFunction.Interpolate(
+                    $"resourceId('Microsoft.App/managedEnvironments', {privateAcaEnvironment!.Resource.NameOutputReference})"));
         })
         .WaitFor(appDb)
         .WaitFor(keycloak);
@@ -403,8 +406,9 @@ else
         })
         .PublishAsAzureContainerApp((infra, app) =>
         {
-            app.EnvironmentId = privateAcaEnvironment!.Resource.ContainerAppEnvironmentId
-                .AsProvisioningParameter(infra, "privateContainerAppsEnvironmentId");
+            app.EnvironmentId = new BicepValue<ResourceIdentifier>(
+                (BicepExpression)BicepFunction.Interpolate(
+                    $"resourceId('Microsoft.App/managedEnvironments', {privateAcaEnvironment!.Resource.NameOutputReference})"));
             app.Configuration ??= new();
             app.Configuration.Ingress ??= new();
             app.Configuration.Ingress.External = true;
