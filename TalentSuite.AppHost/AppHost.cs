@@ -287,11 +287,6 @@ else
         .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", keycloakContainerAdminPassword)
         .WithEnvironment("KC_DB_PASSWORD", keycloakContainerDbPassword)
         .WithComputeEnvironment(privateAcaEnvironment)
-        .PublishAsAzureContainerApp((infra, app) =>
-        {
-            app.EnvironmentId = ((AzureContainerAppEnvironmentResource)privateAcaEnvironment!.Resource)
-                .ContainerAppEnvironmentId;
-        })
         .WaitFor(keycloakDb);
     
     server = builder.AddProject<TalentSuite_Server>("talentserver")
@@ -309,11 +304,6 @@ else
         .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", keycloakPassword)
         .WithEnvironment("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
         .WithComputeEnvironment(privateAcaEnvironment)
-        .PublishAsAzureContainerApp((infra, app) =>
-        {
-            app.EnvironmentId = ((AzureContainerAppEnvironmentResource)privateAcaEnvironment!.Resource)
-                .ContainerAppEnvironmentId;
-        })
         .WaitFor(appDb)
         .WaitFor(keycloak);
 }
@@ -411,10 +401,8 @@ else
                 $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token";
         })
         .WithComputeEnvironment(privateAcaEnvironment)
-        .PublishAsAzureContainerApp((infra, app) =>
+        .PublishAsAzureContainerApp((_, app) =>
         {
-            app.EnvironmentId = ((AzureContainerAppEnvironmentResource)privateAcaEnvironment!.Resource)
-                .ContainerAppEnvironmentId;
             app.Configuration ??= new();
             app.Configuration.Ingress ??= new();
             app.Configuration.Ingress.External = true;
