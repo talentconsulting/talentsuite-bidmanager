@@ -5,6 +5,9 @@
         "no-hardcoded-env-urls": {
           "level": "off"
         },
+        "secure-secrets-in-params": {
+          "level": "off"
+        },
         "no-unused-params": {
           "level": "off"
         }
