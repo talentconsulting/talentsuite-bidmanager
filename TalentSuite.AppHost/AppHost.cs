@@ -238,7 +238,6 @@ else
             var connectionPolicy = new SqlServerConnectionPolicy("sqlConnectionPolicy")
             {
                 Parent = server,
-                Name = "default",
                 ConnectionType = ServerConnectionType.Proxy
             };
             infra.Add(connectionPolicy);
