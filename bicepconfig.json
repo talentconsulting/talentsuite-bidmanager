@@ -2,6 +2,9 @@
   "analyzers": {
     "core": {
       "rules": {
+        "no-hardcoded-env-urls": {
+          "level": "off"
+        },
         "no-unused-params": {
           "level": "off"
         }
