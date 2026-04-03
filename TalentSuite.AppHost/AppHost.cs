@@ -235,13 +235,6 @@ else
             server.AdministratorLogin = "sqladm72";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
 
-            var connectionPolicy = new SqlServerConnectionPolicy("sqlConnectionPolicy")
-            {
-                Parent = server,
-                ConnectionType = ServerConnectionType.Proxy
-            };
-            infra.Add(connectionPolicy);
-
             foreach (var database in infra.GetProvisionableResources().OfType<SqlDatabase>())
             {
                 database.Sku = new SqlSku
@@ -269,6 +262,8 @@ else
                 };
             }
         });
+    _ = builder.AddBicepTemplate("sql-connection-policy", "Infrastructure/sql-connection-policy.bicep")
+        .WithParameter("sqlServerName", sql.Resource.NameOutputReference);
     var privateNetwork = builder.AddBicepTemplate("private-network", "Infrastructure/private-network.bicep")
         .WithParameter("sqlServerName", sql.Resource.NameOutputReference);
     privateAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev-private")
