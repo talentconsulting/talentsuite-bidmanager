@@ -235,6 +235,14 @@ else
             server.AdministratorLogin = "sqladm72";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
 
+            var connectionPolicy = new SqlServerConnectionPolicy("sqlConnectionPolicy")
+            {
+                Parent = server,
+                Name = "default",
+                ConnectionType = ServerConnectionType.Proxy
+            };
+            infra.Add(connectionPolicy);
+
             foreach (var database in infra.GetProvisionableResources().OfType<SqlDatabase>())
             {
                 database.Sku = new SqlSku
