@@ -134,8 +134,6 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseBlazorFrameworkFiles();
-app.UseStaticFiles();
 app.UseRouting();
 app.UseCors("BlazorDev");
 
@@ -145,7 +143,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.MapRazorPages();
-app.MapFallbackToFile("index.html");
 app.MapDefaultEndpoints();
 
 if (app.Environment.IsDevelopment())
