@@ -22,6 +22,8 @@
       window.talentSuiteAuth.sessionExpiryRepromptDelayMs = 30 * 1000;
       window.talentSuiteAuth.sessionExpiryWarningTimerId = null;
       window.talentSuiteAuth.sessionExpiryWarningVisible = false;
+      window.talentSuiteAuth.sessionExpiryModal = null;
+      window.talentSuiteAuth.sessionExpiryResolve = null;
       window.talentSuiteAuth.clearClientAuthState = function () {
         const prefixes = ["oidc.", "Microsoft.AspNetCore.Components.WebAssembly.Authentication"];
         const clearStore = function (store) {
@@ -190,17 +192,76 @@
         }
 
         window.talentSuiteAuth.sessionExpiryWarningVisible = true;
-        const shouldRefresh = window.confirm("Your session will expire in about 2 minutes. Click OK to stay signed in.");
-        window.talentSuiteAuth.sessionExpiryWarningVisible = false;
+        window.talentSuiteAuth.showSessionExpiryModal().then(function (shouldRefresh) {
+          window.talentSuiteAuth.sessionExpiryWarningVisible = false;
 
-        if (shouldRefresh) {
-          window.talentSuiteAuth.redirectToLogin();
-          return;
+          if (shouldRefresh) {
+            window.talentSuiteAuth.redirectToLogin();
+            return;
+          }
+
+          window.talentSuiteAuth.scheduleSessionExpiryWarning(
+            window.talentSuiteAuth.sessionExpiryRepromptDelayMs
+          );
+        });
+      };
+
+      window.talentSuiteAuth.closeSessionExpiryModal = function (shouldRefresh) {
+        if (window.talentSuiteAuth.sessionExpiryModal) {
+          window.talentSuiteAuth.sessionExpiryModal.remove();
+          window.talentSuiteAuth.sessionExpiryModal = null;
         }
 
-        window.talentSuiteAuth.scheduleSessionExpiryWarning(
-          window.talentSuiteAuth.sessionExpiryRepromptDelayMs
-        );
+        if (window.talentSuiteAuth.sessionExpiryResolve) {
+          const resolve = window.talentSuiteAuth.sessionExpiryResolve;
+          window.talentSuiteAuth.sessionExpiryResolve = null;
+          resolve(shouldRefresh);
+        }
+      };
+
+      window.talentSuiteAuth.showSessionExpiryModal = function () {
+        if (window.talentSuiteAuth.sessionExpiryResolve) {
+          return Promise.resolve(false);
+        }
+
+        return new Promise(function (resolve) {
+          window.talentSuiteAuth.sessionExpiryResolve = resolve;
+
+          const overlay = document.createElement("div");
+          overlay.className = "ts-session-modal-backdrop";
+          overlay.innerHTML =
+            '<div class="ts-session-modal" role="dialog" aria-modal="true" aria-labelledby="ts-session-modal-title">' +
+              '<div class="ts-session-modal__header">' +
+                '<h5 id="ts-session-modal-title" class="ts-session-modal__title">Session expiring soon</h5>' +
+              '</div>' +
+              '<div class="ts-session-modal__body">' +
+                '<p>Your session will expire in about 2 minutes.</p>' +
+                '<p class="mb-0">Stay signed in to continue working, or dismiss this warning and sign in again later.</p>' +
+              '</div>' +
+              '<div class="ts-session-modal__footer">' +
+                '<button type="button" class="btn btn-outline-secondary" data-action="dismiss">Dismiss</button>' +
+                '<button type="button" class="btn btn-primary" data-action="stay-signed-in">Stay signed in</button>' +
+              '</div>' +
+            '</div>';
+
+          overlay.addEventListener("click", function (event) {
+            const action = event.target && event.target.getAttribute
+              ? event.target.getAttribute("data-action")
+              : null;
+
+            if (action === "stay-signed-in") {
+              window.talentSuiteAuth.closeSessionExpiryModal(true);
+              return;
+            }
+
+            if (action === "dismiss" || event.target === overlay) {
+              window.talentSuiteAuth.closeSessionExpiryModal(false);
+            }
+          });
+
+          document.body.appendChild(overlay);
+          window.talentSuiteAuth.sessionExpiryModal = overlay;
+        });
       };
 
       window.talentSuiteAuth.scheduleSessionExpiryWarning = function (overrideDelayMs) {
