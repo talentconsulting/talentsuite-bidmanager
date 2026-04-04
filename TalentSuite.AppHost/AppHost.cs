@@ -234,7 +234,7 @@ else
             var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
             server.AdministratorLogin = "sqladm72";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
-            server.PublicNetworkAccess = "Disabled";
+            server.PublicNetworkAccess = ServerNetworkAccessFlag.Disabled;
 
             foreach (var database in infra.GetProvisionableResources().OfType<SqlDatabase>())
             {
@@ -403,7 +403,7 @@ else
             context.EnvironmentVariables["GF_AUTH_AZUREAD_TOKEN_URL"] =
                 $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token";
         })
-        .WithComputeEnvironment(privateAcaEnvironment)
+        .WithComputeEnvironment(privateAcaEnvironment!)
         .PublishAsAzureContainerApp((_, app) =>
         {
             app.Configuration ??= new();
