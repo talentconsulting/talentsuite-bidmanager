@@ -337,9 +337,6 @@ jq -n \
     STRICT_CONFIGURATION: $strict
   }' > /tmp/talentsuite-frontend-publish/wwwroot/appsettings.json
 
-echo "Generated frontend appsettings.json:"
-cat /tmp/talentsuite-frontend-publish/wwwroot/appsettings.json
-
 az storage blob service-properties update \
   --account-name "$storage_account" \
   --auth-mode login \

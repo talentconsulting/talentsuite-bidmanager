@@ -23,12 +23,6 @@ on:
           - talentfunctions
           - grafana
           - frontend
-      migrate_private_aca_apps:
-        description: "Delete keycloak, talentserver, grafana, and talentfunctions before deploy so they can be recreated in the private ACA environment."
-        required: true
-        default: false
-        type: boolean
-
 permissions:
   contents: read
 
@@ -255,82 +249,8 @@ jobs:
           azd env set GrafanaAzureMonitorSubscriptionId "${GrafanaAzureMonitorSubscriptionId}" --environment "${AZURE_ENV_NAME}"
           azd env set GrafanaEntraClientSecret "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
 
-      - name: Preflight AppHost manifest generation
-        if: ${{ github.event.inputs.deployment_mode != 'apps-only' }}
-        working-directory: ${{ env.AZD_WORKING_DIR }}
-        run: |
-          set -euo pipefail
-          manifest_dir="$(mktemp -d /tmp/apphost-manifest-preflight.XXXXXX)"
-          manifest_file="$manifest_dir/manifest.json"
-
-          dotnet restore TalentSuite.AppHost/TalentSuite.AppHost.csproj
-          dotnet build TalentSuite.AppHost/TalentSuite.AppHost.csproj --no-restore
-          dotnet TalentSuite.AppHost/bin/Debug/net10.0/TalentSuite.AppHost.dll \
-            --publisher manifest \
-            --output-path "$manifest_file"
-
-          test -f "$manifest_file" || (echo "AppHost manifest was not generated at $manifest_file" && exit 1)
-          echo "Generated AppHost manifest at $manifest_file"
-
-      - name: Dump Generated SQL Infra Bindings
-        if: ${{ github.event.inputs.deployment_mode != 'apps-only' }}
-        working-directory: ${{ env.AZD_WORKING_DIR }}
-        run: |
-          set -euo pipefail
-          azd infra gen --environment "${AZURE_ENV_NAME}"
-
-          echo "Recent Bicep files in workspace:"
-          find . -type f \( -name '*.bicep' -o -name '*.json' \) -mmin -5 | sort
-
-          sql_module="$(find . -type f -name 'sql.module.bicep' -mmin -5 | head -n 1)"
-          main_bicep="$(find . -type f -name 'main.bicep' -mmin -5 | head -n 1)"
-          main_parameters="$(find . -type f -name 'main.parameters.json' -mmin -5 | head -n 1)"
-
-          if [ -z "$sql_module" ] || [ -z "$main_bicep" ] || [ -z "$main_parameters" ]; then
-            echo "Could not locate freshly generated Bicep files."
-            echo "Listing likely azd output directories:"
-            find . -maxdepth 4 \( -type d -name '.azure' -o -type d -name 'infra' -o -type d -name '.azd' \) | sort
-            exit 1
-          fi
-
-          echo "Password-related lines in main.bicep:"
-          grep -nE "SqlPassword|Password|sql" "$main_bicep" || true
-
-          echo "Password-related lines in sql.module.bicep:"
-          grep -nE "AdministratorLogin|AdministratorLoginPassword|Password|parameters\\(|param " "$sql_module" || true
-
-          echo "Password-related lines in main.parameters.json:"
-          grep -nE "SqlPassword|Password|secureString|keyVault|placeholder" "$main_parameters" || true
-
-          echo "main.parameters.json SqlPassword entry:"
-          jq -c '.parameters.SqlPassword // "<missing>"' "$main_parameters" || true
-
-          echo "azd environment secure value diagnostics:"
-          env_dump_file="$(mktemp)"
-          azd env get-values --environment "${AZURE_ENV_NAME}" > "$env_dump_file"
-          for key in SqlPassword Password KeycloakPassword KeycloakDbPassword InviteSmtpPassword GoogleDriveSyncServiceAccountJsonBase64; do
-            raw_line="$(grep -E "^(export[[:space:]]+)?${key}=" "$env_dump_file" | tail -n 1 || true)"
-            if [ -z "$raw_line" ]; then
-              echo "${key}: missing from azd env"
-              continue
-            fi
-
-            raw_value="${raw_line#*=}"
-            if [ "${#raw_value}" -ge 2 ] && [ "${raw_value#\"}" != "$raw_value" ] && [ "${raw_value%\"}" != "$raw_value" ]; then
-              raw_value="${raw_value#\"}"
-              raw_value="${raw_value%\"}"
-            fi
-
-            value_sha="$(printf '%s' "$raw_value" | sha256sum | awk '{print $1}')"
-            echo "${key}: present len=${#raw_value} sha256=${value_sha}"
-          done
-
-          echo "SQL module excerpt:"
-          sed -n '1,220p' "$sql_module"
-
       - name: Provision
         if: ${{ github.event.inputs.deployment_mode != 'apps-only' }}
-        id: provision
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -350,7 +270,6 @@ jobs:
           }
 
           SqlPassword="$(normalize_secret "${SqlPassword:-}")"
-          echo "SqlPassword source diagnostics: normalized_len=${#SqlPassword}"
           KeycloakPassword="$(normalize_secret "${KeycloakPassword:-}")"
           KeycloakDbPassword="$(normalize_secret "${KeycloakDbPassword:-}")"
           InviteSmtpPassword="$(normalize_secret "${InviteSmtpPassword:-}")"
@@ -374,43 +293,6 @@ jobs:
           azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${{ env.AZURE_ENV_NAME }}"
 
-          sql_pw_sha="$(printf '%s' "$SqlPassword" | sha256sum | awk '{print $1}')"
-          echo "SqlPassword input diagnostics: len=${#SqlPassword} sha256=${sql_pw_sha}"
-
-          env_dump_file="$(mktemp)"
-          azd env get-values --environment "${{ env.AZURE_ENV_NAME }}" > "$env_dump_file"
-          for key in SqlPassword Password; do
-            raw_line="$(grep -E "^(export[[:space:]]+)?${key}=" "$env_dump_file" | tail -n 1 || true)"
-            if [ -z "$raw_line" ]; then
-              echo "${key} diagnostics after azd env set: missing"
-              continue
-            fi
-
-            raw_value="${raw_line#*=}"
-            if [ "${#raw_value}" -ge 2 ] && [ "${raw_value#\"}" != "$raw_value" ] && [ "${raw_value%\"}" != "$raw_value" ]; then
-              raw_value="${raw_value#\"}"
-              raw_value="${raw_value%\"}"
-            fi
-
-            value_sha="$(printf '%s' "$raw_value" | sha256sum | awk '{print $1}')"
-            echo "${key} diagnostics after azd env set: len=${#raw_value} sha256=${value_sha}"
-          done
-
-          password_to_use="${SqlPassword}"
-          pw_len="${#password_to_use}"
-          has_upper="false"; [[ "$password_to_use" =~ [A-Z] ]] && has_upper="true"
-          has_lower="false"; [[ "$password_to_use" =~ [a-z] ]] && has_lower="true"
-          has_number="false"; [[ "$password_to_use" =~ [0-9] ]] && has_number="true"
-          has_special="false"; [[ "$password_to_use" =~ [^A-Za-z0-9] ]] && has_special="true"
-          has_whitespace="false"; [[ "$password_to_use" =~ [[:space:]] ]] && has_whitespace="true"
-          contains_login="false"; [[ "${password_to_use,,}" == *"sqladm72"* ]] && contains_login="true"
-          contains_word_password="false"; [[ "${password_to_use,,}" == *"password"* ]] && contains_word_password="true"
-          echo "SqlPassword diagnostics: length=${pw_len}, upper=${has_upper}, lower=${has_lower}, number=${has_number}, special=${has_special}, whitespace=${has_whitespace}, contains_login=${contains_login}, contains_word_password=${contains_word_password}"
-          if [[ ! "$password_to_use" =~ ^[A-Za-z0-9\!@\#%\^\*\(\)_\+=\.,:-]+$ ]]; then
-            echo "SqlPassword contains unsupported characters. Use only letters, numbers, and !@#%^*()_+=.,:-"
-            exit 1
-          fi
-
           principalId="${AZD_PRINCIPAL_ID}" \
           AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
           AZURE_GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64="${GoogleDriveSyncServiceAccountJsonBase64}" \
@@ -424,73 +306,6 @@ jobs:
           KeycloakDbPassword="${KeycloakDbPassword}" \
           InviteSmtpPassword="${InviteSmtpPassword}" \
           azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
-
-      - name: Dump ARM Deployment Errors (Provision)
-        if: ${{ github.event.inputs.deployment_mode != 'apps-only' && steps.provision.outcome == 'failure' }}
-        run: |
-          set -euo pipefail
-          echo "Azure account context:"
-          az account show --query "{subscriptionId:id,subscriptionName:name,tenantId:tenantId,user:user.name}" -o jsonc || true
-
-          dep_name="$(az deployment sub list \
-            --query "[?starts_with(name, '${AZURE_ENV_NAME}-')]|sort_by(@,&properties.timestamp)[-1].name" \
-            -o tsv)"
-
-          if [ -z "$dep_name" ]; then
-            echo "Could not determine latest subscription deployment name for environment ${AZURE_ENV_NAME}."
-            exit 0
-          fi
-
-          echo "Latest deployment: $dep_name"
-          echo "Deployment summary:"
-          az deployment sub show --name "$dep_name" \
-            --query "{name:name,state:properties.provisioningState,timestamp:properties.timestamp,location:location,error:properties.error}" \
-            -o jsonc || true
-
-          echo "Top-level deployment errors:"
-          az deployment sub show --name "$dep_name" \
-            --query "properties.error.details[].{code:code,target:target,message:message}" \
-            -o jsonc || true
-
-          echo "SQL operation details:"
-          az deployment operation sub list \
-            --name "$dep_name" \
-            --query "[?contains(properties.targetResource.resourceType, 'Microsoft.Sql/servers')].{resource:properties.targetResource.resourceName,type:properties.targetResource.resourceType,state:properties.provisioningState,status:properties.statusMessage}" \
-            -o jsonc || true
-
-          echo "Failed operations (all resources):"
-          az deployment operation sub list \
-            --name "$dep_name" \
-            --query "[?properties.provisioningState!='Succeeded'].{resource:properties.targetResource.resourceName,type:properties.targetResource.resourceType,state:properties.provisioningState,status:properties.statusMessage}" \
-            -o jsonc || true
-
-          echo "Failed operation status messages (compact):"
-          az deployment operation sub list \
-            --name "$dep_name" \
-            --query "[?properties.provisioningState!='Succeeded'].properties.statusMessage" \
-            -o jsonc || true
-
-          rg_name="rg-${AZURE_ENV_NAME}"
-          echo "Nested deployment diagnostics (resource group scope):"
-          echo "Resource group: $rg_name, deployment: sql"
-          az deployment group show \
-            --resource-group "$rg_name" \
-            --name "sql" \
-            --query "{name:name,state:properties.provisioningState,error:properties.error}" \
-            -o jsonc || true
-
-          echo "Nested deployment failed operation status messages:"
-          az deployment operation group list \
-            --resource-group "$rg_name" \
-            --name "sql" \
-            --query "[?properties.provisioningState!='Succeeded'].properties.statusMessage" \
-            -o jsonc || true
-
-      - name: Fail If Provision Failed
-        if: ${{ github.event.inputs.deployment_mode != 'apps-only' && steps.provision.outcome == 'failure' }}
-        run: |
-          echo "Provision step failed. See deployment operation diagnostics above."
-          exit 1
 
       - name: Disable SQL Entra-only auth for Keycloak SQL login
         if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' }}
@@ -544,44 +359,6 @@ jobs:
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
 
-      - name: Migrate apps to private ACA environment
-        if: ${{ github.event.inputs.migrate_private_aca_apps == 'true' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak' || github.event.inputs.deploy_target == 'talentserver' || github.event.inputs.deploy_target == 'grafana' || github.event.inputs.deploy_target == 'talentfunctions') }}
-        run: |
-          set -euo pipefail
-          resource_group="rg-${AZURE_ENV_NAME}"
-          deploy_target="${{ github.event.inputs.deploy_target }}"
-
-          should_delete() {
-            local app_name="$1"
-            [ "$deploy_target" = "all" ] || [ "$deploy_target" = "$app_name" ]
-          }
-
-          wait_for_deletion() {
-            local app_name="$1"
-            for _ in $(seq 1 40); do
-              if ! az containerapp show --name "$app_name" --resource-group "$resource_group" >/dev/null 2>&1; then
-                return 0
-              fi
-              sleep 15
-            done
-            echo "Timed out waiting for '$app_name' to be deleted from $resource_group"
-            return 1
-          }
-
-          for app_name in keycloak talentserver grafana talentfunctions; do
-            if ! should_delete "$app_name"; then
-              continue
-            fi
-
-            if az containerapp show --name "$app_name" --resource-group "$resource_group" >/dev/null 2>&1; then
-              echo "Deleting '$app_name' so it can be recreated in the private ACA environment"
-              az containerapp delete --name "$app_name" --resource-group "$resource_group" --yes
-              wait_for_deletion "$app_name"
-            else
-              echo "'$app_name' does not exist in $resource_group"
-            fi
-          done
-
       - name: Deploy
         if: ${{ github.event.inputs.deploy_target != 'frontend' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
@@ -603,7 +380,6 @@ jobs:
           }
 
           SqlPassword="$(normalize_secret "${SqlPassword:-}")"
-          echo "SqlPassword source diagnostics (deploy): normalized_len=${#SqlPassword}"
           KeycloakPassword="$(normalize_secret "${KeycloakPassword:-}")"
           KeycloakDbPassword="$(normalize_secret "${KeycloakDbPassword:-}")"
           InviteSmtpPassword="$(normalize_secret "${InviteSmtpPassword:-}")"
@@ -625,46 +401,11 @@ jobs:
           azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
 
-          echo "AZURE_ENV_NAME=${AZURE_ENV_NAME}"
-          kc_pw_len="$(azd env get-value KeycloakPassword --environment "${AZURE_ENV_NAME}" | wc -c | tr -d ' ')"
-          kc_db_pw_len="$(azd env get-value KeycloakDbPassword --environment "${AZURE_ENV_NAME}" | wc -c | tr -d ' ')"
-          echo "KeycloakPassword length via azd env get-value: ${kc_pw_len}"
-          echo "KeycloakDbPassword length via azd env get-value: ${kc_db_pw_len}"
-          azd env get-value KeycloakDbUsername --environment "${AZURE_ENV_NAME}" || true
-          azd env get-values --environment "${AZURE_ENV_NAME}" \
-            | awk -F= '/^(KeycloakPassword|KeycloakDbPassword|KeycloakDbUsername)=/ {print NR ":" $1 "=\"***\""}' || true
-          if [ "${kc_pw_len}" -le 1 ]; then
-            echo "KeycloakPassword is blank in azd env ${AZURE_ENV_NAME}"
-            exit 1
-          fi
-          if [ "${kc_db_pw_len}" -le 1 ]; then
-            echo "KeycloakDbPassword is blank in azd env ${AZURE_ENV_NAME}"
-            exit 1
-          fi
-
           vals="$(azd env get-values --environment "${{ env.AZURE_ENV_NAME }}")"
           echo "$vals" | grep -Eq '^KeycloakDbUsername=.+' || (echo "KeycloakDbUsername missing/blank in azd env before deploy" && exit 1)
           echo "$vals" | grep -Eq '^KeycloakPassword=.+' || (echo "KeycloakPassword missing/blank in azd env before deploy" && exit 1)
           echo "$vals" | grep -Eq '^KeycloakDbPassword=.+' || (echo "KeycloakDbPassword missing/blank in azd env before deploy" && exit 1)
           echo "$vals" | grep -Eq '^InviteSmtpPassword=.+' || (echo "InviteSmtpPassword missing/blank in azd env before deploy" && exit 1)
-
-          sql_pw_sha="$(printf '%s' "$SqlPassword" | sha256sum | awk '{print $1}')"
-          echo "SqlPassword input diagnostics (deploy): len=${#SqlPassword} sha256=${sql_pw_sha}"
-
-          password_to_use="${SqlPassword}"
-          pw_len="${#password_to_use}"
-          has_upper="false"; [[ "$password_to_use" =~ [A-Z] ]] && has_upper="true"
-          has_lower="false"; [[ "$password_to_use" =~ [a-z] ]] && has_lower="true"
-          has_number="false"; [[ "$password_to_use" =~ [0-9] ]] && has_number="true"
-          has_special="false"; [[ "$password_to_use" =~ [^A-Za-z0-9] ]] && has_special="true"
-          has_whitespace="false"; [[ "$password_to_use" =~ [[:space:]] ]] && has_whitespace="true"
-          contains_login="false"; [[ "${password_to_use,,}" == *"sqladm72"* ]] && contains_login="true"
-          contains_word_password="false"; [[ "${password_to_use,,}" == *"password"* ]] && contains_word_password="true"
-          echo "SqlPassword diagnostics (deploy): length=${pw_len}, upper=${has_upper}, lower=${has_lower}, number=${has_number}, special=${has_special}, whitespace=${has_whitespace}, contains_login=${contains_login}, contains_word_password=${contains_word_password}"
-          if [[ ! "$password_to_use" =~ ^[A-Za-z0-9\!@\#%\^\*\(\)_\+=\.,:-]+$ ]]; then
-            echo "SqlPassword contains unsupported characters. Use only letters, numbers, and !@#%^*()_+=.,:-"
-            exit 1
-          fi
 
           # Use placeholders in AppHost for azd manifest generation; real values are
           # rebound to Key Vault references in the post-sync step.
@@ -1284,15 +1025,6 @@ jobs:
             --target-port 8080 \
             --transport auto
 
-      - name: Show talentserver URL
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') }}
-        run: |
-          az containerapp show \
-            --name talentserver \
-            --resource-group "rg-${AZURE_ENV_NAME}" \
-            --query properties.configuration.ingress.fqdn \
-            -o tsv
-
       - name: Import Keycloak realm if missing
         if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
@@ -1316,7 +1048,6 @@ jobs:
           azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
           azd auth login --check-status >/dev/null
           azd env refresh --environment "${AZURE_ENV_NAME}" --no-prompt
-          echo "Refreshed azd environment outputs before frontend deploy."
 
       - name: Deploy frontend as static website
         if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'frontend') }}
