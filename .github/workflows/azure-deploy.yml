@@ -98,7 +98,7 @@ jobs:
       - name: Setup azd
         uses: Azure/setup-azd@v2
         with:
-          version: 1.23.13
+          version: 1.23.14
 
       - name: Enable azd operations alpha feature
         run: |
@@ -1058,6 +1058,21 @@ jobs:
           az resource update \
             --ids "$app_id" \
             --set properties.template.containers[0].probes="$probes" >/dev/null
+
+      - name: Disable SQL public network access
+        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          sql_server_name="$(az sql server list --resource-group "$resource_group" --query '[0].name' -o tsv)"
+
+          test -n "$sql_server_name" || (echo "Could not resolve SQL server name in $resource_group" && exit 1)
+
+          az sql server update \
+            --resource-group "$resource_group" \
+            --name "$sql_server_name" \
+            --set publicNetworkAccess=Disabled >/dev/null
 
       - name: Import Keycloak realm if missing
         if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}

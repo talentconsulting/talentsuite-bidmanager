@@ -234,7 +234,6 @@ else
             var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
             server.AdministratorLogin = "sqladm72";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
-            server.PublicNetworkAccess = ServerNetworkAccessFlag.Disabled;
 
             foreach (var database in infra.GetProvisionableResources().OfType<SqlDatabase>())
             {
