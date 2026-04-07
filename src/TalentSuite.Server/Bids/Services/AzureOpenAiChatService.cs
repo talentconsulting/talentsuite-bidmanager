@@ -146,7 +146,7 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
         }
         catch (RequestFailedException ex) when (ex.Status == 400 && TryExtractActiveRunId(ex.Message, out var activeRunId))
         {
-            var activeRun = await _client.Runs.GetRunAsync(threadId, activeRunId, ct);
+            var activeRun = (await _client.Runs.GetRunAsync(threadId, activeRunId, ct)).Value;
             activeRun = await WaitForRunCompletionAsync(threadId, activeRun, ct, ActiveRunWaitBudget);
 
             if (activeRun.Status == RunStatus.Queued || activeRun.Status == RunStatus.InProgress)
