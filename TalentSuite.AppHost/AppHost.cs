@@ -166,7 +166,54 @@ else
         .WithEndpoint("http", endpoint => endpoint.IsExternal = true, createIfNotExists: false)
         .WithArgs("--proxy-headers=xforwarded")
         .WithArgs("--http-enabled=true")
-        .WithArgs("--hostname-strict=false");
+        .WithArgs("--hostname-strict=false")
+        .PublishAsAzureContainerApp((_, app) =>
+        {
+            app.Template ??= new();
+            var container = app.Template.Containers.Single();
+            container.Probes =
+            [
+                new ContainerAppProbe
+                {
+                    ProbeType = ContainerAppProbeType.Startup,
+                    HttpGet = new ContainerAppHttpRequestInfo
+                    {
+                        Path = "/realms/master/.well-known/openid-configuration",
+                        Port = 8080
+                    },
+                    InitialDelaySeconds = 10,
+                    PeriodSeconds = 10,
+                    TimeoutSeconds = 5,
+                    FailureThreshold = 30
+                },
+                new ContainerAppProbe
+                {
+                    ProbeType = ContainerAppProbeType.Readiness,
+                    HttpGet = new ContainerAppHttpRequestInfo
+                    {
+                        Path = "/realms/master/.well-known/openid-configuration",
+                        Port = 8080
+                    },
+                    InitialDelaySeconds = 10,
+                    PeriodSeconds = 10,
+                    TimeoutSeconds = 5,
+                    FailureThreshold = 6
+                },
+                new ContainerAppProbe
+                {
+                    ProbeType = ContainerAppProbeType.Liveness,
+                    HttpGet = new ContainerAppHttpRequestInfo
+                    {
+                        Path = "/realms/master/.well-known/openid-configuration",
+                        Port = 8080
+                    },
+                    InitialDelaySeconds = 30,
+                    PeriodSeconds = 30,
+                    TimeoutSeconds = 5,
+                    FailureThreshold = 3
+                }
+            ];
+        });
 }
 var messaging = builder.AddAzureServiceBus("messaging");
 if (useLocalInfrastructure)
@@ -307,6 +354,53 @@ else
         .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", keycloakPassword)
         .WithEnvironment("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
         .WithComputeEnvironment(privateAcaEnvironment)
+        .PublishAsAzureContainerApp((_, app) =>
+        {
+            app.Template ??= new();
+            var container = app.Template.Containers.Single();
+            container.Probes =
+            [
+                new ContainerAppProbe
+                {
+                    ProbeType = ContainerAppProbeType.Startup,
+                    HttpGet = new ContainerAppHttpRequestInfo
+                    {
+                        Path = "/health",
+                        Port = 8080
+                    },
+                    InitialDelaySeconds = 5,
+                    PeriodSeconds = 10,
+                    TimeoutSeconds = 5,
+                    FailureThreshold = 24
+                },
+                new ContainerAppProbe
+                {
+                    ProbeType = ContainerAppProbeType.Readiness,
+                    HttpGet = new ContainerAppHttpRequestInfo
+                    {
+                        Path = "/health",
+                        Port = 8080
+                    },
+                    InitialDelaySeconds = 5,
+                    PeriodSeconds = 10,
+                    TimeoutSeconds = 5,
+                    FailureThreshold = 3
+                },
+                new ContainerAppProbe
+                {
+                    ProbeType = ContainerAppProbeType.Liveness,
+                    HttpGet = new ContainerAppHttpRequestInfo
+                    {
+                        Path = "/health",
+                        Port = 8080
+                    },
+                    InitialDelaySeconds = 30,
+                    PeriodSeconds = 30,
+                    TimeoutSeconds = 5,
+                    FailureThreshold = 3
+                }
+            ];
+        })
         .WaitFor(appDb)
         .WaitFor(keycloak);
 }

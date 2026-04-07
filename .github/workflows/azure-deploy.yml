@@ -498,7 +498,7 @@ jobs:
               --set-env-vars \
                 AzureWebJobsServiceBus__fullyQualifiedNamespace="$servicebus_fqdn" \
                 AzureWebJobsServiceBus__credential=managedidentity \
-                AzureWebJobsServiceBus__clientID="$identity_client_id" >/dev/null
+                AzureWebJobsServiceBus__clientId="$identity_client_id" >/dev/null
           else
             az containerapp update \
               --name "$app_name" \
