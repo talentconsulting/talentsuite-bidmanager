@@ -369,6 +369,11 @@ jobs:
       - name: Enable talentserver ingress
         if: ${{ success() }}
         run: |
+          az containerapp revision set-mode \
+            --name talentserver \
+            --resource-group "rg-${AZURE_ENV_NAME}" \
+            --mode single
+
           az containerapp ingress enable \
             --name talentserver \
             --resource-group "rg-${AZURE_ENV_NAME}" \

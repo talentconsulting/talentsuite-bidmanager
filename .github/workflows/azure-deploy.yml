@@ -1008,6 +1008,11 @@ jobs:
       - name: Enable talentserver ingress
         if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') }}
         run: |
+          az containerapp revision set-mode \
+            --name talentserver \
+            --resource-group "rg-${AZURE_ENV_NAME}" \
+            --mode single
+
           az containerapp ingress enable \
             --name talentserver \
             --resource-group "rg-${AZURE_ENV_NAME}" \
@@ -1038,6 +1043,11 @@ jobs:
           set -euo pipefail
 
           resource_group="rg-${AZURE_ENV_NAME}"
+          az containerapp revision set-mode \
+            --name keycloak \
+            --resource-group "$resource_group" \
+            --mode single
+
           app_id="$(az containerapp show --name keycloak --resource-group "$resource_group" --query id -o tsv)"
           probes='[
             {"type":"Startup","httpGet":{"path":"/realms/master/.well-known/openid-configuration","port":8080},"initialDelaySeconds":10,"periodSeconds":10,"timeoutSeconds":5,"failureThreshold":30},
