@@ -30,6 +30,7 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
     private readonly PersistentAgentsClient _client;
     private readonly string _agentId;
     private static readonly TimeSpan ActiveRunPollInterval = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan ActiveRunWaitBudget = TimeSpan.FromSeconds(10);
 
     public AzureOpenAiChatService(IConfiguration config)
     {
@@ -146,7 +147,20 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
         catch (RequestFailedException ex) when (ex.Status == 400 && TryExtractActiveRunId(ex.Message, out var activeRunId))
         {
             var activeRun = await _client.Runs.GetRunAsync(threadId, activeRunId, ct);
-            await WaitForRunCompletionAsync(threadId, activeRun, ct);
+            activeRun = await WaitForRunCompletionAsync(threadId, activeRun, ct, ActiveRunWaitBudget);
+
+            if (activeRun.Status == RunStatus.Queued || activeRun.Status == RunStatus.InProgress)
+            {
+                var newThreadId = await CreateThreadAsync(ct);
+
+                await _client.Messages.CreateMessageAsync(
+                    threadId: newThreadId,
+                    role: MessageRole.User,
+                    content: userPrompt,
+                    cancellationToken: ct);
+
+                return newThreadId;
+            }
 
             await _client.Messages.CreateMessageAsync(
                 threadId: threadId,
@@ -164,10 +178,19 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
         return newThread.Id;
     }
 
-    private async Task<ThreadRun> WaitForRunCompletionAsync(string threadId, ThreadRun run, CancellationToken ct)
+    private async Task<ThreadRun> WaitForRunCompletionAsync(
+        string threadId,
+        ThreadRun run,
+        CancellationToken ct,
+        TimeSpan? maxWait = null)
     {
+        var startedAt = DateTimeOffset.UtcNow;
+
         while (run.Status == RunStatus.Queued || run.Status == RunStatus.InProgress)
         {
+            if (maxWait is { } budget && DateTimeOffset.UtcNow - startedAt >= budget)
+                return run;
+
             await Task.Delay(ActiveRunPollInterval, ct);
             run = await _client.Runs.GetRunAsync(threadId, run.Id, ct);
         }
