@@ -21,6 +21,12 @@ public sealed class ChatAnswerResult
     public string ThreadId { get; set; } = string.Empty;
 }
 
+public sealed class ChatServiceUserException(string message, int statusCode = StatusCodes.Status429TooManyRequests)
+    : Exception(message)
+{
+    public int StatusCode { get; } = statusCode;
+}
+
 /// <summary>
 /// Calls an Azure AI Foundry "Persistent Agent" (configured in Foundry with Knowledge Base / tools).
 /// The retrieval (KB / AI Search / Blob, etc.) is performed by the agent based on its configuration in Foundry.
@@ -74,12 +80,21 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
         effectiveThreadId = await AddUserMessageAsync(effectiveThreadId, userPrompt, ct);
 
         // 3) Run the agent
-        ThreadRun run = await _client.Runs.CreateRunAsync(
-            threadId: effectiveThreadId,
-            _agentId,
-            additionalInstructions: string.IsNullOrWhiteSpace(systemPrompt) ? null : systemPrompt,
-            cancellationToken: ct
-        );
+        ThreadRun run;
+        try
+        {
+            run = await _client.Runs.CreateRunAsync(
+                threadId: effectiveThreadId,
+                _agentId,
+                additionalInstructions: string.IsNullOrWhiteSpace(systemPrompt) ? null : systemPrompt,
+                cancellationToken: ct
+            );
+        }
+        catch (RequestFailedException ex) when (IsQuotaLimitException(ex))
+        {
+            throw new ChatServiceUserException(
+                "Chat is temporarily unavailable because the AI usage limit has been reached. Please wait a minute and try again.");
+        }
 
         // 4) Poll until terminal
         run = await WaitForRunCompletionAsync(effectiveThreadId, run, ct);
@@ -218,5 +233,13 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
 
         runId = candidate;
         return true;
+    }
+
+    private static bool IsQuotaLimitException(RequestFailedException ex)
+    {
+        return ex.Status == 429
+               || ex.Message.Contains("rate limit", StringComparison.OrdinalIgnoreCase)
+               || ex.Message.Contains("quota", StringComparison.OrdinalIgnoreCase)
+               || ex.Message.Contains("retry after", StringComparison.OrdinalIgnoreCase);
     }
 }

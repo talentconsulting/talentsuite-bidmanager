@@ -26,40 +26,47 @@ public class ChatQuestionController : ControllerBase
         if (!string.Equals(questionId, chatQuestionRequest.QuestionId, StringComparison.OrdinalIgnoreCase))
             return BadRequest("Route question id does not match request body.");
 
-        var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, chatQuestionRequest.QuestionId);
-
-        var userId = ResolveCurrentUserKey();
-        var persistedThreadId = string.IsNullOrWhiteSpace(userId)
-            ? null
-            : await _bidService.GetChatThreadId(
-                chatQuestionRequest.BidId,
-                chatQuestionRequest.QuestionId,
-                userId);
-
-        var systemPrompt =
-            $"Please use the bid library we have to return the answer to the question: ${question.Description}";
-
-        var userPrompt = $"""{chatQuestionRequest.FreeTextQuestion}""";
-
-        var result = await _azureOpenAiChatService.AskAsync(
-            userPrompt,
-            systemPrompt,
-            chatQuestionRequest.ThreadId ?? persistedThreadId);
-
-        if (!string.IsNullOrWhiteSpace(userId))
+        try
         {
-            await _bidService.SetChatThreadId(
-                chatQuestionRequest.BidId,
-                chatQuestionRequest.QuestionId,
-                userId,
-                result.ThreadId);
+            var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, chatQuestionRequest.QuestionId);
+
+            var userId = ResolveCurrentUserKey();
+            var persistedThreadId = string.IsNullOrWhiteSpace(userId)
+                ? null
+                : await _bidService.GetChatThreadId(
+                    chatQuestionRequest.BidId,
+                    chatQuestionRequest.QuestionId,
+                    userId);
+
+            var systemPrompt =
+                $"Please use the bid library we have to return the answer to the question: ${question.Description}";
+
+            var userPrompt = $"""{chatQuestionRequest.FreeTextQuestion}""";
+
+            var result = await _azureOpenAiChatService.AskAsync(
+                userPrompt,
+                systemPrompt,
+                chatQuestionRequest.ThreadId ?? persistedThreadId);
+
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                await _bidService.SetChatThreadId(
+                    chatQuestionRequest.BidId,
+                    chatQuestionRequest.QuestionId,
+                    userId,
+                    result.ThreadId);
+            }
+
+            return Ok(new ChatQuestionResponse
+            {
+                Response = result.Response,
+                ThreadId = result.ThreadId
+            });
         }
-
-        return Ok(new ChatQuestionResponse
+        catch (ChatServiceUserException ex)
         {
-            Response = result.Response,
-            ThreadId = result.ThreadId
-        });
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
     }
 
     private string ResolveCurrentUserKey()

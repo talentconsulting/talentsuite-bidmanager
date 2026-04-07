@@ -895,7 +895,13 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
             var response = await Http.PostAsJsonAsync(url, payload);
 
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"Failed to submit question: {(int)response.StatusCode} {response.ReasonPhrase}");
+            {
+                var message = await response.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(message))
+                    message = $"Failed to submit question: {(int)response.StatusCode} {response.ReasonPhrase}";
+
+                throw new InvalidOperationException(message);
+            }
 
             var res = await response.Content.ReadFromJsonAsync<ChatQuestionResponse>();
 
@@ -906,7 +912,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            QuestionErrorText = ex.ToString();
+            QuestionErrorText = ex.Message;
             _ = BannerState.ShowAsync("Could not submit question.");
         }
         finally
