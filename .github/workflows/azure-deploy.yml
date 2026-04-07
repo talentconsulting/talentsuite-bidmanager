@@ -1025,6 +1025,40 @@ jobs:
             --target-port 8080 \
             --transport auto
 
+      - name: Configure talentserver health probes
+        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          app_id="$(az containerapp show --name talentserver --resource-group "$resource_group" --query id -o tsv)"
+          probes='[
+            {"type":"Startup","httpGet":{"path":"/health","port":8080},"initialDelaySeconds":5,"periodSeconds":10,"timeoutSeconds":5,"failureThreshold":24},
+            {"type":"Readiness","httpGet":{"path":"/health","port":8080},"initialDelaySeconds":5,"periodSeconds":10,"timeoutSeconds":5,"failureThreshold":3},
+            {"type":"Liveness","httpGet":{"path":"/health","port":8080},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5,"failureThreshold":3}
+          ]'
+
+          az resource update \
+            --ids "$app_id" \
+            --set properties.template.containers[0].probes="$probes" >/dev/null
+
+      - name: Configure keycloak health probes
+        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          app_id="$(az containerapp show --name keycloak --resource-group "$resource_group" --query id -o tsv)"
+          probes='[
+            {"type":"Startup","httpGet":{"path":"/realms/master/.well-known/openid-configuration","port":8080},"initialDelaySeconds":10,"periodSeconds":10,"timeoutSeconds":5,"failureThreshold":30},
+            {"type":"Readiness","httpGet":{"path":"/realms/master/.well-known/openid-configuration","port":8080},"initialDelaySeconds":10,"periodSeconds":10,"timeoutSeconds":5,"failureThreshold":6},
+            {"type":"Liveness","httpGet":{"path":"/realms/master/.well-known/openid-configuration","port":8080},"initialDelaySeconds":30,"periodSeconds":30,"timeoutSeconds":5,"failureThreshold":3}
+          ]'
+
+          az resource update \
+            --ids "$app_id" \
+            --set properties.template.containers[0].probes="$probes" >/dev/null
+
       - name: Import Keycloak realm if missing
         if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
