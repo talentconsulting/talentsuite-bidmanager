@@ -102,6 +102,14 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
         if (run.Status != RunStatus.Completed)
         {
             var err = run.LastError?.Message ?? "Run did not complete successfully.";
+            if (err.Contains("rate limit", StringComparison.OrdinalIgnoreCase)
+                || err.Contains("quota", StringComparison.OrdinalIgnoreCase)
+                || err.Contains("retry after", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ChatServiceUserException(
+                    "Chat is temporarily unavailable because the AI usage limit has been reached. Please wait a minute and try again.");
+            }
+
             throw new InvalidOperationException($"Agent run failed: {run.Status}. {err}");
         }
 
