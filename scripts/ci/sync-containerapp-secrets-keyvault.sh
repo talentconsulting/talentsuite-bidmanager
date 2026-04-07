@@ -53,6 +53,8 @@ resource_group="rg-${AZURE_ENV_NAME}"
 excluded_apps_raw="${EXCLUDE_CONTAINERAPPS:-}"
 keycloak_password="${KeycloakPassword:-}"
 keycloak_db_password="${KeycloakDbPassword:-}"
+document_intelligence_api_key="${DocumentIntelligenceApiKey:-}"
+azure_openai_api_key="${AzureOpenAIApiKey:-}"
 configured_key_vault_name="${KeyVaultName:-}"
 
 test -n "$keycloak_password" || (echo "Missing KeycloakPassword" && exit 1)
@@ -60,6 +62,12 @@ test -n "$keycloak_db_password" || (echo "Missing KeycloakDbPassword" && exit 1)
 
 echo "::add-mask::$keycloak_password"
 echo "::add-mask::$keycloak_db_password"
+if [ -n "$document_intelligence_api_key" ]; then
+  echo "::add-mask::$document_intelligence_api_key"
+fi
+if [ -n "$azure_openai_api_key" ]; then
+  echo "::add-mask::$azure_openai_api_key"
+fi
 
 if [ -n "$configured_key_vault_name" ]; then
   key_vault_name="$configured_key_vault_name"
@@ -165,6 +173,12 @@ containerapp_secret_refs_match() {
 
 set_secret_with_retry "keycloak-admin-password" "$keycloak_password"
 set_secret_with_retry "keycloak-db-password" "$keycloak_db_password"
+if [ -n "$document_intelligence_api_key" ]; then
+  set_secret_with_retry "document-intelligence-api-key" "$document_intelligence_api_key"
+fi
+if [ -n "$azure_openai_api_key" ]; then
+  set_secret_with_retry "azure-openai-api-key" "$azure_openai_api_key"
+fi
 
 mapfile -t app_names < <(az containerapp list --resource-group "$resource_group" --query '[].name' -o tsv)
 restarted_any="false"
@@ -217,6 +231,15 @@ for app_name in "${app_names[@]}"; do
         ;;
     esac
   done
+
+  if [ "$app_name" = "talentserver" ]; then
+    if [ -n "$document_intelligence_api_key" ]; then
+      secret_updates+=("documentintelligence--apikey=keyvaultref:${key_vault_uri}secrets/document-intelligence-api-key,identityref:system")
+    fi
+    if [ -n "$azure_openai_api_key" ]; then
+      secret_updates+=("azureopenai--apikey=keyvaultref:${key_vault_uri}secrets/azure-openai-api-key,identityref:system")
+    fi
+  fi
 
   if [ "${#secret_updates[@]}" -gt 0 ]; then
     if containerapp_secret_refs_match "$app_name" "${secret_updates[@]}"; then

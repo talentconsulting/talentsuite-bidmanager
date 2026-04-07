@@ -244,24 +244,14 @@ jobs:
           resource_group="rg-${AZURE_ENV_NAME}"
           app_name="talentserver"
 
-          secret_args=()
           env_args=()
 
           if [ -n "${DocumentIntelligenceApiKey:-}" ]; then
-            secret_args+=("documentintelligence--apikey=${DocumentIntelligenceApiKey}")
             env_args+=("DocumentIntelligence__ApiKey=secretref:documentintelligence--apikey")
           fi
 
           if [ -n "${AzureOpenAIApiKey:-}" ]; then
-            secret_args+=("azureopenai--apikey=${AzureOpenAIApiKey}")
             env_args+=("AzureOpenAI__ApiKey=secretref:azureopenai--apikey")
-          fi
-
-          if [ "${#secret_args[@]}" -gt 0 ]; then
-            az containerapp secret set \
-              --name "$app_name" \
-              --resource-group "$resource_group" \
-              --secrets "${secret_args[@]}" >/dev/null
           fi
 
           if [ -n "${DocumentIntelligenceEndpoint:-}" ]; then
