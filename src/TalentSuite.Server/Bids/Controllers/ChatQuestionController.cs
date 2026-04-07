@@ -13,11 +13,16 @@ public class ChatQuestionController : ControllerBase
 {
     private readonly IBidService _bidService;
     private readonly IAzureOpenAiChatService _azureOpenAiChatService;
+    private readonly ILogger<ChatQuestionController> _logger;
 
-    public ChatQuestionController(IBidService bidService, IAzureOpenAiChatService azureOpenAiChatService)
+    public ChatQuestionController(
+        IBidService bidService,
+        IAzureOpenAiChatService azureOpenAiChatService,
+        ILogger<ChatQuestionController> logger)
     {
         _bidService = bidService;
         _azureOpenAiChatService = azureOpenAiChatService;
+        _logger = logger;
     }
 
     [HttpPost("{questionId}")]
@@ -65,7 +70,21 @@ public class ChatQuestionController : ControllerBase
         }
         catch (ChatServiceUserException ex)
         {
+            _logger.LogWarning(
+                ex,
+                "Chat request for bid {BidId}, question {QuestionId} returned a user-facing error.",
+                chatQuestionRequest.BidId,
+                chatQuestionRequest.QuestionId);
             return StatusCode(ex.StatusCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Chat request for bid {BidId}, question {QuestionId} failed unexpectedly.",
+                chatQuestionRequest.BidId,
+                chatQuestionRequest.QuestionId);
+            throw;
         }
     }
 
