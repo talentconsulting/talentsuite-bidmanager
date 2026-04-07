@@ -29,6 +29,7 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
 {
     private readonly PersistentAgentsClient _client;
     private readonly string _agentId;
+    private static readonly TimeSpan ActiveRunPollInterval = TimeSpan.FromMilliseconds(500);
 
     public AzureOpenAiChatService(IConfiguration config)
     {
@@ -80,11 +81,7 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
         );
 
         // 4) Poll until terminal
-        while (run.Status == RunStatus.Queued || run.Status == RunStatus.InProgress)
-        {
-            await Task.Delay(TimeSpan.FromMilliseconds(500), ct);
-            run = await _client.Runs.GetRunAsync(effectiveThreadId, run.Id, ct);
-        }
+        run = await WaitForRunCompletionAsync(effectiveThreadId, run, ct);
 
         if (run.Status != RunStatus.Completed)
         {
@@ -146,11 +143,57 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
 
             return newThreadId;
         }
+        catch (RequestFailedException ex) when (ex.Status == 400 && TryExtractActiveRunId(ex.Message, out var activeRunId))
+        {
+            var activeRun = await _client.Runs.GetRunAsync(threadId, activeRunId, ct);
+            await WaitForRunCompletionAsync(threadId, activeRun, ct);
+
+            await _client.Messages.CreateMessageAsync(
+                threadId: threadId,
+                role: MessageRole.User,
+                content: userPrompt,
+                cancellationToken: ct);
+
+            return threadId;
+        }
     }
 
     private async Task<string> CreateThreadAsync(CancellationToken ct)
     {
         PersistentAgentThread newThread = await _client.Threads.CreateThreadAsync(cancellationToken: ct);
         return newThread.Id;
+    }
+
+    private async Task<ThreadRun> WaitForRunCompletionAsync(string threadId, ThreadRun run, CancellationToken ct)
+    {
+        while (run.Status == RunStatus.Queued || run.Status == RunStatus.InProgress)
+        {
+            await Task.Delay(ActiveRunPollInterval, ct);
+            run = await _client.Runs.GetRunAsync(threadId, run.Id, ct);
+        }
+
+        return run;
+    }
+
+    private static bool TryExtractActiveRunId(string message, out string runId)
+    {
+        const string marker = "run ";
+        runId = string.Empty;
+
+        var markerIndex = message.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < 0)
+            return false;
+
+        var start = markerIndex + marker.Length;
+        var end = message.IndexOf(' ', start);
+        if (end < 0)
+            end = message.Length;
+
+        var candidate = message[start..end].Trim(' ', '.', ',', '\'', '"');
+        if (!candidate.StartsWith("run_", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        runId = candidate;
+        return true;
     }
 }
