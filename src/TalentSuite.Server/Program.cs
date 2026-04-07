@@ -140,6 +140,7 @@ app.UseCors("BlazorDev");
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapGet("/", () => Results.Redirect("/health"));
 app.MapControllers();
 
 app.MapRazorPages();
