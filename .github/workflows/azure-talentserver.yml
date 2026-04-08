@@ -292,6 +292,24 @@ jobs:
             echo "No Azure AI settings configured for $app_name"
           fi
 
+      - name: Configure Application Insights for talentserver
+        if: ${{ success() }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          connection_string="$(az monitor app-insights component list \
+            --resource-group "$resource_group" \
+            --query '[0].connectionString' \
+            -o tsv)"
+
+          test -n "$connection_string" || (echo "Could not resolve Application Insights connection string in $resource_group" && exit 1)
+
+          az containerapp update \
+            --name talentserver \
+            --resource-group "$resource_group" \
+            --set-env-vars APPLICATIONINSIGHTS_CONNECTION_STRING="$connection_string" >/dev/null
+
       - name: Grant talentserver managed identity access to Azure AI Foundry
         if: ${{ success() && env.AzureAIFoundryProjectEndpoint != '' }}
         run: |

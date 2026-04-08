@@ -1,0 +1,103 @@
+name: ZAP TalentServer PR Scan
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - ".github/workflows/zap-talentserver-pr.yml"
+      - "src/TalentSuite.Server/**"
+      - "TalentSuite.ServiceDefaults/**"
+
+permissions:
+  contents: read
+
+jobs:
+  zap-baseline:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://127.0.0.1:8080
+      AUTHENTICATION_ENABLED: "false"
+      USE_IN_MEMORY_DATA: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore talentserver
+        run: dotnet restore src/TalentSuite.Server/TalentSuite.Server.csproj
+
+      - name: Start talentserver locally
+        run: |
+          dotnet run \
+            --project src/TalentSuite.Server/TalentSuite.Server.csproj \
+            --configuration Release \
+            --no-restore \
+            --no-launch-profile \
+            > /tmp/talentserver-zap.log 2>&1 &
+
+          echo $! > /tmp/talentserver-zap.pid
+
+      - name: Wait for talentserver
+        run: |
+          for _ in $(seq 1 60); do
+            if curl --silent --show-error --fail http://127.0.0.1:8080/api/runtime/auth > /tmp/talentserver-runtime-auth.json; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "talentserver failed to start"
+          cat /tmp/talentserver-zap.log
+          exit 1
+
+      - name: Run ZAP baseline scan
+        run: |
+          mkdir -p zap-report
+          docker run --rm \
+            --network host \
+            -v "${PWD}/zap-report:/zap/wrk/:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t http://127.0.0.1:8080/api/runtime/auth \
+            -m 3 \
+            -r zap-report.html \
+            -w zap-report.md \
+            -J zap-report.json
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-talentserver-pr-report
+          path: zap-report/
+          if-no-files-found: warn
+
+      - name: Upload talentserver startup log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talentserver-zap-log
+          path: /tmp/talentserver-zap.log
+          if-no-files-found: warn
+
+      - name: Stop talentserver
+        if: always()
+        run: |
+          if [ -f /tmp/talentserver-zap.pid ]; then
+            kill "$(cat /tmp/talentserver-zap.pid)" || true
+          fi

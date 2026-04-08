@@ -227,6 +227,7 @@ if (useLocalInfrastructure)
 else
 {
     defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev");
+    _ = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
 
     sql = builder.AddAzureSqlServer("sql")
         .ConfigureInfrastructure(infra =>

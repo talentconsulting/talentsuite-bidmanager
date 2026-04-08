@@ -11,6 +11,8 @@ var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults()
     .ConfigureServices((context, services) =>
     {
+        services.AddApplicationInsightsTelemetryWorkerService();
+        services.ConfigureFunctionsApplicationInsights();
         services.AddEmailConfiguration(context.Configuration);
         services.AddGoogleDriveSyncConfiguration(context.Configuration);
         services.AddInviteEmail();

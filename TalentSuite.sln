@@ -53,6 +53,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ops", "ops", "{C2EEFDDF-73B
 		ops\grafana\dashboards\azure-storage-accounts.json = ops\grafana\dashboards\azure-storage-accounts.json
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{4B1BCB92-379B-48E3-9368-13ECB8C1B056}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

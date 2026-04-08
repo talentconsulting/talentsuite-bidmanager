@@ -610,6 +610,24 @@ jobs:
 
           echo "Configured BidStorage identity settings for $app_name using $blob_service_uri"
 
+      - name: Configure Application Insights for talentfunctions
+        if: ${{ success() }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+          connection_string="$(az monitor app-insights component list \
+            --resource-group "$resource_group" \
+            --query '[0].connectionString' \
+            -o tsv)"
+
+          test -n "$connection_string" || (echo "Could not resolve Application Insights connection string in $resource_group" && exit 1)
+
+          az containerapp update \
+            --name talentfunctions \
+            --resource-group "$resource_group" \
+            --set-env-vars APPLICATIONINSIGHTS_CONNECTION_STRING="$connection_string" >/dev/null
+
       - name: Remove legacy bidstorage env vars from talentfunctions
         if: ${{ success() }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
