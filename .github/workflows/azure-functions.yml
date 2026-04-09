@@ -616,11 +616,11 @@ jobs:
           set -euo pipefail
 
           resource_group="rg-${AZURE_ENV_NAME}"
-          connection_string="$(az resource list \
+          appi_json="$(az resource list \
             --resource-group "$resource_group" \
             --resource-type "Microsoft.Insights/components" \
-            --query '[0].properties.ConnectionString' \
-            -o tsv)"
+            -o json)"
+          connection_string="$(printf '%s' "$appi_json" | jq -r '.[0].properties.ConnectionString // .[0].properties.connectionString // empty')"
 
           test -n "$connection_string" || (echo "Could not resolve Application Insights connection string in $resource_group" && exit 1)
 
