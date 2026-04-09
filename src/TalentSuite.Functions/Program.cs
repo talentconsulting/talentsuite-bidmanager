@@ -1,3 +1,4 @@
+using Microsoft.Azure.Functions.Worker;
 using TalentSuite.Functions.CommentEmail;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
