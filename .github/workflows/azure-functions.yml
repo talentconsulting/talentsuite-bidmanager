@@ -616,11 +616,30 @@ jobs:
           set -euo pipefail
 
           resource_group="rg-${AZURE_ENV_NAME}"
+          appi_name="appi-talentsuite-${AZURE_ENV_NAME}"
           appi_json="$(az resource list \
             --resource-group "$resource_group" \
             --resource-type "Microsoft.Insights/components" \
             -o json)"
           connection_string="$(printf '%s' "$appi_json" | jq -r '.[0].properties.ConnectionString // .[0].properties.connectionString // empty')"
+
+          if [ -z "$connection_string" ]; then
+            az resource create \
+              --resource-group "$resource_group" \
+              --name "$appi_name" \
+              --resource-type "Microsoft.Insights/components" \
+              --api-version "2020-02-02" \
+              --location "${AZURE_LOCATION}" \
+              --properties '{"Application_Type":"web","Flow_Type":"Bluefield","IngestionMode":"ApplicationInsights"}' \
+              >/dev/null
+
+            appi_json="$(az resource show \
+              --resource-group "$resource_group" \
+              --name "$appi_name" \
+              --resource-type "Microsoft.Insights/components" \
+              -o json)"
+            connection_string="$(printf '%s' "$appi_json" | jq -r '.properties.ConnectionString // .properties.connectionString // empty')"
+          fi
 
           test -n "$connection_string" || (echo "Could not resolve Application Insights connection string in $resource_group" && exit 1)
 
