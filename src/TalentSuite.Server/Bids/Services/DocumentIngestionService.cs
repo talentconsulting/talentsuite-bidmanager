@@ -28,7 +28,8 @@ public interface IDocumentIngestionservice
 public sealed class DocumentIngestionService : IDocumentIngestionservice
 {
     private const int MaxPromptChars = 80_000;
-    private const int ExcelChunkChars = 20_000;
+    private const int ExcelChunkChars = 12_000;
+    private const int MaxExcelSheetChars = 24_000;
     private readonly DocumentIntelligenceClient _diClient;
     private readonly AzureOpenAIClient _aoaiClient;
     private readonly string _chatDeployment;
@@ -114,7 +115,8 @@ public sealed class DocumentIngestionService : IDocumentIngestionservice
 
         foreach (var sheetText in sheetTexts)
         {
-            foreach (var chunk in ChunkExcelSheetText(sheetText.Content, ExcelChunkChars))
+            var cappedSheetText = ClampText(sheetText.Content, MaxExcelSheetChars);
+            foreach (var chunk in ChunkExcelSheetText(cappedSheetText, ExcelChunkChars))
             {
                 var json = await ExtractQuestionsJsonWithAzureOpenAiAsync(
                     chunk,
@@ -334,7 +336,15 @@ DOCUMENT TEXT:
             if (values.Count == 0 || values.All(string.IsNullOrWhiteSpace))
                 continue;
 
-            lines.Add(string.Join(" | ", values));
+            var nonEmptyValues = values
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            if (nonEmptyValues.Count == 0)
+                continue;
+
+            lines.Add(string.Join(" | ", nonEmptyValues));
         }
 
         return string.Join(Environment.NewLine, lines).Trim();
