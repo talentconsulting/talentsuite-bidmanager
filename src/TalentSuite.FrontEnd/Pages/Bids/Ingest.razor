@@ -24,9 +24,9 @@ else
         </div>
 
         <div>
-            <label><b>Bid document (Word)</b></label><br />
+            <label><b>Bid document (Word or Excel)</b></label><br />
             <InputFile OnChange="OnFileChanged"
-                       accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                       accept=".doc,.docx,.xls,.xlsx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
 
             @if (!string.IsNullOrWhiteSpace(FileName))
             {

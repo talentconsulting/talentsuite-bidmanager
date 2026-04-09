@@ -384,7 +384,9 @@
                             <h4 class="mb-3">Files</h4>
                             <div class="mb-3">
                                 <label class="form-label fw-semibold">Upload file</label>
-                                <InputFile OnChange="UploadBidFileAsync" class="form-control" />
+                                <InputFile OnChange="UploadBidFileAsync"
+                                           class="form-control"
+                                           accept=".doc,.docx,.xls,.xlsx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
                             </div>
 
                             @if (!string.IsNullOrWhiteSpace(FilesErrorText))

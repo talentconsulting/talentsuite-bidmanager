@@ -63,7 +63,7 @@ public partial class Ingest : ComponentBase
 
         if (File is null)
         {
-            ErrorText = "Please choose a Word document (.doc/.docx).";
+            ErrorText = "Please choose a Word or Excel document (.doc, .docx, .xls, .xlsx).";
             return;
         }
 
