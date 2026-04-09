@@ -807,9 +807,10 @@ jobs:
           set -euo pipefail
 
           resource_group="rg-${AZURE_ENV_NAME}"
-          connection_string="$(az monitor app-insights component list \
+          connection_string="$(az resource list \
             --resource-group "$resource_group" \
-            --query '[0].connectionString' \
+            --resource-type "Microsoft.Insights/components" \
+            --query '[0].properties.ConnectionString' \
             -o tsv)"
 
           test -n "$connection_string" || (echo "Could not resolve Application Insights connection string in $resource_group" && exit 1)
@@ -955,9 +956,10 @@ jobs:
           set -euo pipefail
 
           resource_group="rg-${AZURE_ENV_NAME}"
-          connection_string="$(az monitor app-insights component list \
+          connection_string="$(az resource list \
             --resource-group "$resource_group" \
-            --query '[0].connectionString' \
+            --resource-type "Microsoft.Insights/components" \
+            --query '[0].properties.ConnectionString' \
             -o tsv)"
 
           test -n "$connection_string" || (echo "Could not resolve Application Insights connection string in $resource_group" && exit 1)
