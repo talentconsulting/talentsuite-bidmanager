@@ -475,7 +475,8 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
             var base64 = Convert.ToBase64String(downloaded.Content);
             PreviewUrl = await JS.InvokeAsync<string>(
-                "bidManage.createBlobUrlFromBase64",
+                "bidManage.createPreviewUrlFromBase64",
+                downloaded.FileName,
                 downloaded.ContentType,
                 base64);
             PreviewFileName = downloaded.FileName;
