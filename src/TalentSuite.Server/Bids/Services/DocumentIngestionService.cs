@@ -3,8 +3,6 @@ using System.Text.Json;
 using Azure;
 using Azure.AI.DocumentIntelligence;
 using Azure.AI.OpenAI;
-using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Spreadsheet;
 using OpenAI.Chat;
 using TalentSuite.Server.Bids.Services.Models;
 using TalentSuite.Shared;
@@ -28,8 +26,6 @@ public interface IDocumentIngestionservice
 public sealed class DocumentIngestionService : IDocumentIngestionservice
 {
     private const int MaxPromptChars = 80_000;
-    private const int ExcelChunkChars = 12_000;
-    private const int MaxExcelSheetChars = 24_000;
     private readonly DocumentIntelligenceClient _diClient;
     private readonly AzureOpenAIClient _aoaiClient;
     private readonly string _chatDeployment;
@@ -67,13 +63,6 @@ public sealed class DocumentIngestionService : IDocumentIngestionservice
         if (!documentStream.CanRead) throw new ArgumentException("Document stream must be readable.", nameof(documentStream));
         if (string.IsNullOrWhiteSpace(fileName)) fileName = "document";
 
-        if (IsExcelWorkbook(fileName))
-        {
-            var excelResult = await ExtractExcelDocumentAsync(documentStream, fileName, stage, ct);
-            if (excelResult?.Questions is { Count: > 0 } || HasDocumentMetadata(excelResult))
-                return ApplyQuestionOrderIndices(excelResult);
-        }
-
         // 1) Extract text with Document Intelligence (prebuilt-read)
         var extractedText = await ExtractTextWithDocumentIntelligenceAsync(documentStream, ct);
 
@@ -89,47 +78,6 @@ public sealed class DocumentIngestionService : IDocumentIngestionservice
         // 3) Parse into strongly typed list
         var parsed = JsonSerializer.Deserialize<ParsedDocumentModel>(json, SerialiserOptions.JsonOptions);
         return ApplyQuestionOrderIndices(parsed);
-    }
-
-    private async Task<ParsedDocumentModel?> ExtractExcelDocumentAsync(
-        Stream documentStream,
-        string fileName,
-        BidStage stage,
-        CancellationToken ct)
-    {
-        if (documentStream.CanSeek)
-            documentStream.Position = 0;
-
-        using var workbookStream = new MemoryStream();
-        await documentStream.CopyToAsync(workbookStream, ct);
-        workbookStream.Position = 0;
-
-        var sheetTexts = ExtractWorkbookSheets(workbookStream);
-        if (sheetTexts.Count == 0)
-            return null;
-
-        var merged = new ParsedDocumentModel
-        {
-            Questions = new List<ParsedQuestionModel>()
-        };
-
-        foreach (var sheetText in sheetTexts)
-        {
-            var cappedSheetText = ClampText(sheetText.Content, MaxExcelSheetChars);
-            foreach (var chunk in ChunkExcelSheetText(cappedSheetText, ExcelChunkChars))
-            {
-                var json = await ExtractQuestionsJsonWithAzureOpenAiAsync(
-                    chunk,
-                    $"{fileName} [{sheetText.Name}]",
-                    stage,
-                    ct);
-
-                var parsedChunk = JsonSerializer.Deserialize<ParsedDocumentModel>(json, SerialiserOptions.JsonOptions);
-                MergeParsedDocument(merged, parsedChunk);
-            }
-        }
-
-        return merged;
     }
 
     private async Task<string> ExtractTextWithDocumentIntelligenceAsync(Stream document, CancellationToken ct)
@@ -260,28 +208,6 @@ DOCUMENT TEXT:
         return text.Substring(0, maxChars);
     }
 
-    private static bool IsExcelWorkbook(string fileName)
-    {
-        var extension = Path.GetExtension(fileName);
-        return string.Equals(extension, ".xlsx", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(extension, ".xlsm", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool HasDocumentMetadata(ParsedDocumentModel? parsed)
-    {
-        if (parsed is null)
-            return false;
-
-        return !string.IsNullOrWhiteSpace(parsed.UniqueReference)
-               || !string.IsNullOrWhiteSpace(parsed.Company)
-               || !string.IsNullOrWhiteSpace(parsed.Summary)
-               || !string.IsNullOrWhiteSpace(parsed.KeyInformation)
-               || !string.IsNullOrWhiteSpace(parsed.Budget)
-               || !string.IsNullOrWhiteSpace(parsed.DeadlineForQualifying)
-               || !string.IsNullOrWhiteSpace(parsed.DeadlineForSubmission)
-               || !string.IsNullOrWhiteSpace(parsed.LengthOfContract);
-    }
-
     private static ParsedDocumentModel? ApplyQuestionOrderIndices(ParsedDocumentModel? parsed)
     {
         if (parsed?.Questions is { Count: > 0 })
@@ -294,146 +220,4 @@ DOCUMENT TEXT:
 
         return parsed;
     }
-
-    private static List<WorkbookSheetText> ExtractWorkbookSheets(Stream workbookStream)
-    {
-        using var document = SpreadsheetDocument.Open(workbookStream, false);
-        var workbookPart = document.WorkbookPart;
-        if (workbookPart?.Workbook?.Sheets is null)
-            return new List<WorkbookSheetText>();
-
-        var sharedStrings = workbookPart.SharedStringTablePart?.SharedStringTable;
-        var result = new List<WorkbookSheetText>();
-
-        foreach (var sheet in workbookPart.Workbook.Sheets.Elements<Sheet>())
-        {
-            if (string.IsNullOrWhiteSpace(sheet.Id?.Value)
-                || workbookPart.GetPartById(sheet.Id.Value) is not WorksheetPart worksheetPart)
-                continue;
-
-            var text = ExtractWorksheetText(worksheetPart, sharedStrings);
-            if (string.IsNullOrWhiteSpace(text))
-                continue;
-
-            result.Add(new WorkbookSheetText(sheet.Name?.Value ?? "Sheet", text));
-        }
-
-        return result;
-    }
-
-    private static string ExtractWorksheetText(WorksheetPart worksheetPart, SharedStringTable? sharedStrings)
-    {
-        var rows = worksheetPart.Worksheet.Descendants<Row>();
-        var lines = new List<string>();
-
-        foreach (var row in rows)
-        {
-            var values = row.Elements<Cell>()
-                .Select(cell => GetCellText(cell, sharedStrings))
-                .ToList();
-
-            TrimTrailingEmptyValues(values);
-            if (values.Count == 0 || values.All(string.IsNullOrWhiteSpace))
-                continue;
-
-            var nonEmptyValues = values
-                .Where(static value => !string.IsNullOrWhiteSpace(value))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-
-            if (nonEmptyValues.Count == 0)
-                continue;
-
-            lines.Add(string.Join(" | ", nonEmptyValues));
-        }
-
-        return string.Join(Environment.NewLine, lines).Trim();
-    }
-
-    private static string GetCellText(Cell cell, SharedStringTable? sharedStrings)
-    {
-        var rawValue = cell.CellValue?.InnerText ?? cell.InnerText ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(rawValue))
-            return string.Empty;
-
-        if (cell.DataType?.Value == CellValues.SharedString
-            && int.TryParse(rawValue, out var sharedStringIndex)
-            && sharedStrings?.ElementAtOrDefault(sharedStringIndex) is SharedStringItem sharedString)
-        {
-            return sharedString.InnerText?.Trim() ?? string.Empty;
-        }
-
-        if (cell.DataType?.Value == CellValues.InlineString)
-            return cell.InlineString?.InnerText?.Trim() ?? string.Empty;
-
-        return rawValue.Trim();
-    }
-
-    private static void TrimTrailingEmptyValues(List<string> values)
-    {
-        for (var i = values.Count - 1; i >= 0; i--)
-        {
-            if (!string.IsNullOrWhiteSpace(values[i]))
-                break;
-
-            values.RemoveAt(i);
-        }
-    }
-
-    private static IEnumerable<string> ChunkExcelSheetText(string sheetText, int maxChars)
-    {
-        if (string.IsNullOrWhiteSpace(sheetText))
-            yield break;
-
-        var builder = new StringBuilder();
-        foreach (var line in sheetText.Split(Environment.NewLine))
-        {
-            var normalizedLine = line.TrimEnd();
-            if (string.IsNullOrWhiteSpace(normalizedLine))
-                continue;
-
-            if (builder.Length > 0 && builder.Length + normalizedLine.Length + Environment.NewLine.Length > maxChars)
-            {
-                yield return builder.ToString().Trim();
-                builder.Clear();
-            }
-
-            if (normalizedLine.Length > maxChars)
-            {
-                yield return ClampText(normalizedLine, maxChars);
-                continue;
-            }
-
-            if (builder.Length > 0)
-                builder.AppendLine();
-
-            builder.Append(normalizedLine);
-        }
-
-        if (builder.Length > 0)
-            yield return builder.ToString().Trim();
-    }
-
-    private static void MergeParsedDocument(ParsedDocumentModel target, ParsedDocumentModel? source)
-    {
-        if (source is null)
-            return;
-
-        target.UniqueReference ??= NullIfWhiteSpace(source.UniqueReference);
-        target.Company ??= NullIfWhiteSpace(source.Company);
-        target.Summary ??= NullIfWhiteSpace(source.Summary);
-        target.KeyInformation ??= NullIfWhiteSpace(source.KeyInformation);
-        target.Budget ??= NullIfWhiteSpace(source.Budget);
-        target.DeadlineForQualifying ??= NullIfWhiteSpace(source.DeadlineForQualifying);
-        target.DeadlineForSubmission ??= NullIfWhiteSpace(source.DeadlineForSubmission);
-        target.LengthOfContract ??= NullIfWhiteSpace(source.LengthOfContract);
-
-        if (source.Questions is { Count: > 0 })
-            target.Questions.AddRange(source.Questions);
-    }
-
-    private static string? NullIfWhiteSpace(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value;
-
-    private sealed record WorkbookSheetText(string Name, string Content);
 }

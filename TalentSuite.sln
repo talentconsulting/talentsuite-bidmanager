@@ -54,6 +54,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ops", "ops", "{C2EEFDDF-73B
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{4B1BCB92-379B-48E3-9368-13ECB8C1B056}"
+	ProjectSection(SolutionItems) = preProject
+		docs\Appendix_4_-_RFP_Business_and_Technical_requirements (1).xlsx = docs\Appendix_4_-_RFP_Business_and_Technical_requirements (1).xlsx
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
