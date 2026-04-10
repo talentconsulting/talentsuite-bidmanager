@@ -1152,6 +1152,52 @@ jobs:
             --name "$sql_server_name" \
             --set publicNetworkAccess=Disabled >/dev/null
 
+      - name: Wait for keycloak healthy
+        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
+        run: |
+          set -euo pipefail
+
+          resource_group="rg-${AZURE_ENV_NAME}"
+
+          for _ in $(seq 1 30); do
+            latest_revision="$(az containerapp show \
+              --name keycloak \
+              --resource-group "$resource_group" \
+              --query properties.latestRevisionName -o tsv)"
+
+            running_state="$(az containerapp revision show \
+              --name keycloak \
+              --resource-group "$resource_group" \
+              --revision "$latest_revision" \
+              --query properties.runningState -o tsv 2>/dev/null || true)"
+
+            health_state="$(az containerapp revision show \
+              --name keycloak \
+              --resource-group "$resource_group" \
+              --revision "$latest_revision" \
+              --query properties.healthState -o tsv 2>/dev/null || true)"
+
+            if [ "$running_state" = "Running" ] && [ "$health_state" = "Healthy" ]; then
+              keycloak_fqdn="$(az containerapp show \
+                --name keycloak \
+                --resource-group "$resource_group" \
+                --query properties.configuration.ingress.fqdn -o tsv)"
+
+              if [ -n "$keycloak_fqdn" ] && curl -fsS "https://${keycloak_fqdn}/realms/master/.well-known/openid-configuration" >/dev/null 2>&1; then
+                exit 0
+              fi
+            fi
+
+            sleep 10
+          done
+
+          echo "Keycloak did not become healthy in time"
+          az containerapp revision list \
+            --name keycloak \
+            --resource-group "$resource_group" \
+            -o table || true
+          exit 1
+
       - name: Import Keycloak realm if missing
         if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
