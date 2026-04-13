@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net">
   <diagram name="Page-1" id="g3XgHIeUFipz4oudvX2k">
-    <mxGraphModel dx="2456" dy="1059" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="2265" dy="934" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -167,6 +167,11 @@
         </mxCell>
         <mxCell id="GZb7suBeXzR2rary7qyB-60" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="dev.talentsuite.uk&lt;div&gt;dev-api.talentsuite.uk&lt;/div&gt;&lt;div&gt;auth-dev.talentsuite.uk&lt;/div&gt;&lt;div&gt;grafana-dev.talentsuite.uk&lt;/div&gt;" vertex="1">
           <mxGeometry height="30" width="180" x="897.91" y="317" as="geometry" />
+        </mxCell>
+        <mxCell id="GZb7suBeXzR2rary7qyB-61" edge="1" parent="1" source="GZb7suBeXzR2rary7qyB-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;jumpStyle=arc;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="371" y="560" as="targetPoint" />
+          </mxGeometry>
         </mxCell>
       </root>
     </mxGraphModel>
