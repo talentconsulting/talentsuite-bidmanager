@@ -2,8 +2,13 @@
 
 This diagram shows the main runtime containers for TalentSuite in the Azure deployment shape.
 
+## C1
+
 ![img.png](img.png)
 
+## C3
+
+![img_1.png](img_1.png)
 ## Container responsibilities
 
 - `TalentSuite.FrontEnd`
