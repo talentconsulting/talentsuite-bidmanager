@@ -28,19 +28,20 @@ public class ChatQuestionController : ControllerBase
     [HttpPost("{questionId}")]
     public async Task<IActionResult> AskQuestions(string questionId, [FromBody] ChatQuestionRequest chatQuestionRequest)
     {
-        if (!string.Equals(questionId, chatQuestionRequest.QuestionId, StringComparison.OrdinalIgnoreCase))
-            return BadRequest("Route question id does not match request body.");
+        var resolvedQuestionId = string.IsNullOrWhiteSpace(chatQuestionRequest.QuestionId)
+            ? questionId
+            : chatQuestionRequest.QuestionId;
 
         try
         {
-            var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, chatQuestionRequest.QuestionId);
+            var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, resolvedQuestionId);
 
             var userId = ResolveCurrentUserKey();
             var persistedThreadId = string.IsNullOrWhiteSpace(userId)
                 ? null
                 : await _bidService.GetChatThreadId(
                     chatQuestionRequest.BidId,
-                    chatQuestionRequest.QuestionId,
+                    resolvedQuestionId,
                     userId);
 
             var systemPrompt =
@@ -57,7 +58,7 @@ public class ChatQuestionController : ControllerBase
             {
                 await _bidService.SetChatThreadId(
                     chatQuestionRequest.BidId,
-                    chatQuestionRequest.QuestionId,
+                    resolvedQuestionId,
                     userId,
                     result.ThreadId);
             }
