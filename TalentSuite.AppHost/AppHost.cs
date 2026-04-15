@@ -166,7 +166,14 @@ else
         .WithEndpoint("http", endpoint => endpoint.IsExternal = true, createIfNotExists: false)
         .WithArgs("--proxy-headers=xforwarded")
         .WithArgs("--http-enabled=true")
-        .WithArgs("--hostname-strict=false");
+        .WithArgs("--hostname-strict=false")
+        .PublishAsAzureContainerApp((_, app) =>
+        {
+            app.Template ??= new();
+            app.Template.Scale ??= new ContainerAppScale();
+            app.Template.Scale.MinReplicas = 1;
+            app.Template.Scale.MaxReplicas = 1;
+        });
 }
 var messaging = builder.AddAzureServiceBus("messaging");
 if (useLocalInfrastructure)
