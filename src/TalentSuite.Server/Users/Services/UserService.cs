@@ -82,8 +82,27 @@ public class UserService : IUserService
 
     public async Task<bool> UpdateUser(string userId, UserModel request, CancellationToken ct = default)
     {
+        var existing = await _userRepository.GetUser(userId, ct);
+        if (existing is null)
+            return false;
+
         var user = _mapper.ToDataModel(request);
-        return await _userRepository.UpdateUser(userId, user, ct);
+        var updated = await _userRepository.UpdateUser(userId, user, ct);
+        if (!updated)
+            return false;
+
+        if (string.Equals(existing.IdentityProvider, "keycloak", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(existing.IdentitySubject))
+        {
+            await SyncKeycloakRoleAsync(
+                existing.IdentitySubject,
+                existing.IdentityUsername,
+                request.Email ?? existing.Email,
+                request.Role,
+                ct);
+        }
+
+        return true;
     }
 
     public async Task<bool> DeleteUser(string userId, CancellationToken ct = default)
@@ -168,12 +187,21 @@ public class UserService : IUserService
             return null;
         }
 
+        var keycloakRole = ToKeycloakRealmRole(pending.Role);
+        _logger.LogInformation(
+            "RegisterInvitedUser starting Keycloak provisioning for pending user {UserId}. InternalRole={InternalRole}, KeycloakRole={KeycloakRole}, Username={Username}, Email={Email}.",
+            pending.Id,
+            pending.Role,
+            keycloakRole,
+            username.Trim(),
+            pending.Email);
+
         var keycloakSubject = await _keycloakAdminService.CreateUserAsync(
             username.Trim(),
             pending.Email ?? string.Empty,
             pending.Name,
             password,
-            "user",
+            keycloakRole,
             ct);
         if (string.IsNullOrWhiteSpace(keycloakSubject))
         {
@@ -183,6 +211,12 @@ public class UserService : IUserService
                 SafeTokenPrefix(invitationToken));
             return null;
         }
+
+        _logger.LogInformation(
+            "RegisterInvitedUser created or resolved Keycloak user {KeycloakSubject} for pending user {UserId} with KeycloakRole={KeycloakRole}.",
+            keycloakSubject,
+            pending.Id,
+            keycloakRole);
 
         var linked = await _userRepository.AcceptInvite(
             invitationToken,
@@ -218,8 +252,57 @@ public class UserService : IUserService
             identityUsername,
             email,
             ct);
+
+        if (user is not null
+            && string.Equals(identityProvider, "keycloak", StringComparison.OrdinalIgnoreCase))
+        {
+            await SyncKeycloakRoleAsync(
+                identitySubject,
+                identityUsername,
+                email,
+                user.Role,
+                ct);
+        }
+
         return user is null ? null : _mapper.ToModel(user);
     }
+
+    private async Task SyncKeycloakRoleAsync(
+        string? userId,
+        string? username,
+        string? email,
+        TalentSuite.Shared.Users.UserRole role,
+        CancellationToken ct)
+    {
+        var synced = await _keycloakAdminService.SyncRealmRoleAsync(
+            userId,
+            username,
+            email,
+            ToKeycloakRealmRole(role),
+            ct);
+
+        _logger.LogInformation(
+            "SyncKeycloakRoleAsync attempted role sync. InternalRole={InternalRole}, KeycloakRole={KeycloakRole}, Subject={Subject}, Username={Username}, Email={Email}, Succeeded={Succeeded}.",
+            role,
+            ToKeycloakRealmRole(role),
+            userId,
+            username,
+            email,
+            synced);
+
+        if (!synced)
+        {
+            _logger.LogWarning(
+                "Failed to sync Keycloak role {Role} for subject {Subject}, username {Username}, email {Email}.",
+                role,
+                userId,
+                username,
+                email);
+        }
+    }
+
+    private static string ToKeycloakRealmRole(TalentSuite.Shared.Users.UserRole role)
+        => role == TalentSuite.Shared.Users.UserRole.Admin ? "admin" : "user";
 
     private static string SafeTokenPrefix(string? token)
     {

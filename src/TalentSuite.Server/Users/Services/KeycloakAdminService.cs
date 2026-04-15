@@ -120,6 +120,14 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
         if (string.IsNullOrWhiteSpace(_keycloakBaseUrl) || string.IsNullOrWhiteSpace(_adminPassword))
             return null;
 
+        _logger.LogInformation(
+            "Keycloak CreateUserAsync starting. Username={Username}, Email={Email}, Role={Role}, Realm={Realm}, BaseUrl={BaseUrl}.",
+            username,
+            email,
+            role,
+            _targetRealm,
+            _keycloakBaseUrl);
+
         var http = _httpClientFactory.CreateClient();
         var tokenResponse = await RequestAdminTokenAsync(http, ct);
         if (tokenResponse is null || string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
@@ -180,13 +188,105 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
 
         var roleRepresentation = await GetRealmRoleAsync(http, tokenResponse.AccessToken, role, ct);
         if (roleRepresentation is null)
+        {
+            _logger.LogWarning(
+                "Keycloak CreateUserAsync could not resolve realm role {Role} for username {Username}.",
+                role,
+                username);
             return null;
+        }
 
         var roleAssigned = await AssignRealmRoleAsync(http, tokenResponse.AccessToken, createdUserId, roleRepresentation, ct);
         if (!roleAssigned)
+        {
+            _logger.LogWarning(
+                "Keycloak CreateUserAsync failed assigning realm role {Role} to user {UserId} ({Username}).",
+                roleRepresentation.Name,
+                createdUserId,
+                username);
             return null;
+        }
+
+        _logger.LogInformation(
+            "Keycloak CreateUserAsync assigned realm role {Role} to user {UserId} ({Username}).",
+            roleRepresentation.Name,
+            createdUserId,
+            username);
 
         return createdUserId;
+    }
+
+    public async Task<bool> SyncRealmRoleAsync(string? userId, string? username, string? email, string role, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId)
+            && string.IsNullOrWhiteSpace(username)
+            && string.IsNullOrWhiteSpace(email))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(role))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(_keycloakBaseUrl) || string.IsNullOrWhiteSpace(_adminPassword))
+            return false;
+
+        var http = _httpClientFactory.CreateClient();
+        var tokenResponse = await RequestAdminTokenAsync(http, ct);
+        if (tokenResponse is null || string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
+            return false;
+
+        var candidateIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(userId))
+            candidateIds.Add(userId);
+
+        if (!string.IsNullOrWhiteSpace(username))
+        {
+            var idsByUsername = await FindUserIdsByUsernameAsync(http, tokenResponse.AccessToken, username, ct);
+            foreach (var id in idsByUsername)
+                candidateIds.Add(id);
+        }
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            var idsByEmail = await FindUserIdsByEmailAsync(http, tokenResponse.AccessToken, email, ct);
+            foreach (var id in idsByEmail)
+                candidateIds.Add(id);
+        }
+
+        if (candidateIds.Count == 0)
+            return false;
+
+        var desiredRole = await GetRealmRoleAsync(http, tokenResponse.AccessToken, role, ct);
+        if (desiredRole is null)
+            return false;
+
+        var allSucceeded = true;
+        foreach (var candidateId in candidateIds)
+        {
+            var existingRoles = await GetUserRealmRolesAsync(http, tokenResponse.AccessToken, candidateId, ct);
+            var managedRoles = existingRoles
+                .Where(r => string.Equals(r.Name, "admin", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(r.Name, "user", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var rolesToRemove = managedRoles
+                .Where(r => !string.Equals(r.Name, desiredRole.Name, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (rolesToRemove.Count > 0)
+            {
+                var removed = await RemoveRealmRolesAsync(http, tokenResponse.AccessToken, candidateId, rolesToRemove, ct);
+                allSucceeded &= removed;
+            }
+
+            var alreadyAssigned = managedRoles.Any(r =>
+                string.Equals(r.Name, desiredRole.Name, StringComparison.OrdinalIgnoreCase));
+            if (!alreadyAssigned)
+            {
+                var assigned = await AssignRealmRoleAsync(http, tokenResponse.AccessToken, candidateId, desiredRole, ct);
+                allSucceeded &= assigned;
+            }
+        }
+
+        return allSucceeded;
     }
 
     private async Task<KeycloakTokenResponse?> RequestAdminTokenAsync(HttpClient http, CancellationToken ct)
@@ -366,6 +466,25 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
         return await response.Content.ReadFromJsonAsync<KeycloakRoleRepresentation>(ct);
     }
 
+    private async Task<List<KeycloakRoleRepresentation>> GetUserRealmRolesAsync(
+        HttpClient http,
+        string accessToken,
+        string userId,
+        CancellationToken ct)
+    {
+        var url =
+            $"{_keycloakBaseUrl!.TrimEnd('/')}/admin/realms/{Uri.EscapeDataString(_targetRealm)}/users/{Uri.EscapeDataString(userId)}/role-mappings/realm";
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var response = await http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            return new List<KeycloakRoleRepresentation>();
+
+        return await response.Content.ReadFromJsonAsync<List<KeycloakRoleRepresentation>>(ct)
+               ?? new List<KeycloakRoleRepresentation>();
+    }
+
     private async Task<bool> AssignRealmRoleAsync(
         HttpClient http,
         string accessToken,
@@ -389,6 +508,37 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
         _logger.LogWarning(
             "Failed to assign Keycloak role {Role} to user {UserId}. Status: {StatusCode}. Body: {Body}",
             role.Name,
+            userId,
+            (int)response.StatusCode,
+            body);
+        return false;
+    }
+
+    private async Task<bool> RemoveRealmRolesAsync(
+        HttpClient http,
+        string accessToken,
+        string userId,
+        IReadOnlyCollection<KeycloakRoleRepresentation> roles,
+        CancellationToken ct)
+    {
+        if (roles.Count == 0)
+            return true;
+
+        var url =
+            $"{_keycloakBaseUrl!.TrimEnd('/')}/admin/realms/{Uri.EscapeDataString(_targetRealm)}/users/{Uri.EscapeDataString(userId)}/role-mappings/realm";
+        using var request = new HttpRequestMessage(HttpMethod.Delete, url)
+        {
+            Content = JsonContent.Create(roles)
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var response = await http.SendAsync(request, ct);
+        if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NoContent)
+            return true;
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        _logger.LogWarning(
+            "Failed to remove Keycloak realm roles from user {UserId}. Status: {StatusCode}. Body: {Body}",
             userId,
             (int)response.StatusCode,
             body);
