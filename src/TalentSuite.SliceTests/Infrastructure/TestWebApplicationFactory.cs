@@ -86,9 +86,11 @@ public sealed class InMemoryKeycloakAdminService : IKeycloakAdminService
 {
     private readonly List<CreatedIdentity> _createdIdentities = [];
     private readonly List<string> _deletedSubjects = [];
+    private readonly List<(string? UserId, string? Username, string? Email, string Role)> _syncedRoles = [];
 
     public IReadOnlyList<CreatedIdentity> CreatedIdentities => _createdIdentities;
     public IReadOnlyList<string> DeletedSubjects => _deletedSubjects;
+    public IReadOnlyList<(string? UserId, string? Username, string? Email, string Role)> SyncedRoles => _syncedRoles;
 
     public Task<bool> DeleteUserAsync(string? userId, string? username, string? email, CancellationToken ct = default)
     {
@@ -115,6 +117,17 @@ public sealed class InMemoryKeycloakAdminService : IKeycloakAdminService
             subject));
 
         return Task.FromResult<string?>(subject);
+    }
+
+    public Task<bool> SyncRealmRoleAsync(
+        string? userId,
+        string? username,
+        string? email,
+        string role,
+        CancellationToken ct = default)
+    {
+        _syncedRoles.Add((userId, username, email, role));
+        return Task.FromResult(true);
     }
 }
 
