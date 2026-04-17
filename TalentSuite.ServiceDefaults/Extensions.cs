@@ -1,13 +1,14 @@
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Azure.Monitor.OpenTelemetry.AspNetCore;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
+using System.Data;
 
 namespace TalentSuite.ServiceDefaults
 {
@@ -58,7 +59,8 @@ namespace TalentSuite.ServiceDefaults
                 {
                     metrics.AddAspNetCoreInstrumentation()
                         .AddHttpClientInstrumentation()
-                        .AddRuntimeInstrumentation();
+                        .AddRuntimeInstrumentation()
+                        .AddSqlClientInstrumentation();
                 })
                 .WithTracing(tracing =>
                 {
@@ -71,7 +73,45 @@ namespace TalentSuite.ServiceDefaults
                         )
                         // Uncomment the following line to enable gRPC instrumentation (requires the OpenTelemetry.Instrumentation.GrpcNetClient package)
                         //.AddGrpcClientInstrumentation()
-                        .AddHttpClientInstrumentation();
+                        .AddHttpClientInstrumentation(options =>
+                        {
+                            // Enrich with metadata only - avoid blocking calls that can cause thread pool starvation
+                            options.EnrichWithHttpRequestMessage = (activity, request) =>
+                            {
+                                activity.SetTag("http.method", request.Method.ToString());
+                                activity.SetTag("http.url", request.RequestUri?.ToString());
+                                activity.SetTag("http.content_type", request.Content?.Headers.ContentType?.ToString());
+                                if (request.Content?.Headers.ContentLength.HasValue == true)
+                                {
+                                    activity.SetTag("http.request_content_length", request.Content.Headers.ContentLength.Value);
+                                }
+                            };
+                            options.EnrichWithHttpResponseMessage = (activity, response) =>
+                            {
+                                activity.SetTag("http.status_code", (int)response.StatusCode);
+                                activity.SetTag("http.content_type", response.Content?.Headers.ContentType?.ToString());
+                                if (response.Content?.Headers.ContentLength.HasValue == true)
+                                {
+                                    activity.SetTag("http.response_content_length", response.Content.Headers.ContentLength.Value);
+                                }
+                            };
+                        })
+                        .AddSqlClientInstrumentation(options =>
+                        {
+                            options.EnrichWithSqlCommand = (activity, command) =>
+                            {
+                                if (command is IDbCommand dbCommand)
+                                {
+                                    var stateDisplayName = $"{dbCommand.CommandType} {dbCommand.CommandText}";
+                                    activity.DisplayName = stateDisplayName;
+                                    activity.SetTag("db.name", stateDisplayName);
+                                }
+                            };
+
+                            options.RecordException = true;
+
+                        })
+                    .AddSource("Experimental.Microsoft.Extensions.AI");
                 });
 
             builder.AddOpenTelemetryExporters();

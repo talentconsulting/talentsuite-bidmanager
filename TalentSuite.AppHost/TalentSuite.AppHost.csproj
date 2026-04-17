@@ -1,4 +1,4 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.1.1">
+<Project Sdk="Aspire.AppHost.Sdk/13.2.2">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -15,14 +15,19 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Azure.Provisioning.Network" Version="1.0.0" />
+    <PackageReference Include="Aspire.Hosting.Azure.ApplicationInsights" Version="13.2.2" />
+    <PackageReference Include="Aspire.Hosting.Azure.ContainerRegistry" Version="13.2.2" />
+    <PackageReference Include="Aspire.Hosting.Azure.Network" Version="13.2.2" />
+    <PackageReference Include="Aspire.Hosting.Azure.OperationalInsights" Version="13.2.2" />
+    <PackageReference Include="Aspire4Wasm.AppHost" Version="6.0.0" />
+    <PackageReference Include="Azure.Provisioning.Network" Version="1.1.0" />
     <PackageReference Include="Azure.Provisioning.PrivateDns" Version="1.0.0" />
-    <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="13.1.2" />
-    <PackageReference Include="Aspire.Hosting.Azure.ServiceBus" Version="13.1.1" />
-    <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.1.1" />
-    <PackageReference Include="Aspire.Hosting.Azure.Sql" Version="13.1.1" />
-    <PackageReference Include="Aspire.Hosting.Keycloak" Version="13.1.1-preview.1.26105.8" />
-    <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.1.1" />
+    <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="13.2.2" />
+    <PackageReference Include="Aspire.Hosting.Azure.ServiceBus" Version="13.2.2" />
+    <PackageReference Include="Aspire.Hosting.Azure.Storage" Version="13.2.2" />
+    <PackageReference Include="Aspire.Hosting.Azure.Sql" Version="13.2.2" />
+    <PackageReference Include="Aspire.Hosting.Keycloak" Version="13.2.2-preview.1.26207.2" />
+    <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.2.2" />
   </ItemGroup>
 
 </Project>
