@@ -1,0 +1,98 @@
+name: Azure Application Gateway
+
+on:
+  workflow_dispatch:
+    inputs:
+      frontend_custom_domain:
+        description: "Frontend Custom Domain (e.g. dev.talentsuite.uk)"
+        required: true
+        default: "dev.talentsuite.uk"
+        type: string
+      api_custom_domain:
+        description: "API Custom Domain (e.g. dev-api.talentsuite.uk)"
+        required: true
+        default: "dev-api.talentsuite.uk"
+        type: string
+      auth_custom_domain:
+        description: "Auth Custom Domain (e.g. auth-dev.talentsuite.uk)"
+        required: true
+        default: "auth-dev.talentsuite.uk"
+        type: string
+      grafana_custom_domain:
+        description: "Grafana Custom Domain (e.g. grafana-dev.talentsuite.uk)"
+        required: true
+        default: "grafana-dev.talentsuite.uk"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-appgateway:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Fetch Backend FQDNs
+        id: fqdn
+        run: |
+          set -euo pipefail
+          resource_group="rg-${AZURE_ENV_NAME}"
+          
+          azd_values="$(azd env get-values --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
+          storage_blob_endpoint="$(printf '%s\n' "$azd_values" | grep -E '^STORAGE_BLOBENDPOINT=' | cut -d= -f2 | tr -d '"')"
+          
+          if [ -z "$storage_blob_endpoint" ]; then
+            # fallback to manual lookup
+            storage_account_name="$(az storage account list --resource-group "$resource_group" --query "[0].name" -o tsv 2>/dev/null | grep -v '^bidcontentstorage' | head -n1 || true)"
+            frontend_host="$(az storage account show --name "$storage_account_name" --resource-group "$resource_group" --query 'primaryEndpoints.web' -o tsv)"
+          else
+            storage_account_name="$(echo "$storage_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
+            frontend_host="$(az storage account show --name "$storage_account_name" --resource-group "$resource_group" --query 'primaryEndpoints.web' -o tsv)"
+          fi
+          
+          frontend_fqdn="${frontend_host#https://}"
+          frontend_fqdn="${frontend_fqdn%/}"
+          
+          api_fqdn="$(az containerapp show --name talentserver --resource-group "$resource_group" --query 'properties.configuration.ingress.fqdn' -o tsv)"
+          auth_fqdn="$(az containerapp show --name keycloak --resource-group "$resource_group" --query 'properties.configuration.ingress.fqdn' -o tsv)"
+          grafana_fqdn="$(az containerapp show --name grafana --resource-group "$resource_group" --query 'properties.configuration.ingress.fqdn' -o tsv)"
+          
+          echo "frontend_fqdn=$frontend_fqdn" >> $GITHUB_OUTPUT
+          echo "api_fqdn=$api_fqdn" >> $GITHUB_OUTPUT
+          echo "auth_fqdn=$auth_fqdn" >> $GITHUB_OUTPUT
+          echo "grafana_fqdn=$grafana_fqdn" >> $GITHUB_OUTPUT
+
+      - name: Deploy Application Gateway Bicep
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: "rg-${{ env.AZURE_ENV_NAME }}"
+          template: ./infra/appgw/main.bicep
+          parameters: >
+            envName=${{ env.AZURE_ENV_NAME }}
+            frontendBackendFqdn=${{ steps.fqdn.outputs.frontend_fqdn }}
+            apiBackendFqdn=${{ steps.fqdn.outputs.api_fqdn }}
+            keycloakBackendFqdn=${{ steps.fqdn.outputs.auth_fqdn }}
+            grafanaBackendFqdn=${{ steps.fqdn.outputs.grafana_fqdn }}
+            frontendCustomDomain=${{ github.event.inputs.frontend_custom_domain }}
+            apiCustomDomain=${{ github.event.inputs.api_custom_domain }}
+            authCustomDomain=${{ github.event.inputs.auth_custom_domain }}
+            grafanaCustomDomain=${{ github.event.inputs.grafana_custom_domain }}
