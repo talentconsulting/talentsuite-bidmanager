@@ -95,15 +95,21 @@ public sealed class BidDocumentController : ControllerBase
     }
 
     [HttpGet("jobs/{jobId}/stream")]
-    public async Task<IActionResult> StreamIngestionJob(string jobId, CancellationToken ct)
+    public async Task StreamIngestionJob(string jobId, CancellationToken ct)
     {
         var userKey = ResolveCurrentUserKey();
         if (string.IsNullOrWhiteSpace(userKey))
-            return Unauthorized();
+        {
+            Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
 
         var job = await _jobService.GetJobAsync(jobId, userKey, ct);
         if (job is null)
-            return NotFound();
+        {
+            Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
 
         Response.StatusCode = StatusCodes.Status200OK;
         Response.ContentType = "application/x-ndjson";
@@ -116,8 +122,6 @@ public sealed class BidDocumentController : ControllerBase
             await Response.WriteAsync("\n", ct);
             await Response.Body.FlushAsync(ct);
         }
-
-        return new EmptyResult();
     }
 
     private string ResolveCurrentUserKey()
