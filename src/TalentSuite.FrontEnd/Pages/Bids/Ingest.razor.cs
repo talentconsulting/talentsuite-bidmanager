@@ -32,6 +32,9 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
 
     private DotNetObjectReference<Ingest>? _dotNetRef;
     private string? _streamSessionId;
+    private string? _activeJobId;
+    private bool _hasTerminalEvent;
+    private CancellationTokenSource? _pollingCts;
 
     protected override async Task OnInitializedAsync()
     {
@@ -63,6 +66,9 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
     {
         ErrorText = null;
         ProgressMessages.Clear();
+        _hasTerminalEvent = false;
+        _activeJobId = null;
+        await CancelPollingAsync();
 
         if (!IsAdminUser)
         {
@@ -116,6 +122,8 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
                 return;
             }
 
+            _activeJobId = job.JobId;
+
             DraftState.SourceDocumentName = File.Name;
             DraftState.SourceDocumentContentType = File.ContentType;
             DraftState.SourceDocumentBytes = fileBytes;
@@ -149,23 +157,22 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
 
         if (update.IsError)
         {
+            _hasTerminalEvent = true;
             ErrorText = update.Message;
             IsBusy = false;
-            await CancelStreamingAsync();
         }
         else if (update.IsComplete)
         {
+            _hasTerminalEvent = true;
             if (update.Result is null)
             {
                 ErrorText = "Document ingestion completed without a parsed result.";
                 IsBusy = false;
-                await CancelStreamingAsync();
             }
             else
             {
                 DraftState.LastUpload = update.Result;
                 IsBusy = false;
-                await CancelStreamingAsync();
                 await InvokeAsync(() => Nav.NavigateTo("/bids/ingestion-summary"));
             }
         }
@@ -176,27 +183,24 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
     [JSInvokable]
     public async Task HandleIngestionStreamError(string message)
     {
-        ErrorText = message;
-        IsBusy = false;
         await CancelStreamingAsync();
+        await StartPollingFallbackAsync(message);
         await InvokeAsync(StateHasChanged);
     }
 
     [JSInvokable]
-    public Task HandleIngestionStreamCompleted()
+    public async Task HandleIngestionStreamCompleted()
     {
-        if (IsBusy && string.IsNullOrWhiteSpace(ErrorText))
-        {
-            ErrorText = "The ingestion stream ended before the server returned a final result.";
-            IsBusy = false;
-        }
+        if (IsBusy && !_hasTerminalEvent)
+            await StartPollingFallbackAsync("The live ingestion stream ended early. Continuing with status polling.");
 
-        return InvokeAsync(StateHasChanged);
+        await InvokeAsync(StateHasChanged);
     }
 
     public async ValueTask DisposeAsync()
     {
         await CancelStreamingAsync();
+        await CancelPollingAsync();
         _dotNetRef?.Dispose();
     }
 
@@ -234,5 +238,96 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
             await JS.InvokeVoidAsync("talentSuiteDocumentIngestion.cancel", _streamSessionId);
             _streamSessionId = null;
         }
+    }
+
+    private async Task StartPollingFallbackAsync(string message)
+    {
+        if (_hasTerminalEvent || string.IsNullOrWhiteSpace(_activeJobId))
+            return;
+
+        BusyMessage = "Checking ingestion status...";
+        AppendProgressMessage(message);
+        await CancelPollingAsync();
+        _pollingCts = new CancellationTokenSource();
+        _ = PollJobUntilCompleteAsync(_activeJobId, _pollingCts.Token);
+    }
+
+    private async Task PollJobUntilCompleteAsync(string jobId, CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                var job = await Http.GetFromJsonAsync<DocumentIngestionJobStatusResponse>(
+                    $"api/document/jobs/{Uri.EscapeDataString(jobId)}",
+                    SerialiserOptions.JsonOptions,
+                    ct);
+
+                if (job is not null)
+                {
+                    if (!string.IsNullOrWhiteSpace(job.Message))
+                    {
+                        BusyMessage = job.Message;
+                        AppendProgressMessage(job.Message);
+                    }
+
+                    if (job.IsError)
+                    {
+                        ErrorText = job.Message;
+                        IsBusy = false;
+                        return;
+                    }
+
+                    if (job.IsComplete)
+                    {
+                        _hasTerminalEvent = true;
+                        if (job.Result is null)
+                        {
+                            ErrorText = "Document ingestion completed without a parsed result.";
+                            IsBusy = false;
+                            return;
+                        }
+
+                        DraftState.LastUpload = job.Result;
+                        IsBusy = false;
+                        await InvokeAsync(() => Nav.NavigateTo("/bids/ingestion-summary"));
+                        return;
+                    }
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(2), ct);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+            IsBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task CancelPollingAsync()
+    {
+        if (_pollingCts is null)
+            return;
+
+        await _pollingCts.CancelAsync();
+        _pollingCts.Dispose();
+        _pollingCts = null;
+    }
+
+    private void AppendProgressMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+
+        if (ProgressMessages.Count == 0 || !string.Equals(ProgressMessages[^1], message, StringComparison.Ordinal))
+            ProgressMessages.Add(message);
+
+        if (ProgressMessages.Count > 6)
+            ProgressMessages.RemoveAt(0);
     }
 }
