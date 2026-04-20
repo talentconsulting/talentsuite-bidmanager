@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.JSInterop;
 using TalentSuite.Shared;
 using TalentSuite.Shared.Bids;
 using TalentSuite.Shared.Users;
@@ -178,7 +179,6 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
     [JSInvokable]
     public async Task HandleIngestionStreamError(string message)
     {
-        await CancelStreamingAsync();
         await StartPollingFallbackAsync(message);
         await InvokeAsync(StateHasChanged);
     }
