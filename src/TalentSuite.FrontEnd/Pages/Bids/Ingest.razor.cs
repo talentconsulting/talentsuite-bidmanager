@@ -1,9 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
-using Microsoft.JSInterop;
 using TalentSuite.Shared;
 using TalentSuite.Shared.Bids;
 using TalentSuite.Shared.Users;
@@ -134,62 +132,6 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
             ErrorText = ex.ToString();
             IsBusy = false;
         }
-    }
-
-    [JSInvokable]
-    public async Task HandleIngestionEvent(string json)
-    {
-        var update = JsonSerializer.Deserialize<DocumentIngestionJobEventResponse>(json, SerialiserOptions.JsonOptions);
-        if (update is null)
-            return;
-
-        if (!string.IsNullOrWhiteSpace(update.Message))
-        {
-            BusyMessage = update.Message;
-            ProgressMessages.Add(update.Message);
-            if (ProgressMessages.Count > 6)
-                ProgressMessages.RemoveAt(0);
-        }
-
-        if (update.IsError)
-        {
-            _hasTerminalEvent = true;
-            ErrorText = update.Message;
-            IsBusy = false;
-        }
-        else if (update.IsComplete)
-        {
-            _hasTerminalEvent = true;
-            if (update.Result is null)
-            {
-                ErrorText = "Document ingestion completed without a parsed result.";
-                IsBusy = false;
-            }
-            else
-            {
-                DraftState.LastUpload = update.Result;
-                IsBusy = false;
-                await InvokeAsync(() => Nav.NavigateTo("/bids/ingestion-summary"));
-            }
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    [JSInvokable]
-    public async Task HandleIngestionStreamError(string message)
-    {
-        await StartPollingFallbackAsync(message);
-        await InvokeAsync(StateHasChanged);
-    }
-
-    [JSInvokable]
-    public async Task HandleIngestionStreamCompleted()
-    {
-        if (IsBusy && !_hasTerminalEvent)
-            await StartPollingFallbackAsync("The live ingestion stream ended early. Continuing with status polling.");
-
-        await InvokeAsync(StateHasChanged);
     }
 
     public async ValueTask DisposeAsync()
