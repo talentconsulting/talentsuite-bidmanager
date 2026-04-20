@@ -151,7 +151,6 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
         {
             ErrorText = update.Message;
             IsBusy = false;
-            await CancelStreamingAsync();
         }
         else if (update.IsComplete)
         {
@@ -159,13 +158,11 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
             {
                 ErrorText = "Document ingestion completed without a parsed result.";
                 IsBusy = false;
-                await CancelStreamingAsync();
             }
             else
             {
                 DraftState.LastUpload = update.Result;
                 IsBusy = false;
-                await CancelStreamingAsync();
                 await InvokeAsync(() => Nav.NavigateTo("/bids/ingestion-summary"));
             }
         }
