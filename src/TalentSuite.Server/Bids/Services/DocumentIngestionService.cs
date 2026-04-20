@@ -3,6 +3,8 @@ using System.Text.Json;
 using Azure;
 using Azure.AI.DocumentIntelligence;
 using Azure.AI.OpenAI;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Spreadsheet;
 using OpenAI.Chat;
 using TalentSuite.Server.Bids.Services.Models;
 using TalentSuite.Shared;
@@ -20,12 +22,13 @@ public interface IDocumentIngestionservice
     Task<ParsedDocumentModel?> ExtractDocumentAsync(Stream documentStream,
         string filename,
         BidStage stage,
+        IProgress<DocumentIngestionProgressUpdate>? progress = null,
         CancellationToken ct = default);
 }
 
 public sealed class DocumentIngestionService : IDocumentIngestionservice
 {
-    private const int MaxPromptChars = 80_000;
+    private const int DocumentChunkChars = 60_000;
     private readonly DocumentIntelligenceClient _diClient;
     private readonly AzureOpenAIClient _aoaiClient;
     private readonly string _chatDeployment;
@@ -57,27 +60,48 @@ public sealed class DocumentIngestionService : IDocumentIngestionservice
     public async Task<ParsedDocumentModel?> ExtractDocumentAsync(Stream documentStream,
         string fileName,
         BidStage stage,
+        IProgress<DocumentIngestionProgressUpdate>? progress = null,
         CancellationToken ct = default)
     {
         if (documentStream is null) throw new ArgumentNullException(nameof(documentStream));
         if (!documentStream.CanRead) throw new ArgumentException("Document stream must be readable.", nameof(documentStream));
         if (string.IsNullOrWhiteSpace(fileName)) fileName = "document";
 
+        progress?.Report(new DocumentIngestionProgressUpdate
+        {
+            Status = "extracting_text",
+            Message = "Extracting text from the source document."
+        });
+
+        if (IsSpreadsheetFile(fileName))
+        {
+            var spreadsheetChunks = await ExtractTextChunksFromSpreadsheetAsync(documentStream, ct);
+            if (spreadsheetChunks.Count == 0)
+                return new ParsedDocumentModel { Questions = [] };
+
+            return ApplyQuestionOrderIndices(await ExtractAndMergeChunksAsync(
+                spreadsheetChunks,
+                fileName,
+                stage,
+                progress,
+                progressMessagePrefix: "Structuring workbook content into bid questions",
+                ct));
+        }
+
         // 1) Extract text with Document Intelligence (prebuilt-read)
         var extractedText = await ExtractTextWithDocumentIntelligenceAsync(documentStream, ct);
 
         if (string.IsNullOrWhiteSpace(extractedText))
-            return new ParsedDocumentModel();
+            return new ParsedDocumentModel { Questions = [] };
 
-        // Optional clamp to avoid huge prompts
-        extractedText = ClampText(extractedText, maxChars: MaxPromptChars);
-
-        // 2) Ask Azure OpenAI to produce strict JSON array
-        var json = await ExtractQuestionsJsonWithAzureOpenAiAsync(extractedText, fileName, stage, ct);
-
-        // 3) Parse into strongly typed list
-        var parsed = JsonSerializer.Deserialize<ParsedDocumentModel>(json, SerialiserOptions.JsonOptions);
-        return ApplyQuestionOrderIndices(parsed);
+        var textChunks = SplitTextIntoChunks(extractedText, DocumentChunkChars);
+        return ApplyQuestionOrderIndices(await ExtractAndMergeChunksAsync(
+            textChunks,
+            fileName,
+            stage,
+            progress,
+            progressMessagePrefix: "Structuring the extracted content into bid questions",
+            ct));
     }
 
     private async Task<string> ExtractTextWithDocumentIntelligenceAsync(Stream document, CancellationToken ct)
@@ -133,9 +157,20 @@ public sealed class DocumentIngestionService : IDocumentIngestionservice
         string extractedText,
         string fileName,
         BidStage stage,
-        CancellationToken ct)
+        CancellationToken ct,
+        int? chunkIndex = null,
+        int? chunkCount = null)
     {
         var chatClient = _aoaiClient.GetChatClient(_chatDeployment);
+        var chunkContext = chunkIndex.HasValue && chunkCount.HasValue
+            ? $"""
+
+This is chunk {chunkIndex.Value + 1} of {chunkCount.Value} from the source document.
+Only extract questions and metadata explicitly present in this chunk.
+If a root-level metadata field is not present in this chunk, return it as an empty string.
+Do not invent missing metadata from earlier or later chunks.
+"""
+            : string.Empty;
 
         var messages = new List<ChatMessage>
         {
@@ -179,6 +214,7 @@ Rules:
   - Keep description concise but informative (1-4 sentences max).
   - If length isn't present -> length="".
   - Do NOT include any fields other than the ones listed.
+{chunkContext}
 
 Document name: {fileName}
 Bid stage: {stage}
@@ -201,15 +237,192 @@ DOCUMENT TEXT:
         return sb.ToString().Trim();
     }
 
-    private static string ClampText(string text, int maxChars)
+    private static bool IsSpreadsheetFile(string fileName)
     {
-        if (string.IsNullOrEmpty(text)) return text;
-        if (text.Length <= maxChars) return text;
-        return text.Substring(0, maxChars);
+        return fileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task<List<string>> ExtractTextChunksFromSpreadsheetAsync(Stream document, CancellationToken ct)
+    {
+        if (document.CanSeek)
+            document.Position = 0;
+
+        using var memory = new MemoryStream();
+        await document.CopyToAsync(memory, ct);
+        memory.Position = 0;
+
+        using var spreadsheet = SpreadsheetDocument.Open(memory, false);
+        var workbookPart = spreadsheet.WorkbookPart
+                           ?? throw new InvalidOperationException("Spreadsheet workbook part was missing.");
+
+        var sharedStringTable = workbookPart.SharedStringTablePart?.SharedStringTable;
+        var chunks = new List<string>();
+        var current = new StringBuilder();
+
+        var sheets = workbookPart.Workbook.Sheets?.Elements<Sheet>() ?? Enumerable.Empty<Sheet>();
+        foreach (var sheet in sheets)
+        {
+            var worksheetPart = workbookPart.GetPartById(sheet.Id!) as WorksheetPart;
+            if (worksheetPart?.Worksheet is null)
+                continue;
+
+            AppendChunkLine(current, chunks, $"=== SHEET: {sheet.Name} ===");
+
+            var rows = worksheetPart.Worksheet.Descendants<Row>();
+            foreach (var row in rows)
+            {
+                var values = row.Elements<Cell>()
+                    .Select(cell => GetCellText(cell, sharedStringTable))
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .ToList();
+
+                if (values.Count == 0)
+                    continue;
+
+                AppendChunkLine(current, chunks, string.Join(" | ", values));
+            }
+        }
+
+        if (current.Length > 0)
+            chunks.Add(current.ToString().Trim());
+
+        return chunks;
+    }
+
+    private static void AppendChunkLine(StringBuilder current, List<string> chunks, string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+            return;
+
+        var normalizedLine = line.Trim();
+        if (current.Length > 0 && current.Length + normalizedLine.Length + Environment.NewLine.Length > DocumentChunkChars)
+        {
+            chunks.Add(current.ToString().Trim());
+            current.Clear();
+        }
+
+        current.AppendLine(normalizedLine);
+    }
+
+    private static string GetCellText(Cell cell, SharedStringTable? sharedStringTable)
+    {
+        var raw = cell.CellValue?.InnerText;
+        if (string.IsNullOrWhiteSpace(raw))
+            return string.Empty;
+
+        if (cell.DataType?.Value == CellValues.SharedString
+            && int.TryParse(raw, out var sharedIndex)
+            && sharedStringTable?.ElementAtOrDefault(sharedIndex) is SharedStringItem item)
+        {
+            return item.InnerText.Trim();
+        }
+
+        return raw.Trim();
+    }
+
+    private async Task<ParsedDocumentModel> ExtractAndMergeChunksAsync(
+        List<string> chunks,
+        string fileName,
+        BidStage stage,
+        IProgress<DocumentIngestionProgressUpdate>? progress,
+        string progressMessagePrefix,
+        CancellationToken ct)
+    {
+        var parsedChunks = new List<ParsedDocumentModel>();
+
+        for (var i = 0; i < chunks.Count; i++)
+        {
+            var message = chunks.Count == 1
+                ? $"{progressMessagePrefix}."
+                : $"{progressMessagePrefix} ({i + 1}/{chunks.Count}).";
+
+            progress?.Report(new DocumentIngestionProgressUpdate
+            {
+                Status = "structuring_questions",
+                Message = message
+            });
+
+            var chunkJson = await ExtractQuestionsJsonWithAzureOpenAiAsync(
+                chunks[i],
+                fileName,
+                stage,
+                ct,
+                chunkIndex: i,
+                chunkCount: chunks.Count);
+
+            var parsedChunk = JsonSerializer.Deserialize<ParsedDocumentModel>(chunkJson, SerialiserOptions.JsonOptions);
+            if (parsedChunk is not null)
+                parsedChunks.Add(parsedChunk);
+        }
+
+        return MergeParsedDocuments(parsedChunks);
+    }
+
+    private static List<string> SplitTextIntoChunks(string text, int maxChars)
+    {
+        var chunks = new List<string>();
+        var current = new StringBuilder();
+        var lines = text.Split(["\r\n", "\n"], StringSplitOptions.None);
+
+        foreach (var rawLine in lines)
+        {
+            AppendChunkLine(current, chunks, rawLine);
+        }
+
+        if (current.Length > 0)
+            chunks.Add(current.ToString().Trim());
+
+        if (chunks.Count == 0 && !string.IsNullOrWhiteSpace(text))
+            chunks.Add(text.Trim());
+
+        return chunks;
+    }
+
+    private static ParsedDocumentModel MergeParsedDocuments(List<ParsedDocumentModel> parsedChunks)
+    {
+        var merged = new ParsedDocumentModel
+        {
+            Questions = []
+        };
+
+        foreach (var chunk in parsedChunks)
+        {
+            merged.UniqueReference ??= FirstNonEmpty(chunk.UniqueReference);
+            merged.Company ??= FirstNonEmpty(chunk.Company);
+            merged.Summary ??= FirstNonEmpty(chunk.Summary);
+            merged.KeyInformation ??= FirstNonEmpty(chunk.KeyInformation);
+            merged.Budget ??= FirstNonEmpty(chunk.Budget);
+            merged.DeadlineForQualifying ??= FirstNonEmpty(chunk.DeadlineForQualifying);
+            merged.DeadlineForSubmission ??= FirstNonEmpty(chunk.DeadlineForSubmission);
+            merged.LengthOfContract ??= FirstNonEmpty(chunk.LengthOfContract);
+
+            foreach (var question in chunk.Questions ?? [])
+            {
+                if (merged.Questions.Any(existing =>
+                        string.Equals(existing.Number, question.Number, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(existing.Title, question.Title, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(existing.Description, question.Description, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                merged.Questions.Add(question);
+            }
+        }
+
+        return merged;
+    }
+
+    private static string? FirstNonEmpty(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private static ParsedDocumentModel? ApplyQuestionOrderIndices(ParsedDocumentModel? parsed)
     {
+        if (parsed is not null && parsed.Questions is null)
+            parsed.Questions = [];
+
         if (parsed?.Questions is { Count: > 0 })
         {
             for (var i = 0; i < parsed.Questions.Count; i++)

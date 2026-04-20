@@ -8,6 +8,7 @@ public class InMemoryBidRepository : IManageBids
     private readonly Dictionary<string, BidDataModel> _bids = new();
     private readonly Dictionary<string, List<string>> _usersForBids = new();
     private readonly Dictionary<string, List<BidFileDataModel>> _filesForBids = new();
+    private readonly Dictionary<string, DocumentIngestionJobDataModel> _documentIngestionJobs = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _chatThreadIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<QuestionAssignmentDataModel>> _usersForQuestions = new();
     private readonly Dictionary<string, List<DraftDataModel>> _draftsForQuestions = new();
@@ -121,6 +122,32 @@ public class InMemoryBidRepository : IManageBids
         };
         
         return await Task.FromResult(model);
+    }
+
+    public Task SaveDocumentIngestionJob(DocumentIngestionJobDataModel job, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        _documentIngestionJobs[job.JobId] = CloneDocumentIngestionJob(job);
+        return Task.CompletedTask;
+    }
+
+    public Task<DocumentIngestionJobDataModel?> GetDocumentIngestionJob(string jobId, CancellationToken ct = default)
+    {
+        if (_documentIngestionJobs.TryGetValue(jobId, out var job))
+            return Task.FromResult<DocumentIngestionJobDataModel?>(CloneDocumentIngestionJob(job));
+
+        return Task.FromResult<DocumentIngestionJobDataModel?>(null);
+    }
+
+    public Task<List<DocumentIngestionJobDataModel>> GetDocumentIngestionJobsForUser(string ownerUserKey, CancellationToken ct = default)
+    {
+        var jobs = _documentIngestionJobs.Values
+            .Where(job => string.Equals(job.OwnerUserKey, ownerUserKey, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(job => job.CreatedAtUtc)
+            .Select(CloneDocumentIngestionJob)
+            .ToList();
+
+        return Task.FromResult(jobs);
     }
 
     public async Task<List<string>> GetBidUsers(string bidId, CancellationToken ct = default)
@@ -961,4 +988,49 @@ public class InMemoryBidRepository : IManageBids
 
     private static string BuildChatThreadKey(string bidId, string questionId, string userId)
         => $"{bidId}|{questionId}|{userId}";
+
+    private static DocumentIngestionJobDataModel CloneDocumentIngestionJob(DocumentIngestionJobDataModel source)
+    {
+        return new DocumentIngestionJobDataModel
+        {
+            JobId = source.JobId,
+            OwnerUserKey = source.OwnerUserKey,
+            FileName = source.FileName,
+            Stage = source.Stage,
+            Status = source.Status,
+            Message = source.Message,
+            IsComplete = source.IsComplete,
+            IsError = source.IsError,
+            CreatedAtUtc = source.CreatedAtUtc,
+            UpdatedAtUtc = source.UpdatedAtUtc,
+            CompletedAtUtc = source.CompletedAtUtc,
+            Result = source.Result is null
+                ? null
+                : new ParsedDocumentResponse
+                {
+                    UniqueReference = source.Result.UniqueReference,
+                    Company = source.Result.Company,
+                    Summary = source.Result.Summary,
+                    KeyInformation = source.Result.KeyInformation,
+                    Budget = source.Result.Budget,
+                    DeadlineForQualifying = source.Result.DeadlineForQualifying,
+                    DeadlineForSubmission = source.Result.DeadlineForSubmission,
+                    LengthOfContract = source.Result.LengthOfContract,
+                    Questions = source.Result.Questions?
+                        .Select(q => new ParsedQuestionResponse
+                        {
+                            QuestionOrderIndex = q.QuestionOrderIndex,
+                            Category = q.Category,
+                            Number = q.Number,
+                            Title = q.Title,
+                            Description = q.Description,
+                            Length = q.Length,
+                            Weighting = q.Weighting,
+                            Required = q.Required,
+                            NiceToHave = q.NiceToHave
+                        })
+                        .ToList() ?? []
+                }
+        };
+    }
 }

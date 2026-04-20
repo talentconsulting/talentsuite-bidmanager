@@ -8,8 +8,20 @@ namespace TalentSuite.Server.Bids.Services;
 public sealed class InMemoryDocumentIngestionService : IDocumentIngestionservice
 {
     public Task<ParsedDocumentModel?> ExtractDocumentAsync(Stream documentStream, string filename, BidStage stage,
+        IProgress<DocumentIngestionProgressUpdate>? progress = null,
         CancellationToken ct = default)
     {
+        progress?.Report(new DocumentIngestionProgressUpdate
+        {
+            Status = "extracting_text",
+            Message = "Extracting text from the source document."
+        });
+        progress?.Report(new DocumentIngestionProgressUpdate
+        {
+            Status = "structuring_questions",
+            Message = "Structuring the extracted content into bid questions."
+        });
+
         var parsed = JsonSerializer.Deserialize<ParsedDocumentModel>(_response, SerialiserOptions.JsonOptions);
         if (parsed?.Questions is { Count: > 0 })
         {

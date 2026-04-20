@@ -134,6 +134,98 @@ public sealed class SqlServerBidRepository : IManageBids
         };
     }
 
+    public async Task SaveDocumentIngestionJob(DocumentIngestionJobDataModel job, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        await EnsureSchemaAsync(ct);
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            IF EXISTS (SELECT 1 FROM dbo.DocumentIngestionJobs WHERE JobId = @JobId)
+            BEGIN
+                UPDATE dbo.DocumentIngestionJobs
+                SET OwnerUserKey = @OwnerUserKey,
+                    FileName = @FileName,
+                    Stage = @Stage,
+                    Status = @Status,
+                    Message = @Message,
+                    IsComplete = @IsComplete,
+                    IsError = @IsError,
+                    UpdatedAtUtc = @UpdatedAtUtc,
+                    CompletedAtUtc = @CompletedAtUtc,
+                    ResultPayload = @ResultPayload
+                WHERE JobId = @JobId;
+            END
+            ELSE
+            BEGIN
+                INSERT INTO dbo.DocumentIngestionJobs
+                    (JobId, OwnerUserKey, FileName, Stage, Status, Message, IsComplete, IsError, CreatedAtUtc, UpdatedAtUtc, CompletedAtUtc, ResultPayload)
+                VALUES
+                    (@JobId, @OwnerUserKey, @FileName, @Stage, @Status, @Message, @IsComplete, @IsError, @CreatedAtUtc, @UpdatedAtUtc, @CompletedAtUtc, @ResultPayload);
+            END;
+            """,
+            new
+            {
+                job.JobId,
+                job.OwnerUserKey,
+                job.FileName,
+                Stage = job.Stage.ToString(),
+                job.Status,
+                job.Message,
+                job.IsComplete,
+                job.IsError,
+                job.CreatedAtUtc,
+                job.UpdatedAtUtc,
+                job.CompletedAtUtc,
+                ResultPayload = job.Result is null ? null : Serialize(job.Result)
+            },
+            cancellationToken: ct));
+    }
+
+    public async Task<DocumentIngestionJobDataModel?> GetDocumentIngestionJob(string jobId, CancellationToken ct = default)
+    {
+        await EnsureSchemaAsync(ct);
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        var row = await connection.QuerySingleOrDefaultAsync<DocumentIngestionJobRow>(
+            new CommandDefinition(
+                """
+                SELECT JobId, OwnerUserKey, FileName, Stage, Status, Message, IsComplete, IsError, CreatedAtUtc, UpdatedAtUtc, CompletedAtUtc, ResultPayload
+                FROM dbo.DocumentIngestionJobs
+                WHERE JobId = @JobId;
+                """,
+                new { JobId = jobId },
+                cancellationToken: ct));
+
+        return row is null ? null : MapDocumentIngestionJob(row);
+    }
+
+    public async Task<List<DocumentIngestionJobDataModel>> GetDocumentIngestionJobsForUser(string ownerUserKey, CancellationToken ct = default)
+    {
+        await EnsureSchemaAsync(ct);
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        var rows = await connection.QueryAsync<DocumentIngestionJobRow>(
+            new CommandDefinition(
+                """
+                SELECT JobId, OwnerUserKey, FileName, Stage, Status, Message, IsComplete, IsError, CreatedAtUtc, UpdatedAtUtc, CompletedAtUtc, ResultPayload
+                FROM dbo.DocumentIngestionJobs
+                WHERE OwnerUserKey = @OwnerUserKey
+                ORDER BY CreatedAtUtc DESC;
+                """,
+                new { OwnerUserKey = ownerUserKey },
+                cancellationToken: ct));
+
+        return rows.Select(MapDocumentIngestionJob).ToList();
+    }
+
     public async Task<List<string>> GetBidUsers(string bidId, CancellationToken ct = default)
     {
         await EnsureSchemaAsync(ct);
@@ -1488,6 +1580,28 @@ public sealed class SqlServerBidRepository : IManageBids
                         CONSTRAINT PK_ChatThreads PRIMARY KEY (BidId, QuestionId, UserId)
                     );
                 END;
+
+                IF OBJECT_ID(N'dbo.DocumentIngestionJobs', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.DocumentIngestionJobs
+                    (
+                        JobId NVARCHAR(100) NOT NULL PRIMARY KEY,
+                        OwnerUserKey NVARCHAR(200) NOT NULL,
+                        FileName NVARCHAR(400) NOT NULL,
+                        Stage NVARCHAR(50) NOT NULL,
+                        Status NVARCHAR(100) NOT NULL,
+                        Message NVARCHAR(MAX) NOT NULL,
+                        IsComplete BIT NOT NULL,
+                        IsError BIT NOT NULL,
+                        CreatedAtUtc DATETIMEOFFSET(7) NOT NULL,
+                        UpdatedAtUtc DATETIMEOFFSET(7) NOT NULL,
+                        CompletedAtUtc DATETIMEOFFSET(7) NULL,
+                        ResultPayload NVARCHAR(MAX) NULL
+                    );
+
+                    CREATE INDEX IX_DocumentIngestionJobs_OwnerUserKey_CreatedAtUtc
+                        ON dbo.DocumentIngestionJobs (OwnerUserKey, CreatedAtUtc DESC);
+                END;
                 """,
                 cancellationToken: ct));
             _schemaInitialized = true;
@@ -1525,5 +1639,42 @@ public sealed class SqlServerBidRepository : IManageBids
                ?? throw new InvalidOperationException("Failed to deserialize SQL payload.");
     }
 
+    private static DocumentIngestionJobDataModel MapDocumentIngestionJob(DocumentIngestionJobRow row)
+    {
+        return new DocumentIngestionJobDataModel
+        {
+            JobId = row.JobId,
+            OwnerUserKey = row.OwnerUserKey,
+            FileName = row.FileName,
+            Stage = Enum.TryParse<BidStage>(row.Stage, true, out var stage) ? stage : BidStage.Stage1,
+            Status = row.Status,
+            Message = row.Message,
+            IsComplete = row.IsComplete,
+            IsError = row.IsError,
+            CreatedAtUtc = row.CreatedAtUtc,
+            UpdatedAtUtc = row.UpdatedAtUtc,
+            CompletedAtUtc = row.CompletedAtUtc,
+            Result = string.IsNullOrWhiteSpace(row.ResultPayload)
+                ? null
+                : Deserialize<ParsedDocumentResponse>(row.ResultPayload)
+        };
+    }
+
     private static string Serialize<T>(T model) => JsonSerializer.Serialize(model, JsonOptions);
+
+    private sealed class DocumentIngestionJobRow
+    {
+        public string JobId { get; set; } = string.Empty;
+        public string OwnerUserKey { get; set; } = string.Empty;
+        public string FileName { get; set; } = string.Empty;
+        public string Stage { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public bool IsComplete { get; set; }
+        public bool IsError { get; set; }
+        public DateTimeOffset CreatedAtUtc { get; set; }
+        public DateTimeOffset UpdatedAtUtc { get; set; }
+        public DateTimeOffset? CompletedAtUtc { get; set; }
+        public string? ResultPayload { get; set; }
+    }
 }

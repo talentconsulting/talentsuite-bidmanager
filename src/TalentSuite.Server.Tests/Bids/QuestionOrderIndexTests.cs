@@ -12,7 +12,12 @@ public class QuestionOrderIndexTests
         var sut = new InMemoryDocumentIngestionService();
         await using var stream = new MemoryStream([1, 2, 3]);
 
-        var parsed = await sut.ExtractDocumentAsync(stream, "dummy.pdf", BidStage.Stage1, CancellationToken.None);
+        var parsed = await sut.ExtractDocumentAsync(
+            stream,
+            "dummy.pdf",
+            BidStage.Stage1,
+            progress: null,
+            ct: CancellationToken.None);
 
         Assert.That(parsed, Is.Not.Null);
         Assert.That(parsed!.Questions, Is.Not.Empty);
