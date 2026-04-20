@@ -3,8 +3,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
-using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
-using Microsoft.JSInterop;
 using TalentSuite.Shared;
 using TalentSuite.Shared.Bids;
 using TalentSuite.Shared.Users;
@@ -16,7 +14,6 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
     [Inject] public HttpClient Http { get; set; } = default!;
     [Inject] public NavigationManager Nav { get; set; } = default!;
     [Inject] public Services.BidState DraftState { get; set; } = default!;
-    [Inject] public IServiceProvider Services { get; set; } = default!;
 
     
     protected IBrowserFile? File { get; set; }
@@ -30,8 +27,6 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
     protected string BusyMessage { get; set; } = "Processing document...";
     protected List<string> ProgressMessages { get; } = [];
 
-    private DotNetObjectReference<Ingest>? _dotNetRef;
-    private string? _streamSessionId;
     private string? _activeJobId;
     private bool _hasTerminalEvent;
     private CancellationTokenSource? _pollingCts;
@@ -129,9 +124,9 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
             DraftState.SourceDocumentBytes = fileBytes;
             DraftState.SelectedStage = stage;
 
-            BusyMessage = "Connecting to ingestion stream...";
+            BusyMessage = "Starting ingestion...";
             ProgressMessages.Add("Document uploaded.");
-            await StartStreamingAsync(job.JobId);
+            await StartPollingFallbackAsync("Document uploaded. Polling ingestion status.");
         }
         catch (Exception ex)
         {
@@ -199,45 +194,7 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await CancelStreamingAsync();
         await CancelPollingAsync();
-        _dotNetRef?.Dispose();
-    }
-
-    private async Task StartStreamingAsync(string jobId)
-    {
-        _dotNetRef?.Dispose();
-        _dotNetRef = DotNetObjectReference.Create(this);
-
-        var accessToken = await TryGetAccessTokenAsync();
-        var streamUrl = new Uri(
-            Http.BaseAddress ?? throw new InvalidOperationException("HttpClient BaseAddress is not configured."),
-            $"api/document/jobs/{Uri.EscapeDataString(jobId)}/stream")
-            .ToString();
-        _streamSessionId = await JS.InvokeAsync<string>(
-            "talentSuiteDocumentIngestion.start",
-            streamUrl,
-            accessToken,
-            _dotNetRef);
-    }
-
-    private async Task<string?> TryGetAccessTokenAsync()
-    {
-        var tokenProvider = Services.GetService(typeof(IAccessTokenProvider)) as IAccessTokenProvider;
-        if (tokenProvider is null)
-            return null;
-
-        var tokenResult = await tokenProvider.RequestAccessToken();
-        return tokenResult.TryGetToken(out var token) ? token.Value : null;
-    }
-
-    private async Task CancelStreamingAsync()
-    {
-        if (!string.IsNullOrWhiteSpace(_streamSessionId))
-        {
-            await JS.InvokeVoidAsync("talentSuiteDocumentIngestion.cancel", _streamSessionId);
-            _streamSessionId = null;
-        }
     }
 
     private async Task StartPollingFallbackAsync(string message)

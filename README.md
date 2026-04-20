@@ -356,20 +356,20 @@ Notes:
 - Flow:
   1. The frontend creates an ingestion job with `POST /api/document/jobs`.
   2. The backend persists the job and starts processing it in the background.
-  3. The frontend connects to `GET /api/document/jobs/{jobId}/stream` and receives NDJSON progress events.
+  3. The frontend polls `GET /api/document/jobs/{jobId}` for status updates until the job completes.
   4. The backend extracts text and calls Azure OpenAI chat completion to structure that text into strict JSON (company, summary, questions, etc.).
-  5. The completed parsed payload is stored with the ingestion job and returned on the terminal stream event.
+  5. The completed parsed payload is stored with the ingestion job and returned by the job detail endpoint.
 - API endpoints:
   - `POST /api/document` (`src/TalentSuite.Server/Bids/Controllers/BidDocumentController.cs`)
     - legacy blocking ingestion endpoint
   - `POST /api/document/jobs`
     - create a background ingestion job
   - `GET /api/document/jobs/{jobId}/stream`
-    - stream NDJSON progress for a live job
+    - optional NDJSON live progress stream for a live job
   - `GET /api/document/jobs`
     - list persisted ingestion jobs for the current user
   - `GET /api/document/jobs/{jobId}`
-    - fetch a persisted ingestion job by id
+    - fetch a persisted ingestion job by id, including current status and final result when complete
 - Required config:
   - `AzureOpenAI:Endpoint`
   - `AzureOpenAI:ApiKey`
@@ -384,6 +384,10 @@ Notes:
   - upload page: `src/TalentSuite.FrontEnd/Pages/Bids/Ingest.razor`
   - jobs page: `src/TalentSuite.FrontEnd/Pages/Bids/IngestionJobs.razor`
   - summary/review page: `src/TalentSuite.FrontEnd/Pages/Bids/IngestSummary.razor`
+- Upload UI behavior:
+  - the upload page now uses polling-only for both Excel and non-Excel documents
+  - it no longer depends on the live stream endpoint to complete ingestion in hosted environments
+  - the jobs page continues to read persisted job status from list/detail endpoints
 
 Current ingestion modes:
 - `.xlsx`
@@ -408,7 +412,8 @@ Notes:
 
 ### Document Ingestion Jobs
 - Jobs are user-scoped and require the current authenticated admin user.
-- Live progress is streamed as `application/x-ndjson`.
+- The upload page uses polling against the persisted job detail endpoint.
+- A live stream endpoint still exists and returns `application/x-ndjson`, but it is optional and no longer required by the upload flow.
 - Persisted job state includes:
   - `job id`
   - `owner user key`
