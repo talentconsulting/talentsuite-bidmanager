@@ -4,6 +4,7 @@ param sqlServerName string
 var vnetName = 'vnet-talentsuite-dev'
 var acaSubnetName = 'aca-infrastructure'
 var privateEndpointSubnetName = 'private-endpoints'
+var talentgatewaySubnetName = 'talent-appgateway-subnet'
 var privateDnsZoneName = 'privatelink.database.windows.net'
 
 resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
@@ -39,6 +40,15 @@ resource privateEndpointSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-0
   name: privateEndpointSubnetName
   properties: {
     addressPrefix: '10.42.2.0/24'
+    privateEndpointNetworkPolicies: 'Disabled'
+  }
+}
+
+resource appgatewaySubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
+  parent: vnet
+  name: talentgatewaySubnetName
+  properties: {
+    addressPrefix: '10.42.3.0/24'
     privateEndpointNetworkPolicies: 'Disabled'
   }
 }
