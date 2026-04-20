@@ -1,0 +1,229 @@
+@page "/bids/ingestion-jobs"
+@implements IAsyncDisposable
+@using System.Net
+@using System.Net.Http.Json
+@using TalentSuite.Shared.Bids
+@using TalentSuite.Shared.Users
+
+<h1 class="mb-4">Ingestion Jobs</h1>
+
+@if (!IsAdminUser)
+{
+    <div class="alert alert-info">You do not have permission to view ingestion jobs.</div>
+}
+else
+{
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="text-muted">Recent document ingestion jobs for your account.</div>
+        <button type="button" class="btn btn-outline-secondary" @onclick="LoadJobsAsync" disabled="@IsBusy">
+            @(IsBusy ? "Refreshing..." : "Refresh")
+        </button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(ErrorText))
+    {
+        <div class="alert alert-danger">@ErrorText</div>
+    }
+    else if (IsBusy && Jobs.Count == 0)
+    {
+        <div class="text-muted">Loading jobs...</div>
+    }
+    else if (Jobs.Count == 0)
+    {
+        <div class="alert alert-light border">No ingestion jobs found.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>File</th>
+                        <th>Stage</th>
+                        <th>Status</th>
+                        <th>Updated</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var job in Jobs)
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">@job.FileName</div>
+                                <div class="small text-muted">@job.Message</div>
+                            </td>
+                            <td>@job.Stage</td>
+                            <td>
+                                <span class="badge @GetBadgeClass(job)">
+                                    @GetStatusLabel(job)
+                                </span>
+                            </td>
+                            <td>@job.UpdatedAtUtc.ToLocalTime().ToString("dd MMM yyyy HH:mm")</td>
+                            <td class="text-end">
+                                @if (job.IsComplete)
+                                {
+                                    <button type="button"
+                                            class="btn btn-outline-primary btn-sm"
+                                            @onclick="() => ReviewJobAsync(job.JobId)"
+                                            disabled="@IsReviewing">
+                                        Review result
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+<BusyOverlay IsVisible="@IsReviewing" Message="Loading ingestion result..." />
+
+@code {
+    [Inject] public HttpClient Http { get; set; } = default!;
+    [Inject] public NavigationManager Nav { get; set; } = default!;
+    [Inject] public Services.BidState DraftState { get; set; } = default!;
+
+    private readonly List<DocumentIngestionJobStatusResponse> Jobs = [];
+    private PeriodicTimer? _refreshTimer;
+    private CancellationTokenSource? _refreshCts;
+    private bool IsBusy { get; set; }
+    private bool IsReviewing { get; set; }
+    private bool IsAdminUser { get; set; }
+    private string? ErrorText { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var auth = await Http.GetFromJsonAsync<CurrentUserAuthorisationResponse>("api/users/me-authorisation");
+            IsAdminUser = auth?.IsAdmin ?? false;
+        }
+        catch
+        {
+            IsAdminUser = false;
+        }
+
+        if (!IsAdminUser)
+            return;
+
+        await LoadJobsAsync();
+        StartRefreshLoop();
+    }
+
+    private async Task LoadJobsAsync()
+    {
+        IsBusy = true;
+        ErrorText = null;
+
+        try
+        {
+            var jobs = await Http.GetFromJsonAsync<List<DocumentIngestionJobStatusResponse>>("api/document/jobs")
+                       ?? [];
+
+            Jobs.Clear();
+            Jobs.AddRange(jobs);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
+        {
+            ErrorText = "You do not have permission to view ingestion jobs.";
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ReviewJobAsync(string jobId)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+            return;
+
+        IsReviewing = true;
+        ErrorText = null;
+
+        try
+        {
+            var job = await Http.GetFromJsonAsync<DocumentIngestionJobStatusResponse>($"api/document/jobs/{Uri.EscapeDataString(jobId)}");
+            if (job?.Result is null)
+            {
+                ErrorText = "The selected job does not have a parsed result.";
+                return;
+            }
+
+            DraftState.Clear();
+            DraftState.LastUpload = job.Result;
+            DraftState.SelectedStage = job.Stage;
+            DraftState.SourceDocumentName = job.FileName;
+            Nav.NavigateTo("/bids/ingestion-summary");
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+        }
+        finally
+        {
+            IsReviewing = false;
+        }
+    }
+
+    private void StartRefreshLoop()
+    {
+        _refreshCts = new CancellationTokenSource();
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _refreshTimer.WaitForNextTickAsync(_refreshCts.Token))
+                {
+                    await InvokeAsync(LoadJobsAsync);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        });
+    }
+
+    private static string GetBadgeClass(DocumentIngestionJobStatusResponse job)
+    {
+        if (job.IsError)
+            return "bg-danger";
+
+        if (job.IsComplete)
+            return "bg-success";
+
+        return "bg-primary";
+    }
+
+    private static string GetStatusLabel(DocumentIngestionJobStatusResponse job)
+    {
+        if (job.IsError)
+            return "Failed";
+
+        if (job.IsComplete)
+            return "Completed";
+
+        return job.Status.Replace('_', ' ');
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_refreshCts is not null)
+        {
+            await _refreshCts.CancelAsync();
+            _refreshCts.Dispose();
+        }
+
+        _refreshTimer?.Dispose();
+    }
+}

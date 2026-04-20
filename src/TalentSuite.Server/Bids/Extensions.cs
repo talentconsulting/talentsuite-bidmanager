@@ -16,6 +16,7 @@ public static class Extensions
     public static void AddBidServices(this IServiceCollection services, IConfiguration? configuration = null)
     {
         services.AddScoped<IBidService, BidService>();
+        services.AddSingleton<IDocumentIngestionJobService, DocumentIngestionJobService>();
 
         var useInMemory = string.Equals(configuration?[UseInMemoryDataKey], "true", StringComparison.OrdinalIgnoreCase);
         var ingestionConfigured = IsConfigured(configuration, DocumentIntelligenceEndpointKey)

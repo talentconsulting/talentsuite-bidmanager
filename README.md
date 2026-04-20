@@ -354,14 +354,75 @@ Notes:
 ### Azure OpenAI (direct in code)
 - Used by bid document ingestion in `src/TalentSuite.Server/Bids/Services/DocumentIngestionService.cs`.
 - Flow:
-  1. Azure AI Document Intelligence extracts document text.
-  2. Azure OpenAI chat completion structures that text into strict JSON (company, summary, questions, etc.).
-- API endpoint:
+  1. The frontend creates an ingestion job with `POST /api/document/jobs`.
+  2. The backend persists the job and starts processing it in the background.
+  3. The frontend connects to `GET /api/document/jobs/{jobId}/stream` and receives NDJSON progress events.
+  4. The backend extracts text and calls Azure OpenAI chat completion to structure that text into strict JSON (company, summary, questions, etc.).
+  5. The completed parsed payload is stored with the ingestion job and returned on the terminal stream event.
+- API endpoints:
   - `POST /api/document` (`src/TalentSuite.Server/Bids/Controllers/BidDocumentController.cs`)
+    - legacy blocking ingestion endpoint
+  - `POST /api/document/jobs`
+    - create a background ingestion job
+  - `GET /api/document/jobs/{jobId}/stream`
+    - stream NDJSON progress for a live job
+  - `GET /api/document/jobs`
+    - list persisted ingestion jobs for the current user
+  - `GET /api/document/jobs/{jobId}`
+    - fetch a persisted ingestion job by id
 - Required config:
   - `AzureOpenAI:Endpoint`
   - `AzureOpenAI:ApiKey`
   - `AzureOpenAI:ChatDeployment`
+
+### Document Ingestion Behavior
+- Main orchestration:
+  - `src/TalentSuite.Server/Bids/Controllers/BidDocumentController.cs`
+  - `src/TalentSuite.Server/Bids/Services/DocumentIngestionJobService.cs`
+  - `src/TalentSuite.Server/Bids/Services/DocumentIngestionService.cs`
+- Frontend pages:
+  - upload page: `src/TalentSuite.FrontEnd/Pages/Bids/Ingest.razor`
+  - jobs page: `src/TalentSuite.FrontEnd/Pages/Bids/IngestionJobs.razor`
+  - summary/review page: `src/TalentSuite.FrontEnd/Pages/Bids/IngestSummary.razor`
+
+Current ingestion modes:
+- `.xlsx`
+  - the workbook is read directly with OpenXML
+  - all sheets, rows, and non-empty cells are converted into plain text with sheet headers
+  - the workbook text is split into chunks of about `60,000` characters
+  - each chunk is sent to Azure OpenAI separately
+  - parsed chunk results are merged:
+    - first non-empty root metadata wins
+    - duplicate questions are skipped
+    - final question order indices are reassigned sequentially
+- non-Excel documents
+  - Azure AI Document Intelligence extracts the raw document text
+  - extracted text is split into chunks of about `60,000` characters
+  - each chunk is sent to Azure OpenAI separately
+  - parsed chunk results are merged with the same rules as Excel
+
+Notes:
+- The previous single-prompt clamp for document text has been removed.
+- Chunking reduces model context failures on large documents, but cross-chunk content can still be imperfect if a question spans chunk boundaries.
+- The current merge strategy is intentionally simple and deterministic rather than semantic.
+
+### Document Ingestion Jobs
+- Jobs are user-scoped and require the current authenticated admin user.
+- Live progress is streamed as `application/x-ndjson`.
+- Persisted job state includes:
+  - `job id`
+  - `owner user key`
+  - `file name`
+  - `stage`
+  - `status/message`
+  - completion/error flags
+  - timestamps
+  - final parsed result payload
+- SQL-backed environments persist jobs in `dbo.DocumentIngestionJobs` via `src/TalentSuite.Server/Bids/Data/SqlServerBidRepository.cs`.
+- In-memory environments persist jobs only for the lifetime of the process via `src/TalentSuite.Server/Bids/Data/InMemoryBidRepository.cs`.
+- Live streaming still depends on the current server process for active jobs.
+  - after restart, completed jobs can still be viewed from the jobs page because the persisted record is returned from list/detail endpoints
+  - streaming a completed persisted job after restart returns a synthesized terminal event from stored state
 
 ### Azure AI Search (indirect via Azure AI Foundry Agent)
 - There is no direct Azure AI Search SDK usage in this repository.
