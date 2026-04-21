@@ -35,10 +35,6 @@ var publicIpName = 'pip-appgw-${envName}'
 
 module vnet 'modules/vnet.bicep' = {
   name: 'deploy-vnet'
-  params: {
-    vnetName: vnetName
-    location: location
-  }
 }
 
 module publicIp 'modules/publicIp.bicep' = {
