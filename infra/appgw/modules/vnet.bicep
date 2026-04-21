@@ -4,8 +4,12 @@ var talentgatewaySubnetName = 'talent-appgateway-subnet'
 resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' existing = {
   name: vnetName
 
-  resource subnet 'subnets' existing = {
+  resource subnet 'subnets' = {
     name: talentgatewaySubnetName
+    properties: {
+      addressPrefix: '10.42.3.0/24'
+      privateEndpointNetworkPolicies: 'Disabled'
+    }
   }
 }
 
