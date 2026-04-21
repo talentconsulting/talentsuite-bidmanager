@@ -54,26 +54,44 @@ jobs:
         id: fqdn
         run: |
           set -euo pipefail
+          echo "==> Debug: Start fetching FQDNs"
           resource_group="rg-${AZURE_ENV_NAME}"
+          echo "==> Debug: resource_group=$resource_group"
           
+          echo "==> Debug: Fetching azd_values"
           azd_values="$(azd env get-values --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
-          storage_blob_endpoint="$(printf '%s\n' "$azd_values" | grep -E '^STORAGE_BLOBENDPOINT=' | cut -d= -f2 | tr -d '"')"
+          
+          # Using sed instead of grep to avoid 'set -e' crashing if no match is found
+          storage_blob_endpoint="$(printf '%s\n' "$azd_values" | sed -n -E 's/^(export[[:space:]]+)?STORAGE_BLOBENDPOINT=(.*)$/\2/p' | head -n1 | tr -d '"')"
+          echo "==> Debug: storage_blob_endpoint=${storage_blob_endpoint:-empty}"
           
           if [ -z "$storage_blob_endpoint" ]; then
-            # fallback to manual lookup
+            echo "==> Debug: Fallback manual lookup for storage account"
             storage_account_name="$(az storage account list --resource-group "$resource_group" --query "[0].name" -o tsv 2>/dev/null | grep -v '^bidcontentstorage' | head -n1 || true)"
+            echo "==> Debug: Fallback storage_account_name=${storage_account_name:-empty}"
             frontend_host="$(az storage account show --name "$storage_account_name" --resource-group "$resource_group" --query 'primaryEndpoints.web' -o tsv)"
+            echo "==> Debug: Fallback frontend_host=$frontend_host"
           else
+            echo "==> Debug: Parsing storage account from endpoint"
             storage_account_name="$(echo "$storage_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
+            echo "==> Debug: Derived storage_account_name=$storage_account_name"
             frontend_host="$(az storage account show --name "$storage_account_name" --resource-group "$resource_group" --query 'primaryEndpoints.web' -o tsv)"
+            echo "==> Debug: frontend_host=$frontend_host"
           fi
           
           frontend_fqdn="${frontend_host#https://}"
           frontend_fqdn="${frontend_fqdn%/}"
+          echo "==> Debug: frontend_fqdn=$frontend_fqdn"
           
+          echo "==> Debug: Fetching Container App FQDNs..."
           api_fqdn="$(az containerapp show --name talentserver --resource-group "$resource_group" --query 'properties.configuration.ingress.fqdn' -o tsv)"
-          auth_fqdn="$(az containerapp show --name keycloak --resource-group "$resource_group" --query 'properties.configuration.ingress.fqdn' -o tsv)"
-          grafana_fqdn="$(az containerapp show --name grafana --resource-group "$resource_group" --query 'properties.configuration.ingress.fqdn' -o tsv)"
+          echo "==> Debug: api_fqdn=$api_fqdn"
+          
+          auth_fqdn="$(az containerapp show --name keycloak --resource-group "$resource_group" --query 'properties.configuration.ingress.fqdn' -o tsv || true)"
+          echo "==> Debug: auth_fqdn=$auth_fqdn"
+          
+          grafana_fqdn="$(az containerapp show --name grafana --resource-group "$resource_group" --query 'properties.configuration.ingress.fqdn' -o tsv || true)"
+          echo "==> Debug: grafana_fqdn=$grafana_fqdn"
           
           echo "frontend_fqdn=$frontend_fqdn" >> $GITHUB_OUTPUT
           echo "api_fqdn=$api_fqdn" >> $GITHUB_OUTPUT
