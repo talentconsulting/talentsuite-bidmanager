@@ -29,7 +29,7 @@ param authCustomDomain string
 param grafanaCustomDomain string
 
 var appGwName = 'appgw-${envName}'
-var vnetName = 'vnet-${envName}'
+//var vnetName = 'vnet-${envName}'
 var publicIpName = 'pip-appgw-${envName}'
 
 module vnet 'modules/vnet.bicep' = {
