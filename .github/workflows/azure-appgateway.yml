@@ -67,9 +67,9 @@ jobs:
           
           if [ -z "$storage_blob_endpoint" ]; then
             echo "==> Debug: Fallback manual lookup for storage account"
-            storage_account_name="$(az storage account list --resource-group "$resource_group" --query "[0].name" -o tsv 2>/dev/null | grep -v '^bidcontentstorage' | head -n1 || true)"
+            storage_account_name="$(az storage account list --resource-group "$resource_group" --query "[].name" -o tsv 2>/dev/null | grep -v '^bidcontentstorage' | head -n1 || true)"
             echo "==> Debug: Fallback storage_account_name=${storage_account_name:-empty}"
-            frontend_host="$(az storage account show --name "$storage_account_name" --resource-group "$resource_group" --query 'primaryEndpoints.web' -o tsv)"
+            frontend_host="$(az storage account show --name "$storage_account_name" --resource-group "$resource_group" --query 'primaryEndpoints.web' -o tsv || true)"
             echo "==> Debug: Fallback frontend_host=$frontend_host"
           else
             echo "==> Debug: Parsing storage account from endpoint"
