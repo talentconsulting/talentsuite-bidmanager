@@ -18,8 +18,8 @@ resource appGw 'Microsoft.Network/applicationGateways@2023-04-01' = {
   location: location
   properties: {
     sku: {
-      name: 'WAF_v2'
-      tier: 'WAF_v2'
+      name: 'Standard_v2'
+      tier: 'Standard_v2'
       capacity: 2
     }
     gatewayIPConfigurations: [
