@@ -73,11 +73,9 @@ jobs:
             --name "rg-kvcertbot-${AZURE_ENV_NAME}" \
             --location "${AZURE_LOCATION}"
 
-      - name: Deploy ACME Bot
-        id: deploy
+      - name: Validate Bicep template
         run: |
-          set -euo pipefail
-          function_app_name="$(az deployment group create \
+          az deployment group validate \
             --resource-group "rg-kvcertbot-${AZURE_ENV_NAME}" \
             --template-file ./infra/acmebot/main.bicep \
             --parameters \
@@ -86,11 +84,57 @@ jobs:
               acmeEndpoint="${{ github.event.inputs.acme_endpoint }}" \
               createWithKeyVault=${{ github.event.inputs.create_with_key_vault }} \
               keyVaultSkuName="${{ github.event.inputs.key_vault_sku_name }}" \
-            --name "acmebot-$(date +%Y%m%d%H%M%S)" \
-            --query 'properties.outputs.functionAppName.value' \
-            -o tsv)"
-          test -n "$function_app_name" || (echo "Deployment did not return a functionAppName output" && exit 1)
+            --output json
+
+      - name: Deploy ACME Bot
+        id: deploy
+        run: |
+          set -euo pipefail
+          DEPLOYMENT_NAME="acmebot-$(date +%Y%m%d%H%M%S)"
+          echo "::group::az deployment group create"
+          DEPLOY_OUTPUT="$(az deployment group create \
+            --resource-group "rg-kvcertbot-${AZURE_ENV_NAME}" \
+            --template-file ./infra/acmebot/main.bicep \
+            --parameters \
+              appNamePrefix="${{ github.event.inputs.app_name_prefix }}" \
+              mailAddress="${{ github.event.inputs.mail_address }}" \
+              acmeEndpoint="${{ github.event.inputs.acme_endpoint }}" \
+              createWithKeyVault=${{ github.event.inputs.create_with_key_vault }} \
+              keyVaultSkuName="${{ github.event.inputs.key_vault_sku_name }}" \
+            --name "$DEPLOYMENT_NAME" \
+            --output json 2>&1)" || {
+            echo "::endgroup::"
+            echo "::error::Deployment failed. Raw output below:"
+            echo "$DEPLOY_OUTPUT"
+            echo "::group::Deployment error details"
+            az deployment group show \
+              --resource-group "rg-kvcertbot-${AZURE_ENV_NAME}" \
+              --name "$DEPLOYMENT_NAME" \
+              --query '{state:properties.provisioningState,error:properties.error}' \
+              --output json 2>/dev/null || true
+            echo "::endgroup::"
+            echo "::group::Operation-level errors"
+            az deployment operation group list \
+              --resource-group "rg-kvcertbot-${AZURE_ENV_NAME}" \
+              --name "$DEPLOYMENT_NAME" \
+              --query '[?properties.provisioningState==`Failed`].{resource:properties.targetResource.resourceType,status:properties.statusMessage}' \
+              --output json 2>/dev/null || true
+            echo "::endgroup::"
+            exit 1
+          }
+          echo "::endgroup::"
+          echo "::group::Full deployment output"
+          echo "$DEPLOY_OUTPUT"
+          echo "::endgroup::"
+          function_app_name="$(echo "$DEPLOY_OUTPUT" | jq -r '.properties.outputs.functionAppName.value // empty')"
+          if [ -z "$function_app_name" ]; then
+            echo "::error::Deployment succeeded but returned no functionAppName output"
+            echo "Available outputs:"
+            echo "$DEPLOY_OUTPUT" | jq '.properties.outputs'
+            exit 1
+          fi
           echo "function_app_name=$function_app_name" >> "$GITHUB_OUTPUT"
+          echo "deployment_name=$DEPLOYMENT_NAME" >> "$GITHUB_OUTPUT"
           echo "Deployed ACME bot: $function_app_name"
 
       - name: Show ACME Bot Function App URL
