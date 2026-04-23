@@ -1,0 +1,97 @@
+name: Azure ACME Bot
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name_prefix:
+        description: 'Prefix for ACME bot resources (e.g. talentsuite-dev)'
+        required: true
+        default: 'kvcertbot-dev'
+        type: string
+      mail_address:
+        description: "Email address for ACME/Let's Encrypt notifications"
+        required: true
+        default: 'pablo.lorenzo@talentconsulting.uk'
+        type: string
+      acme_endpoint:
+        description: 'ACME directory endpoint'
+        required: true
+        default: 'https://acme-v02.api.letsencrypt.org/'
+        type: choice
+        options:
+          - 'https://acme-v02.api.letsencrypt.org/'
+          - 'https://acme-staging-v02.api.letsencrypt.org/'
+      create_with_key_vault:
+        description: 'Create a new Key Vault alongside the ACME bot'
+        required: true
+        default: true
+        type: boolean
+      key_vault_sku_name:
+        description: 'Key Vault SKU'
+        required: true
+        default: 'standard'
+        type: choice
+        options:
+          - standard
+          - premium
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-acmebot:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate inputs
+        run: |
+          test -n "${AZURE_ENV_NAME:-}" || (echo "AZURE_ENV_NAME missing" && exit 1)
+          test -n "${{ github.event.inputs.app_name_prefix }}" || (echo "app_name_prefix missing" && exit 1)
+          test -n "${{ github.event.inputs.mail_address }}" || (echo "mail_address missing" && exit 1)
+
+      - name: Deploy ACME Bot
+        id: deploy
+        run: |
+          set -euo pipefail
+          function_app_name="$(az deployment group create \
+            --resource-group "rg-kvcertbot-${AZURE_ENV_NAME}" \
+            --template-file ./infra/acmebot/main.bicep \
+            --parameters \
+              appNamePrefix="${{ github.event.inputs.app_name_prefix }}" \
+              mailAddress="${{ github.event.inputs.mail_address }}" \
+              acmeEndpoint="${{ github.event.inputs.acme_endpoint }}" \
+              createWithKeyVault=${{ github.event.inputs.create_with_key_vault }} \
+              keyVaultSkuName="${{ github.event.inputs.key_vault_sku_name }}" \
+            --name "acmebot-$(date +%Y%m%d%H%M%S)" \
+            --query 'properties.outputs.functionAppName.value' \
+            -o tsv)"
+          test -n "$function_app_name" || (echo "Deployment did not return a functionAppName output" && exit 1)
+          echo "function_app_name=$function_app_name" >> "$GITHUB_OUTPUT"
+          echo "Deployed ACME bot: $function_app_name"
+
+      - name: Show ACME Bot Function App URL
+        run: |
+          echo "Function App: ${{ steps.deploy.outputs.function_app_name }}"
+          az functionapp show \
+            --resource-group "rg-kvcertbot-${AZURE_ENV_NAME}" \
+            --name "${{ steps.deploy.outputs.function_app_name }}" \
+            --query 'defaultHostName' \
+            -o tsv

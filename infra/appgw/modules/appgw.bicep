@@ -13,9 +13,20 @@ param apiCustomDomain string
 param authCustomDomain string
 param grafanaCustomDomain string
 
+param appGwIdentityId string = ''
+param keyVaultSecretUri string = ''
+
+var enableHttps = !empty(keyVaultSecretUri)
+
 resource appGw 'Microsoft.Network/applicationGateways@2023-04-01' = {
   name: appGwName
   location: location
+  identity: !empty(appGwIdentityId) ? {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${appGwIdentityId}': {}
+    }
+  } : null
   properties: {
     sku: {
       name: 'Standard_v2'
@@ -49,30 +60,44 @@ resource appGw 'Microsoft.Network/applicationGateways@2023-04-01' = {
           port: 80
         }
       }
+      {
+        name: 'port_443'
+        properties: {
+          port: 443
+        }
+      }
     ]
+    sslCertificates: enableHttps ? [
+      {
+        name: 'wildcardCert'
+        properties: {
+          keyVaultSecretId: keyVaultSecretUri
+        }
+      }
+    ] : []
     backendAddressPools: [
       {
         name: 'frontendBackendPool'
         properties: {
-          backendAddresses: [ { fqdn: frontendBackendFqdn } ]
+          backendAddresses: [{ fqdn: frontendBackendFqdn }]
         }
       }
       {
         name: 'apiBackendPool'
         properties: {
-          backendAddresses: [ { fqdn: apiBackendFqdn } ]
+          backendAddresses: [{ fqdn: apiBackendFqdn }]
         }
       }
       {
         name: 'authBackendPool'
         properties: {
-          backendAddresses: [ { fqdn: keycloakBackendFqdn } ]
+          backendAddresses: [{ fqdn: keycloakBackendFqdn }]
         }
       }
       {
         name: 'grafanaBackendPool'
         properties: {
-          backendAddresses: [ { fqdn: grafanaBackendFqdn } ]
+          backendAddresses: [{ fqdn: grafanaBackendFqdn }]
         }
       }
     ]
@@ -172,41 +197,69 @@ resource appGw 'Microsoft.Network/applicationGateways@2023-04-01' = {
       {
         name: 'frontendListener'
         properties: {
-          frontendIPConfiguration: { id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', appGwName, 'appGwPublicFrontendIp') }
-          frontendPort: { id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGwName, 'port_80') }
-          protocol: 'Http'
+          frontendIPConfiguration: {
+            id: resourceId(
+              'Microsoft.Network/applicationGateways/frontendIPConfigurations',
+              appGwName,
+              'appGwPublicFrontendIp'
+            )
+          }
+          frontendPort: { id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGwName, enableHttps ? 'port_443' : 'port_80') }
+          protocol: enableHttps ? 'Https' : 'Http'
+          sslCertificate: enableHttps ? { id: resourceId('Microsoft.Network/applicationGateways/sslCertificates', appGwName, 'wildcardCert') } : null
           hostName: frontendCustomDomain
-          requireServerNameIndication: false
+          requireServerNameIndication: enableHttps
         }
       }
       {
         name: 'apiListener'
         properties: {
-          frontendIPConfiguration: { id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', appGwName, 'appGwPublicFrontendIp') }
-          frontendPort: { id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGwName, 'port_80') }
-          protocol: 'Http'
+          frontendIPConfiguration: {
+            id: resourceId(
+              'Microsoft.Network/applicationGateways/frontendIPConfigurations',
+              appGwName,
+              'appGwPublicFrontendIp'
+            )
+          }
+          frontendPort: { id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGwName, enableHttps ? 'port_443' : 'port_80') }
+          protocol: enableHttps ? 'Https' : 'Http'
+          sslCertificate: enableHttps ? { id: resourceId('Microsoft.Network/applicationGateways/sslCertificates', appGwName, 'wildcardCert') } : null
           hostName: apiCustomDomain
-          requireServerNameIndication: false
+          requireServerNameIndication: enableHttps
         }
       }
       {
         name: 'authListener'
         properties: {
-          frontendIPConfiguration: { id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', appGwName, 'appGwPublicFrontendIp') }
-          frontendPort: { id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGwName, 'port_80') }
-          protocol: 'Http'
+          frontendIPConfiguration: {
+            id: resourceId(
+              'Microsoft.Network/applicationGateways/frontendIPConfigurations',
+              appGwName,
+              'appGwPublicFrontendIp'
+            )
+          }
+          frontendPort: { id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGwName, enableHttps ? 'port_443' : 'port_80') }
+          protocol: enableHttps ? 'Https' : 'Http'
+          sslCertificate: enableHttps ? { id: resourceId('Microsoft.Network/applicationGateways/sslCertificates', appGwName, 'wildcardCert') } : null
           hostName: authCustomDomain
-          requireServerNameIndication: false
+          requireServerNameIndication: enableHttps
         }
       }
       {
         name: 'grafanaListener'
         properties: {
-          frontendIPConfiguration: { id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', appGwName, 'appGwPublicFrontendIp') }
-          frontendPort: { id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGwName, 'port_80') }
-          protocol: 'Http'
+          frontendIPConfiguration: {
+            id: resourceId(
+              'Microsoft.Network/applicationGateways/frontendIPConfigurations',
+              appGwName,
+              'appGwPublicFrontendIp'
+            )
+          }
+          frontendPort: { id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGwName, enableHttps ? 'port_443' : 'port_80') }
+          protocol: enableHttps ? 'Https' : 'Http'
+          sslCertificate: enableHttps ? { id: resourceId('Microsoft.Network/applicationGateways/sslCertificates', appGwName, 'wildcardCert') } : null
           hostName: grafanaCustomDomain
-          requireServerNameIndication: false
+          requireServerNameIndication: enableHttps
         }
       }
     ]
@@ -216,9 +269,23 @@ resource appGw 'Microsoft.Network/applicationGateways@2023-04-01' = {
         properties: {
           ruleType: 'Basic'
           priority: 100
-          httpListener: { id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGwName, 'frontendListener') }
-          backendAddressPool: { id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', appGwName, 'frontendBackendPool') }
-          backendHttpSettings: { id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', appGwName, 'frontendHttpSettings') }
+          httpListener: {
+            id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGwName, 'frontendListener')
+          }
+          backendAddressPool: {
+            id: resourceId(
+              'Microsoft.Network/applicationGateways/backendAddressPools',
+              appGwName,
+              'frontendBackendPool'
+            )
+          }
+          backendHttpSettings: {
+            id: resourceId(
+              'Microsoft.Network/applicationGateways/backendHttpSettingsCollection',
+              appGwName,
+              'frontendHttpSettings'
+            )
+          }
         }
       }
       {
@@ -226,9 +293,19 @@ resource appGw 'Microsoft.Network/applicationGateways@2023-04-01' = {
         properties: {
           ruleType: 'Basic'
           priority: 110
-          httpListener: { id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGwName, 'apiListener') }
-          backendAddressPool: { id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', appGwName, 'apiBackendPool') }
-          backendHttpSettings: { id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', appGwName, 'apiHttpSettings') }
+          httpListener: {
+            id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGwName, 'apiListener')
+          }
+          backendAddressPool: {
+            id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', appGwName, 'apiBackendPool')
+          }
+          backendHttpSettings: {
+            id: resourceId(
+              'Microsoft.Network/applicationGateways/backendHttpSettingsCollection',
+              appGwName,
+              'apiHttpSettings'
+            )
+          }
         }
       }
       {
@@ -236,9 +313,19 @@ resource appGw 'Microsoft.Network/applicationGateways@2023-04-01' = {
         properties: {
           ruleType: 'Basic'
           priority: 120
-          httpListener: { id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGwName, 'authListener') }
-          backendAddressPool: { id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', appGwName, 'authBackendPool') }
-          backendHttpSettings: { id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', appGwName, 'authHttpSettings') }
+          httpListener: {
+            id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGwName, 'authListener')
+          }
+          backendAddressPool: {
+            id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', appGwName, 'authBackendPool')
+          }
+          backendHttpSettings: {
+            id: resourceId(
+              'Microsoft.Network/applicationGateways/backendHttpSettingsCollection',
+              appGwName,
+              'authHttpSettings'
+            )
+          }
         }
       }
       {
@@ -246,9 +333,19 @@ resource appGw 'Microsoft.Network/applicationGateways@2023-04-01' = {
         properties: {
           ruleType: 'Basic'
           priority: 130
-          httpListener: { id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGwName, 'grafanaListener') }
-          backendAddressPool: { id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', appGwName, 'grafanaBackendPool') }
-          backendHttpSettings: { id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', appGwName, 'grafanaHttpSettings') }
+          httpListener: {
+            id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGwName, 'grafanaListener')
+          }
+          backendAddressPool: {
+            id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', appGwName, 'grafanaBackendPool')
+          }
+          backendHttpSettings: {
+            id: resourceId(
+              'Microsoft.Network/applicationGateways/backendHttpSettingsCollection',
+              appGwName,
+              'grafanaHttpSettings'
+            )
+          }
         }
       }
     ]
