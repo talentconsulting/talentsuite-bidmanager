@@ -28,9 +28,37 @@ param authCustomDomain string
 @description('Grafana Custom Domain (e.g. grafana-dev.talentsuite.uk)')
 param grafanaCustomDomain string
 
+@description('Key Vault Name (optional)')
+param keyVaultName string = ''
+
+@description('Key Vault Secret Name for the Certificate (optional)')
+param certificateSecretName string = ''
+
 var appGwName = 'appgw-${envName}'
-//var vnetName = 'vnet-${envName}'
 var publicIpName = 'pip-appgw-${envName}'
+var appGwIdentityName = 'id-appgw-${envName}'
+
+resource keyVault 'Microsoft.KeyVault/vaults@2023-02-01' existing = if (!empty(keyVaultName)) {
+  name: keyVaultName
+}
+
+resource appGwIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (!empty(keyVaultName)) {
+  name: appGwIdentityName
+  location: location
+}
+
+// "Key Vault Secrets User" Role Definition ID
+var secretsUserRoleId = resourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+
+resource keyVaultRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(keyVaultName)) {
+  scope: keyVault
+  name: guid(keyVault.id, appGwIdentityName, secretsUserRoleId)
+  properties: {
+    roleDefinitionId: secretsUserRoleId
+    principalId: appGwIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
 
 module vnet 'modules/vnet.bicep' = {
   name: 'deploy-vnet'
@@ -59,6 +87,8 @@ module appGw 'modules/appgw.bicep' = {
     apiCustomDomain: apiCustomDomain
     authCustomDomain: authCustomDomain
     grafanaCustomDomain: grafanaCustomDomain
+    appGwIdentityId: !empty(keyVaultName) ? appGwIdentity.id : ''
+    keyVaultSecretUri: (!empty(keyVaultName) && !empty(certificateSecretName)) ? '${keyVault.properties.vaultUri}secrets/${certificateSecretName}' : ''
   }
 }
 

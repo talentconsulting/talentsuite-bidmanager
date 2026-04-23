@@ -23,6 +23,11 @@ on:
         required: true
         default: "grafana-dev.talentsuite.uk"
         type: string
+      certificate_secret_name:
+        description: "(Optional) Key Vault Secret Name for SSL Certificate to enable HTTPS"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -64,6 +69,9 @@ jobs:
           # Using sed instead of grep to avoid 'set -e' crashing if no match is found
           storage_blob_endpoint="$(printf '%s\n' "$azd_values" | sed -n -E 's/^(export[[:space:]]+)?STORAGE_BLOBENDPOINT=(.*)$/\2/p' | head -n1 | tr -d '"')"
           echo "==> Debug: storage_blob_endpoint=${storage_blob_endpoint:-empty}"
+
+          key_vault_name="$(printf '%s\n' "$azd_values" | sed -n -E 's/^(export[[:space:]]+)?KeyVaultName=(.*)$/\2/p' | head -n1 | tr -d '"')"
+          echo "==> Debug: key_vault_name=${key_vault_name:-empty}"
           
           if [ -z "$storage_blob_endpoint" ]; then
             echo "==> Debug: Fallback manual lookup for storage account"
@@ -97,6 +105,7 @@ jobs:
           echo "api_fqdn=$api_fqdn" >> $GITHUB_OUTPUT
           echo "auth_fqdn=$auth_fqdn" >> $GITHUB_OUTPUT
           echo "grafana_fqdn=$grafana_fqdn" >> $GITHUB_OUTPUT
+          echo "key_vault_name=$key_vault_name" >> $GITHUB_OUTPUT
 
       - name: Deploy Application Gateway Bicep
         uses: azure/arm-deploy@v2
@@ -114,3 +123,5 @@ jobs:
             apiCustomDomain=${{ github.event.inputs.api_custom_domain }}
             authCustomDomain=${{ github.event.inputs.auth_custom_domain }}
             grafanaCustomDomain=${{ github.event.inputs.grafana_custom_domain }}
+            keyVaultName=${{ steps.fqdn.outputs.key_vault_name }}
+            certificateSecretName=${{ github.event.inputs.certificate_secret_name }}
