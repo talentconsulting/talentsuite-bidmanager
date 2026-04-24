@@ -16,11 +16,14 @@ on:
       acme_endpoint:
         description: 'ACME directory endpoint'
         required: true
-        default: 'https://acme-v02.api.letsencrypt.org/'
+        default: 'https://acme-v02.api.letsencrypt.org/directory'
         type: choice
         options:
-          - 'https://acme-v02.api.letsencrypt.org/'
-          - 'https://acme-staging-v02.api.letsencrypt.org/'
+          - 'https://acme-v02.api.letsencrypt.org/directory'
+          - 'https://acme.zerossl.com/v2/DV90/'
+          - 'https://dv.acme-v02.api.pki.goog/directory'
+          - 'https://acme.entrust.net/acme2/directory'
+          - 'https://emea.acme.atlas.globalsign.com/directory'
       create_with_key_vault:
         description: 'Create a new Key Vault alongside the ACME bot'
         required: true
