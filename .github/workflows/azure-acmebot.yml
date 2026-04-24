@@ -64,8 +64,10 @@ jobs:
       - name: Validate inputs
         run: |
           test -n "${AZURE_ENV_NAME:-}" || (echo "AZURE_ENV_NAME missing" && exit 1)
+          test -n "${AZURE_LOCATION:-}" || (echo "AZURE_LOCATION missing" && exit 1)
           test -n "${{ github.event.inputs.app_name_prefix }}" || (echo "app_name_prefix missing" && exit 1)
           test -n "${{ github.event.inputs.mail_address }}" || (echo "mail_address missing" && exit 1)
+          echo "Using Azure location: ${AZURE_LOCATION}"
 
       - name: Create Resource Group
         run: |

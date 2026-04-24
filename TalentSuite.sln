@@ -46,6 +46,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripts", "scripts", "{2ED1
 		scripts\ci\bootstrap-rbac.sh = scripts\ci\bootstrap-rbac.sh
 		scripts\ci\sync-containerapp-secrets-keyvault.sh = scripts\ci\sync-containerapp-secrets-keyvault.sh
 		scripts\ci\provision-foundry-agent-stack.sh = scripts\ci\provision-foundry-agent-stack.sh
+		.github\workflows\azure-acmebot.yml = .github\workflows\azure-acmebot.yml
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ops", "ops", "{C2EEFDDF-73B0-442C-B74A-11B9656BFD98}"
