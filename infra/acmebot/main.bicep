@@ -14,7 +14,7 @@ param createWithKeyVault bool = true
 @allowed(['standard', 'premium'])
 param keyVaultSkuName string = 'standard'
 
-module acmebot 'br:cracmebotprod.azurecr.io/bicep/modules/keyvault-acmebot:v3' = {
+module acmebot 'br:cracmebotprod.azurecr.io/bicep/modules/keyvault-acmebot:v4' = {
   name: 'acmebot'
   params: {
     appNamePrefix: appNamePrefix
