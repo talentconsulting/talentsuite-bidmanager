@@ -7,6 +7,7 @@ using TalentSuite.Server.Bids.Services;
 using TalentSuite.Server;
 using TalentSuite.Shared.Messaging;
 using TalentSuite.Server.Users.Services;
+using TalentSuite.Shared.Bids.Ai;
 
 namespace TalentSuite.SliceTests.Infrastructure;
 
