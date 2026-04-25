@@ -152,4 +152,41 @@ public sealed class InMemoryAzureOpenAiChatService : IAzureOpenAiChatService
             ThreadId = resolvedThreadId
         });
     }
+
+    public async IAsyncEnumerable<ChatStreamUpdate> StreamAsync(
+        string userPrompt,
+        string? systemPrompt = null,
+        string? threadId = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var prompt = userPrompt ?? string.Empty;
+        var resolvedThreadId = string.IsNullOrWhiteSpace(threadId)
+            ? $"thread-{Interlocked.Increment(ref _threadCounter)}"
+            : threadId;
+        var response = $"[stubbed-chat] {prompt}";
+
+        yield return new ChatStreamUpdate
+        {
+            Type = "thread",
+            ThreadId = resolvedThreadId
+        };
+
+        foreach (var chunk in response.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            ct.ThrowIfCancellationRequested();
+            await Task.Yield();
+            yield return new ChatStreamUpdate
+            {
+                Type = "delta",
+                ThreadId = resolvedThreadId,
+                Content = $"{chunk} "
+            };
+        }
+
+        yield return new ChatStreamUpdate
+        {
+            Type = "completed",
+            ThreadId = resolvedThreadId
+        };
+    }
 }

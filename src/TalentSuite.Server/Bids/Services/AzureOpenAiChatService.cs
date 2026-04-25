@@ -1,14 +1,22 @@
 using System.Text;
+using System.ClientModel;
 using Azure;
 using Azure.AI.Agents.Persistent;
 using Azure.Core;
 using Azure.Identity;
+using TalentSuite.Shared.Bids.Ai;
 
 namespace TalentSuite.Server.Bids.Services;
 
 public interface IAzureOpenAiChatService
 {
     Task<ChatAnswerResult> AskAsync(
+        string userPrompt,
+        string? systemPrompt = null,
+        string? threadId = null,
+        CancellationToken ct = default);
+
+    IAsyncEnumerable<ChatStreamUpdate> StreamAsync(
         string userPrompt,
         string? systemPrompt = null,
         string? threadId = null,
@@ -143,6 +151,109 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
             Response = lastAgentText ?? "(No agent text response returned.)",
             ThreadId = effectiveThreadId
         };
+    }
+
+    public async IAsyncEnumerable<ChatStreamUpdate> StreamAsync(
+        string userPrompt,
+        string? systemPrompt = null,
+        string? threadId = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(userPrompt))
+            throw new ArgumentException("User prompt is required.", nameof(userPrompt));
+
+        var effectiveThreadId = threadId;
+        if (string.IsNullOrWhiteSpace(effectiveThreadId))
+            effectiveThreadId = await CreateThreadAsync(ct);
+
+        effectiveThreadId = await AddUserMessageAsync(effectiveThreadId, userPrompt, ct);
+
+        yield return new ChatStreamUpdate
+        {
+            Type = "thread",
+            ThreadId = effectiveThreadId
+        };
+
+        AsyncCollectionResult<StreamingUpdate> stream;
+        try
+        {
+            stream = _client.Runs.CreateRunStreamingAsync(
+                effectiveThreadId,
+                _agentId,
+                new CreateRunStreamingOptions
+                {
+                    AdditionalInstructions = string.IsNullOrWhiteSpace(systemPrompt) ? null : systemPrompt
+                },
+                ct);
+        }
+        catch (RequestFailedException ex) when (IsQuotaLimitException(ex))
+        {
+            throw new ChatServiceUserException(
+                "Chat is temporarily unavailable because the AI usage limit has been reached. Please wait a minute and try again.");
+        }
+
+        ThreadRun? streamRun = null;
+        List<ToolOutput> toolOutputs = [];
+
+        do
+        {
+            toolOutputs.Clear();
+
+            await foreach (var streamingUpdate in stream)
+            {
+                if (streamingUpdate.UpdateKind == StreamingUpdateReason.RunCreated && streamingUpdate is RunUpdate runCreated)
+                {
+                    streamRun = runCreated.Value;
+                    continue;
+                }
+
+                if (streamingUpdate is RequiredActionUpdate requiredActionUpdate)
+                {
+                    streamRun = requiredActionUpdate.Value;
+                    throw new InvalidOperationException(
+                        $"Streaming chat does not support required tool action '{requiredActionUpdate.FunctionName}'.");
+                }
+
+                if (streamingUpdate is MessageContentUpdate contentUpdate && !string.IsNullOrWhiteSpace(contentUpdate.Text))
+                {
+                    yield return new ChatStreamUpdate
+                    {
+                        Type = "delta",
+                        ThreadId = effectiveThreadId,
+                        Content = contentUpdate.Text
+                    };
+                    continue;
+                }
+
+                if (streamingUpdate.UpdateKind == StreamingUpdateReason.RunCompleted)
+                {
+                    yield return new ChatStreamUpdate
+                    {
+                        Type = "completed",
+                        ThreadId = effectiveThreadId
+                    };
+                    yield break;
+                }
+
+                if (streamingUpdate.UpdateKind == StreamingUpdateReason.Error && streamingUpdate is RunUpdate errorStep)
+                {
+                    var err = errorStep.Value.LastError?.Message ?? "Chat streaming failed.";
+                    if (err.Contains("rate limit", StringComparison.OrdinalIgnoreCase)
+                        || err.Contains("quota", StringComparison.OrdinalIgnoreCase)
+                        || err.Contains("retry after", StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new ChatServiceUserException(
+                            "Chat is temporarily unavailable because the AI usage limit has been reached. Please wait a minute and try again.");
+                    }
+
+                    throw new InvalidOperationException(err);
+                }
+            }
+
+            if (toolOutputs.Count > 0)
+                stream = _client.Runs.SubmitToolOutputsToStreamAsync(streamRun!, toolOutputs, ct);
+        }
+        while (toolOutputs.Count > 0);
     }
 
     private async Task<string> AddUserMessageAsync(string threadId, string userPrompt, CancellationToken ct)

@@ -144,6 +144,7 @@ public class ChatQuestionController : ControllerBase
             var persistedThreadId = await _bidService.GetChatThreadId(chatQuestionRequest.BidId, resolvedQuestionId, userId, ct);
             var systemPrompt =
                 $"Please use the bid library we have to return the answer to the question: ${question.Description}";
+            var assistantResponse = new System.Text.StringBuilder();
 
             var startedAt = DateTimeOffset.UtcNow;
             await _bidService.AddChatMessage(
@@ -155,64 +156,43 @@ public class ChatQuestionController : ControllerBase
                 startedAt,
                 ct);
 
-            var askTask = _azureOpenAiChatService.AskAsync(
-                chatQuestionRequest.FreeTextQuestion,
-                systemPrompt,
-                chatQuestionRequest.ThreadId ?? persistedThreadId,
-                ct);
-
-            while (!askTask.IsCompleted)
+            string? threadId = null;
+            await foreach (var update in _azureOpenAiChatService.StreamAsync(
+                               chatQuestionRequest.FreeTextQuestion,
+                               systemPrompt,
+                               chatQuestionRequest.ThreadId ?? persistedThreadId,
+                               ct))
             {
-                var heartbeat = JsonSerializer.Serialize(new ChatStreamUpdate
-                {
-                    Type = "progress"
-                }, SerialiserOptions.JsonOptions);
-                await Response.WriteAsync(heartbeat, ct);
-                await Response.WriteAsync("\n", ct);
-                await Response.Body.FlushAsync(ct);
-                await Task.WhenAny(askTask, Task.Delay(TimeSpan.FromSeconds(1), ct));
+                if (!string.IsNullOrWhiteSpace(update.ThreadId))
+                    threadId = update.ThreadId;
+
+                if (string.Equals(update.Type, "delta", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(update.Content))
+                    assistantResponse.Append(update.Content);
+
+                await WriteStreamUpdateAsync(update, ct);
             }
 
-            var result = await askTask;
-
-            await _bidService.SetChatThreadId(
-                chatQuestionRequest.BidId,
-                resolvedQuestionId,
-                userId,
-                result.ThreadId,
-                ct);
-
-            await _bidService.AddChatMessage(
-                chatQuestionRequest.BidId,
-                resolvedQuestionId,
-                userId,
-                "assistant",
-                result.Response,
-                DateTimeOffset.UtcNow,
-                ct);
-
-            await WriteStreamUpdateAsync(new ChatStreamUpdate
+            if (!string.IsNullOrWhiteSpace(threadId))
             {
-                Type = "thread",
-                ThreadId = result.ThreadId
-            }, ct);
-
-            foreach (var chunk in ChunkResponse(result.Response))
-            {
-                await WriteStreamUpdateAsync(new ChatStreamUpdate
-                {
-                    Type = "delta",
-                    ThreadId = result.ThreadId,
-                    Content = chunk
-                }, ct);
-                await Task.Delay(25, ct);
+                await _bidService.SetChatThreadId(
+                    chatQuestionRequest.BidId,
+                    resolvedQuestionId,
+                    userId,
+                    threadId,
+                    ct);
             }
 
-            await WriteStreamUpdateAsync(new ChatStreamUpdate
+            if (assistantResponse.Length > 0)
             {
-                Type = "completed",
-                ThreadId = result.ThreadId
-            }, ct);
+                await _bidService.AddChatMessage(
+                    chatQuestionRequest.BidId,
+                    resolvedQuestionId,
+                    userId,
+                    "assistant",
+                    assistantResponse.ToString(),
+                    DateTimeOffset.UtcNow,
+                    ct);
+            }
         }
         catch (ChatServiceUserException ex)
         {
@@ -248,26 +228,6 @@ public class ChatQuestionController : ControllerBase
         await Response.WriteAsync(json, ct);
         await Response.WriteAsync("\n", ct);
         await Response.Body.FlushAsync(ct);
-    }
-
-    private static IEnumerable<string> ChunkResponse(string response)
-    {
-        if (string.IsNullOrWhiteSpace(response))
-            yield break;
-
-        var words = response.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length == 0)
-            yield break;
-
-        for (var i = 0; i < words.Length; i += 8)
-        {
-            var count = Math.Min(8, words.Length - i);
-            var chunk = string.Join(' ', words.Skip(i).Take(count));
-            if (i + count < words.Length)
-                chunk += " ";
-
-            yield return chunk;
-        }
     }
 
     private string ResolveCurrentUserKey()
