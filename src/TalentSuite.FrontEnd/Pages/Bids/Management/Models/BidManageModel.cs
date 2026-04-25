@@ -1,4 +1,5 @@
 using TalentSuite.Shared.Bids;
+using TalentSuite.Shared.Bids.Ai;
 
 namespace TalentSuite.FrontEnd.Pages.Bids.Management.Models;
 
@@ -36,6 +37,9 @@ public sealed class BidQuestionModel
     public List<QuestionAssignmentResponse> QuestionAssignments { get; set; } = new();
     public string ChatResponse { get; set; } = string.Empty;
     public string? ChatThreadId { get; set; }
+    public List<ChatMessageResponse> ChatMessages { get; set; } = new();
+    public bool IsChatHistoryLoaded { get; set; }
+    public bool IsChatStreaming { get; set; }
     public string? FinalAnswer { get; set; }
     public bool ReadyForSubmission { get; set; }
     public List<DraftCommentResponse> FinalAnswerComments { get; set; } = new();

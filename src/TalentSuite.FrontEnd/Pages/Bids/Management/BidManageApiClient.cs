@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components.Forms;
 using TalentSuite.Shared.Bids;
+using TalentSuite.Shared.Bids.Ai;
 using TalentSuite.Shared.Users;
 
 namespace TalentSuite.FrontEnd.Pages.Bids.Management;
@@ -18,6 +19,11 @@ public sealed class BidManageApiClient(HttpClient http)
 
     public Task<Models.BidManageModel?> GetBidAsync(string bidId, CancellationToken ct = default)
         => http.GetFromJsonAsync<Models.BidManageModel>($"api/bids/{Uri.EscapeDataString(bidId)}", ct);
+
+    public Task<List<ChatMessageResponse>?> GetChatMessagesAsync(string bidId, string questionId, CancellationToken ct = default)
+        => http.GetFromJsonAsync<List<ChatMessageResponse>>(
+            $"api/ai/questions/{Uri.EscapeDataString(questionId)}/messages?bidId={Uri.EscapeDataString(bidId)}",
+            ct);
 
     public Task<List<BidFileResponse>?> GetBidFilesAsync(string bidId, CancellationToken ct = default)
         => http.GetFromJsonAsync<List<BidFileResponse>>($"api/bids/{Uri.EscapeDataString(bidId)}/files", ct);

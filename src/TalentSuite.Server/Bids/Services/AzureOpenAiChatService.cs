@@ -35,10 +35,11 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
 {
     private readonly PersistentAgentsClient _client;
     private readonly string _agentId;
+    private readonly bool _isDevelopment;
     private static readonly TimeSpan ActiveRunPollInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan ActiveRunWaitBudget = TimeSpan.FromSeconds(10);
 
-    public AzureOpenAiChatService(IConfiguration config)
+    public AzureOpenAiChatService(IConfiguration config, IWebHostEnvironment environment)
     {
         var projectEndpoint = (config["AzureAIFoundry:ProjectEndpoint"]
             ?? throw new InvalidOperationException("Missing config: AzureAIFoundry:ProjectEndpoint")).Trim();
@@ -50,15 +51,16 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
                        ?? config["AzureAIFoundry__ClientId"]
                        ?? Environment.GetEnvironmentVariable("AzureAIFoundry__ClientId"))?.Trim();
 
-        // Prefer the app's managed identity in Azure. Fall back to developer credentials locally.
-        TokenCredential credential = new ChainedTokenCredential(
-            string.IsNullOrWhiteSpace(clientId)
-                ? new ManagedIdentityCredential()
-                : new ManagedIdentityCredential(clientId),
-            new DefaultAzureCredential(new DefaultAzureCredentialOptions
+        _isDevelopment = environment.IsDevelopment();
+
+        TokenCredential credential = _isDevelopment
+            ? new DefaultAzureCredential(new DefaultAzureCredentialOptions
             {
                 ExcludeManagedIdentityCredential = true
-            }));
+            })
+            : string.IsNullOrWhiteSpace(clientId)
+                ? new ManagedIdentityCredential()
+                : new ManagedIdentityCredential(clientId);
 
         _client = new PersistentAgentsClient(projectEndpoint, credential);
     }

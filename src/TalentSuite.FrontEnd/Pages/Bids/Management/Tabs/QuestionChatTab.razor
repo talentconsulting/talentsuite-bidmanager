@@ -10,7 +10,7 @@
                     class="btn btn-outline-primary"
                     @onclick="OnSubmitChat"
                     disabled="@IsBusy">
-                @(IsBusy ? "Submitting…" : "Submit")
+                @(IsBusy ? "Streaming…" : "Submit")
             </button>
         </div>
 
@@ -19,26 +19,51 @@
                   rows="3"
                   value="@ChatQuestionText"
                   @oninput="e => OnChatQuestionTextChanged.InvokeAsync(e.Value?.ToString())"
+                  disabled="@IsBusy"
                   @onkeydown="OnQuestionKeyDown"></textarea>
 
         <label class="form-label fw-bold mt-3">Response</label>
-        <div class="border rounded p-3 bg-light" style="min-height: 360px; max-height: 540px; overflow: auto;">
-            @if (string.IsNullOrWhiteSpace(Question.ChatResponse))
+        <div class="border rounded p-3 bg-light"
+             id="@ChatScrollContainerId"
+             style="min-height: 360px; max-height: 540px; overflow: auto;">
+            @if (Question.ChatMessages.Count == 0)
             {
-                <div class="text-muted">No response yet.</div>
+                <div class="text-muted">No chat history yet.</div>
             }
             else
             {
-                @((MarkupString)RenderMarkdown(Question.ChatResponse))
+                @foreach (var message in Question.ChatMessages)
+                {
+                    var isAssistant = string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase);
+                    <div class="mb-3">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <div class="small text-muted text-uppercase fw-bold">@message.Role</div>
+                            <div class="small text-muted">@message.CreatedAtUtc.ToLocalTime().ToString("g")</div>
+                        </div>
+                        <div class="border rounded p-3 bg-white">
+                            @if (isAssistant)
+                            {
+                                @((MarkupString)RenderMarkdown(message.Content))
+                            }
+                            else
+                            {
+                                <div style="white-space: pre-wrap;">@message.Content</div>
+                            }
+                        </div>
+                        @if (isAssistant)
+                        {
+                            <div class="mt-2">
+                                <button type="button"
+                                        class="btn btn-outline-secondary btn-sm"
+                                        @onclick="() => OnAddChatToDrafts.InvokeAsync(message.Content)"
+                                        disabled="@(IsDraftBusy || Question.IsChatStreaming)">
+                                    @(IsDraftBusy ? "Adding…" : "Add to drafts")
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
             }
-        </div>
-        <div class="mt-2">
-            <button type="button"
-                    class="btn btn-outline-secondary"
-                    @onclick="OnAddChatToDrafts"
-                    disabled="@IsDraftBusy">
-                @(IsDraftBusy ? "Adding…" : "Add to drafts")
-            </button>
         </div>
     </div>
 </div>
@@ -48,9 +73,10 @@
     [Parameter] public bool IsBusy { get; set; }
     [Parameter] public bool IsDraftBusy { get; set; }
     [Parameter] public string? ChatQuestionText { get; set; }
+    [Parameter] public string ChatScrollContainerId { get; set; } = string.Empty;
     [Parameter] public EventCallback<string?> OnChatQuestionTextChanged { get; set; }
     [Parameter] public EventCallback OnSubmitChat { get; set; }
-    [Parameter] public EventCallback OnAddChatToDrafts { get; set; }
+    [Parameter] public EventCallback<string> OnAddChatToDrafts { get; set; }
 
     private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
         .DisableHtml()

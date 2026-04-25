@@ -1,12 +1,15 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Routing;
+using Microsoft.AspNetCore.Components.WebAssembly.Http;
 using Microsoft.JSInterop;
 using TalentSuite.FrontEnd.Pages.Bids.Management;
 using TalentSuite.FrontEnd.Pages.Bids.Management.Models;
 using TalentSuite.FrontEnd.Services;
+using TalentSuite.Shared;
 using TalentSuite.Shared.Bids;
 using TalentSuite.Shared.Bids.Ai;
 using TalentSuite.Shared.Users;
@@ -25,6 +28,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
     protected bool IsLoading { get; set; }
     protected bool IsBusy { get; set; }
+    protected bool IsChatBusy { get; set; }
     protected string? ErrorText { get; set; }
     protected string? QuestionErrorText { get; set; }
     protected string? UsersErrorText { get; set; }
@@ -66,6 +70,13 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     private async Task SetBusyAsync()
     {
         IsBusy = true;
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+    }
+
+    private async Task SetChatBusyAsync()
+    {
+        IsChatBusy = true;
         await InvokeAsync(StateHasChanged);
         await Task.Yield();
     }
@@ -880,20 +891,48 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(q.Id))
             return;
 
-        await SetBusyAsync();
+        await SetChatBusyAsync();
         QuestionErrorText = null;
 
         try
         {
-            var url = $"api/ai/questions/{Uri.EscapeDataString(q.Id)}";
+            var submittedQuestion = ChatQuestionText ?? string.Empty;
             var payload = new ChatQuestionRequest
             {
                 BidId = Bid.Id,
                 QuestionId = q.Id,
-                FreeTextQuestion = ChatQuestionText ?? string.Empty,
+                FreeTextQuestion = submittedQuestion,
                 ThreadId = q.ChatThreadId
             };
-            var response = await Http.PostAsJsonAsync(url, payload);
+            q.IsChatHistoryLoaded = true;
+            q.IsChatStreaming = true;
+
+            var userMessage = new ChatMessageResponse
+            {
+                Id = Guid.NewGuid().ToString(),
+                Role = "user",
+                Content = submittedQuestion,
+                CreatedAtUtc = DateTimeOffset.UtcNow
+            };
+            var assistantMessage = new ChatMessageResponse
+            {
+                Id = Guid.NewGuid().ToString(),
+                Role = "assistant",
+                Content = string.Empty,
+                CreatedAtUtc = DateTimeOffset.UtcNow.AddMilliseconds(1)
+            };
+
+            q.ChatMessages.Add(userMessage);
+            q.ChatMessages.Add(assistantMessage);
+            await ScrollChatToBottomAsync(q.Id);
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"api/ai/questions/{Uri.EscapeDataString(q.Id)}/stream")
+            {
+                Content = JsonContent.Create(payload)
+            };
+            request.SetBrowserResponseStreamingEnabled(true);
+
+            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -904,21 +943,61 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
                 throw new InvalidOperationException(message);
             }
 
-            var res = await response.Content.ReadFromJsonAsync<ChatQuestionResponse>();
+            await using var stream = await response.Content.ReadAsStreamAsync();
+            using var reader = new StreamReader(stream);
+            while (true)
+            {
+                var line = await reader.ReadLineAsync();
+                if (line is null)
+                    break;
 
-            ActiveQuestion.ChatResponse = res?.Response ?? string.Empty;
-            ActiveQuestion.ChatThreadId = res?.ThreadId;
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                var update = JsonSerializer.Deserialize<ChatStreamUpdate>(line, SerialiserOptions.JsonOptions);
+                if (update is null)
+                    continue;
+
+                if (string.Equals(update.Type, "thread", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(update.ThreadId))
+                {
+                    q.ChatThreadId = update.ThreadId;
+                    continue;
+                }
+
+                if (string.Equals(update.Type, "delta", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(update.Content))
+                {
+                    assistantMessage.Content += update.Content;
+                    q.ChatResponse = assistantMessage.Content;
+                    await InvokeAsync(StateHasChanged);
+                    await ScrollChatToBottomAsync(q.Id);
+                    continue;
+                }
+
+                if (string.Equals(update.Type, "error", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(update.Error ?? "Chat failed.");
+            }
+
             ChatQuestionText = string.Empty;
             ClearDirty("chat-question");
         }
         catch (Exception ex)
         {
             QuestionErrorText = ex.Message;
+            if (q.ChatMessages.Count > 0)
+            {
+                var lastAssistant = q.ChatMessages.LastOrDefault(message => string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase));
+                var lastUser = q.ChatMessages.LastOrDefault(message => string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
+                if (lastAssistant is not null && string.IsNullOrWhiteSpace(lastAssistant.Content))
+                    q.ChatMessages.Remove(lastAssistant);
+                if (lastUser is not null && string.Equals(lastUser.Content, ChatQuestionText, StringComparison.Ordinal))
+                    q.ChatMessages.Remove(lastUser);
+            }
             _ = BannerState.ShowAsync("Could not submit question.");
         }
         finally
         {
-            IsBusy = false;
+            q.IsChatStreaming = false;
+            IsChatBusy = false;
         }
     }
 
@@ -1073,6 +1152,43 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
             return;
 
         ActiveInnerTab = InnerTab.Chat;
+        await LoadChatMessagesAsync();
+    }
+
+    protected async Task LoadChatMessagesAsync(BidQuestionModel? question = null, bool force = false)
+    {
+        var targetQuestion = question ?? ActiveQuestion;
+        if (targetQuestion is null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(targetQuestion.Id))
+            return;
+
+        if (targetQuestion.IsChatHistoryLoaded && !force)
+            return;
+
+        await SetChatBusyAsync();
+        QuestionErrorText = null;
+
+        try
+        {
+            var messages = await ApiClient.GetChatMessagesAsync(BidId, targetQuestion.Id) ?? new List<ChatMessageResponse>();
+            targetQuestion.ChatMessages = messages;
+            targetQuestion.ChatResponse = messages
+                .LastOrDefault(message => string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                ?.Content ?? string.Empty;
+            targetQuestion.IsChatHistoryLoaded = true;
+            await ScrollChatToBottomAsync(targetQuestion.Id);
+        }
+        catch (Exception ex)
+        {
+            QuestionErrorText = ex.Message;
+            _ = BannerState.ShowAsync("Could not load chat history.");
+        }
+        finally
+        {
+            IsChatBusy = false;
+        }
     }
 
     protected async Task ShowFinalAnswerTabAsync()
@@ -1179,12 +1295,12 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         }
     }
 
-    protected async Task AddChatResponseToDraftsAsync(BidQuestionModel q)
+    protected async Task AddChatResponseToDraftsAsync(BidQuestionModel q, string? chatResponse = null)
     {
         if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(q.Id))
             return;
 
-        var text = (q.ChatResponse ?? string.Empty).Trim();
+        var text = (chatResponse ?? q.ChatResponse ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(text))
         {
             _ = BannerState.ShowAsync("Chat response is empty.");
@@ -2057,12 +2173,12 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         }
     }
 
-    protected Task AddActiveChatResponseToDraftsAsync()
+    protected Task AddActiveChatResponseToDraftsAsync(string chatResponse)
     {
         if (ActiveQuestion is null)
             return Task.CompletedTask;
 
-        return AddChatResponseToDraftsAsync(ActiveQuestion);
+        return AddChatResponseToDraftsAsync(ActiveQuestion, chatResponse);
     }
 
     protected static bool TryParseQuestionUserRole(object? value, out QuestionUserRole role)
@@ -2155,6 +2271,16 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     private static string GetDraftDirtyKey(string draftId) => $"draft:{draftId}";
     private static string GetRedReviewDirtyKey(string questionId) => $"red-review:{questionId}";
     private static string GetFinalAnswerDirtyKey(string questionId) => $"final-answer:{questionId}";
+    protected static string GetChatScrollContainerId(string? questionId)
+        => $"chat-scroll-{questionId}";
+
+    private async Task ScrollChatToBottomAsync(string? questionId)
+    {
+        if (string.IsNullOrWhiteSpace(questionId))
+            return;
+
+        await JS.InvokeVoidAsync("bidManage.scrollContainerToBottom", GetChatScrollContainerId(questionId));
+    }
 
     private void MarkDirty(string source)
     {
