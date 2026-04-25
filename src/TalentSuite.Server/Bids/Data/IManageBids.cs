@@ -40,6 +40,17 @@ public interface IManageBids
 
     Task SetChatThreadId(string bidId, string questionId, string userId, string threadId, CancellationToken ct = default);
 
+    Task<List<ChatMessageDataModel>> GetChatMessages(string bidId, string questionId, string userId, CancellationToken ct = default);
+
+    Task AddChatMessage(
+        string bidId,
+        string questionId,
+        string userId,
+        string role,
+        string content,
+        DateTimeOffset createdAtUtc,
+        CancellationToken ct = default);
+
     Task SetBidStatus(string bidId, BidStatus status, CancellationToken ct = default);
 
     Task<BidLibraryPushDataModel> PushBidToLibrary(

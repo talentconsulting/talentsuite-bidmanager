@@ -28,6 +28,16 @@ window.bidManage.scrollToElementById = function (elementId) {
   return true;
 };
 
+window.bidManage.scrollContainerToBottom = function (elementId) {
+  const element = document.getElementById(elementId);
+  if (!element) {
+    return false;
+  }
+
+  element.scrollTop = element.scrollHeight;
+  return true;
+};
+
 window.bidManage._outsideClickHandlers = window.bidManage._outsideClickHandlers || {};
 
 window.bidManage.registerOutsideClick = function (dotNetRef, rootElementId, registrationKey) {

@@ -272,9 +272,10 @@
                         else if (ActiveInnerTab == InnerTab.Chat)
                         {
                             <QuestionChatTab Question="ActiveQuestion"
-                                             IsBusy="IsBusy"
+                                             IsBusy="IsChatBusy"
                                              IsDraftBusy="IsDraftBusy"
                                              ChatQuestionText="@ChatQuestionText"
+                                             ChatScrollContainerId="@GetChatScrollContainerId(ActiveQuestion.Id)"
                                              OnChatQuestionTextChanged="OnChatQuestionTextChangedAsync"
                                              OnSubmitChat="SubmitChatForActiveQuestionAsync"
                                              OnAddChatToDrafts="AddActiveChatResponseToDraftsAsync" />

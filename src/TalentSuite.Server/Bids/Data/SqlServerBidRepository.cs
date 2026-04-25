@@ -486,6 +486,67 @@ public sealed class SqlServerBidRepository : IManageBids
             cancellationToken: ct));
     }
 
+    public async Task<List<ChatMessageDataModel>> GetChatMessages(string bidId, string questionId, string userId, CancellationToken ct = default)
+    {
+        await EnsureSchemaAsync(ct);
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        var rows = await connection.QueryAsync<ChatMessageDataModel>(new CommandDefinition(
+            """
+            SELECT Id, BidId, QuestionId, UserId, Role, Content, CreatedAtUtc
+            FROM dbo.ChatMessages
+            WHERE BidId = @BidId
+              AND QuestionId = @QuestionId
+              AND UserId = @UserId
+            ORDER BY CreatedAtUtc ASC, Id ASC;
+            """,
+            new { BidId = bidId, QuestionId = questionId, UserId = userId },
+            cancellationToken: ct));
+
+        return rows.ToList();
+    }
+
+    public async Task AddChatMessage(
+        string bidId,
+        string questionId,
+        string userId,
+        string role,
+        string content,
+        DateTimeOffset createdAtUtc,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(bidId)
+            || string.IsNullOrWhiteSpace(questionId)
+            || string.IsNullOrWhiteSpace(userId)
+            || string.IsNullOrWhiteSpace(role)
+            || string.IsNullOrWhiteSpace(content))
+            return;
+
+        await EnsureSchemaAsync(ct);
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO dbo.ChatMessages (Id, BidId, QuestionId, UserId, Role, Content, CreatedAtUtc)
+            VALUES (@Id, @BidId, @QuestionId, @UserId, @Role, @Content, @CreatedAtUtc);
+            """,
+            new
+            {
+                Id = Guid.NewGuid().ToString(),
+                BidId = bidId,
+                QuestionId = questionId,
+                UserId = userId,
+                Role = role,
+                Content = content,
+                CreatedAtUtc = createdAtUtc
+            },
+            cancellationToken: ct));
+    }
+
     public async Task SetBidStatus(string bidId, BidStatus status, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(bidId))
@@ -1579,6 +1640,23 @@ public sealed class SqlServerBidRepository : IManageBids
                         UpdatedAtUtc DATETIMEOFFSET(7) NOT NULL,
                         CONSTRAINT PK_ChatThreads PRIMARY KEY (BidId, QuestionId, UserId)
                     );
+                END;
+
+                IF OBJECT_ID(N'dbo.ChatMessages', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.ChatMessages
+                    (
+                        Id NVARCHAR(100) NOT NULL PRIMARY KEY,
+                        BidId NVARCHAR(100) NOT NULL,
+                        QuestionId NVARCHAR(100) NOT NULL,
+                        UserId NVARCHAR(200) NOT NULL,
+                        Role NVARCHAR(20) NOT NULL,
+                        Content NVARCHAR(MAX) NOT NULL,
+                        CreatedAtUtc DATETIMEOFFSET(7) NOT NULL
+                    );
+
+                    CREATE INDEX IX_ChatMessages_BidQuestionUser_CreatedAtUtc
+                        ON dbo.ChatMessages (BidId, QuestionId, UserId, CreatedAtUtc, Id);
                 END;
 
                 IF OBJECT_ID(N'dbo.DocumentIngestionJobs', N'U') IS NULL

@@ -10,6 +10,7 @@ public class InMemoryBidRepository : IManageBids
     private readonly Dictionary<string, List<BidFileDataModel>> _filesForBids = new();
     private readonly Dictionary<string, DocumentIngestionJobDataModel> _documentIngestionJobs = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _chatThreadIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<ChatMessageDataModel>> _chatMessages = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<QuestionAssignmentDataModel>> _usersForQuestions = new();
     private readonly Dictionary<string, List<DraftDataModel>> _draftsForQuestions = new();
     private readonly Dictionary<string, RedReviewDataModel> _redReviewsForQuestions = new();
@@ -288,6 +289,52 @@ public class InMemoryBidRepository : IManageBids
 
         var key = BuildChatThreadKey(bidId, questionId, userId);
         _chatThreadIds[key] = threadId;
+        return Task.CompletedTask;
+    }
+
+    public Task<List<ChatMessageDataModel>> GetChatMessages(string bidId, string questionId, string userId, CancellationToken ct = default)
+    {
+        var key = BuildChatThreadKey(bidId, questionId, userId);
+        if (_chatMessages.TryGetValue(key, out var messages))
+            return Task.FromResult(messages.OrderBy(message => message.CreatedAtUtc).ThenBy(message => message.Id, StringComparer.OrdinalIgnoreCase).ToList());
+
+        return Task.FromResult(new List<ChatMessageDataModel>());
+    }
+
+    public Task AddChatMessage(
+        string bidId,
+        string questionId,
+        string userId,
+        string role,
+        string content,
+        DateTimeOffset createdAtUtc,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(bidId)
+            || string.IsNullOrWhiteSpace(questionId)
+            || string.IsNullOrWhiteSpace(userId)
+            || string.IsNullOrWhiteSpace(role)
+            || string.IsNullOrWhiteSpace(content))
+            return Task.CompletedTask;
+
+        var key = BuildChatThreadKey(bidId, questionId, userId);
+        if (!_chatMessages.TryGetValue(key, out var messages))
+        {
+            messages = new List<ChatMessageDataModel>();
+            _chatMessages[key] = messages;
+        }
+
+        messages.Add(new ChatMessageDataModel
+        {
+            Id = Guid.NewGuid().ToString(),
+            BidId = bidId,
+            QuestionId = questionId,
+            UserId = userId,
+            Role = role,
+            Content = content,
+            CreatedAtUtc = createdAtUtc
+        });
+
         return Task.CompletedTask;
     }
 

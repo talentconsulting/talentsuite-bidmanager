@@ -7,6 +7,7 @@ using TalentSuite.Shared.Messaging;
 using TalentSuite.Shared.Messaging.Events;
 using TalentSuite.Shared.Tasks;
 using TalentSuite.Server.Users.Data;
+using TalentSuite.Shared.Bids.Ai;
 
 namespace TalentSuite.Server.Bids.Services;
 
@@ -42,6 +43,17 @@ public interface IBidService
     Task<string?> GetChatThreadId(string bidId, string questionId, string userId, CancellationToken ct = default);
 
     Task SetChatThreadId(string bidId, string questionId, string userId, string threadId, CancellationToken ct = default);
+
+    Task<List<ChatMessageResponse>> GetChatMessages(string bidId, string questionId, string userId, CancellationToken ct = default);
+
+    Task AddChatMessage(
+        string bidId,
+        string questionId,
+        string userId,
+        string role,
+        string content,
+        DateTimeOffset createdAtUtc,
+        CancellationToken ct = default);
 
     Task SetBidStatus(string bidId, BidStatus status, CancellationToken ct = default);
     Task<BidLibraryPushResponse> PushBidToLibrary(
@@ -291,6 +303,32 @@ public sealed class BidService : IBidService
 
     public Task SetChatThreadId(string bidId, string questionId, string userId, string threadId, CancellationToken ct = default)
         => _repository.SetChatThreadId(bidId, questionId, userId, threadId, ct);
+
+    public async Task<List<ChatMessageResponse>> GetChatMessages(string bidId, string questionId, string userId, CancellationToken ct = default)
+    {
+        var result = await _repository.GetChatMessages(bidId, questionId, userId, ct);
+        return result
+            .OrderBy(message => message.CreatedAtUtc)
+            .ThenBy(message => message.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(message => new ChatMessageResponse
+            {
+                Id = message.Id,
+                Role = message.Role,
+                Content = message.Content,
+                CreatedAtUtc = message.CreatedAtUtc
+            })
+            .ToList();
+    }
+
+    public Task AddChatMessage(
+        string bidId,
+        string questionId,
+        string userId,
+        string role,
+        string content,
+        DateTimeOffset createdAtUtc,
+        CancellationToken ct = default)
+        => _repository.AddChatMessage(bidId, questionId, userId, role, content, createdAtUtc, ct);
 
     public async Task SetBidStatus(string bidId, BidStatus status, CancellationToken ct = default)
     {
