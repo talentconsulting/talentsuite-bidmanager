@@ -32,6 +32,13 @@ public partial class Home
                 .ToList();
         }
     }
+
+    private bool HasActiveStatusFilter
+        => Enum.TryParse<BidStatus>(SelectedStatusFilter, true, out _);
+
+    private bool ShowPagination
+        => Bids.TotalPages > 1
+           && (!HasActiveStatusFilter || FilteredItems.Count >= Bids.PageSize);
     
     // Shows a small window around current page (e.g., 1..5)
     private IEnumerable<int> PageNumbersToShow
