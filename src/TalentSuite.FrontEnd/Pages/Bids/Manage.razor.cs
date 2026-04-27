@@ -175,7 +175,10 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
                 var firstQ = QuestionsInCategory.FirstOrDefault();
                 if (firstQ is not null)
+                {
                     ActiveQuestionId = firstQ.Id;
+                    await SetDefaultInnerTabForCurrentQuestionAsync();
+                }
             }
 
             if (!CanManageQuestionUsers && ActiveInnerTab == InnerTab.Users)
@@ -588,9 +591,11 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
         var first = QuestionsInCategory.FirstOrDefault();
         if (first is not null)
+        {
             ActiveQuestionId = first.Id;
+            await SetDefaultInnerTabForCurrentQuestionAsync();
+        }
 
-        ActiveInnerTab = CanManageQuestionUsers ? InnerTab.Users : InnerTab.Draft;
         QuestionErrorText = null;
     }
 
@@ -601,12 +606,12 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
         ActiveQuestionId = questionId;
         PendingQuestionUserRoles.Clear();
-        ActiveInnerTab = CanManageQuestionUsers ? InnerTab.Users : InnerTab.Draft;
         QuestionErrorText = null;
         DraftErrorText = null;
         ShowNewDraft = false;
         NewDraftText = null;
         ChatQuestionText = null;
+        await SetDefaultInnerTabForCurrentQuestionAsync();
     }
 
     protected Task GoToFinalAnswerFromSummaryAsync(string? questionId)
@@ -737,6 +742,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
         if (string.IsNullOrWhiteSpace(_targetCommentId))
         {
+            await SetDefaultInnerTabForCurrentQuestionAsync();
             _targetApplied = true;
             return;
         }
@@ -1183,12 +1189,52 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         catch (Exception ex)
         {
             QuestionErrorText = ex.Message;
-            _ = BannerState.ShowAsync("Could not load chat history.");
+        _ = BannerState.ShowAsync("Could not load chat history.");
         }
         finally
         {
             IsChatBusy = false;
         }
+    }
+
+    private async Task SetDefaultInnerTabForCurrentQuestionAsync()
+    {
+        var question = ActiveQuestion;
+        if (question is null)
+            return;
+
+        ActiveInnerTab = await DetermineMostProgressedInnerTabAsync(question);
+    }
+
+    private async Task<InnerTab> DetermineMostProgressedInnerTabAsync(BidQuestionModel question)
+    {
+        if (!string.IsNullOrWhiteSpace(question.FinalAnswer))
+            return InnerTab.FinalAnswer;
+
+        if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(question.Id))
+            return GetFallbackInnerTab(question);
+
+        if (!question.IsRedReviewLoaded)
+            await LoadRedReviewAsync();
+
+        if (!string.IsNullOrWhiteSpace(question.RedReviewAnswer))
+            return InnerTab.RedReview;
+
+        if (question.DraftResponses.Count == 0)
+            await LoadQuestionDraftResponsesAsync();
+
+        if (question.DraftResponses.Count > 0)
+            return InnerTab.Draft;
+
+        return GetFallbackInnerTab(question);
+    }
+
+    private InnerTab GetFallbackInnerTab(BidQuestionModel question)
+    {
+        if (CanManageQuestionUsers && question.QuestionAssignments.Count == 0)
+            return InnerTab.Users;
+
+        return InnerTab.Draft;
     }
 
     protected async Task ShowFinalAnswerTabAsync()
