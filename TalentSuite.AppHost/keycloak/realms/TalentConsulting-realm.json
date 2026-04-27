@@ -1,6 +1,20 @@
 {
   "realm": "TalentConsulting",
   "enabled": true,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": false,
+  "smtpServer": {
+    "host": "localhost",
+    "port": "1025",
+    "from": "noreply@talentconsulting.uk",
+    "fromDisplayName": "TalentSuite",
+    "auth": "false",
+    "starttls": "false",
+    "ssl": "false"
+  },
   "roles": {
     "realm": [
       {

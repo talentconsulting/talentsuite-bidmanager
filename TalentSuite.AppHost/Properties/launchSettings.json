@@ -12,7 +12,7 @@
         "TALENTSUITE_INFRA_MODE": "local",
         "ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL": "https://localhost:21115",
         "ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL": "https://localhost:22127",
-        "ASPNETCORE_URLS": ""
+        "ASPNETCORE_URLS": "https://localhost:17077;http://localhost:15073"
       }
     },
     "https-azure": {
