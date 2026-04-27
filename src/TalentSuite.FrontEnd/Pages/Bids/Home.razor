@@ -112,35 +112,38 @@ else
         }
     </div>
 
-    <nav aria-label="Bids pagination">
-        <ul class="pagination">
+    @if (ShowPagination)
+    {
+        <nav aria-label="Bids pagination">
+            <ul class="pagination">
 
-            <li class="page-item @(Bids.CurrentPage <= 1 ? "disabled" : "")">
-                <button class="page-link"
-                        @onclick="PrevPage"
-                        disabled="@(Bids.CurrentPage <= 1)">
-                    ← Prev
-                </button>
-            </li>
-
-            @foreach (var p in PageNumbersToShow)
-            {
-                <li class="page-item @(p == Bids.CurrentPage ? "active" : "")">
+                <li class="page-item @(Bids.CurrentPage <= 1 ? "disabled" : "")">
                     <button class="page-link"
-                            @onclick="(() => GoToPage(p))">
-                        @p
+                            @onclick="PrevPage"
+                            disabled="@(Bids.CurrentPage <= 1)">
+                        ← Prev
                     </button>
                 </li>
-            }
 
-            <li class="page-item @(Bids.CurrentPage >= Bids.TotalPages ? "disabled" : "")">
-                <button class="page-link"
-                        @onclick="NextPage"
-                        disabled="@(Bids.CurrentPage >= Bids.TotalPages)">
-                    Next →
-                </button>
-            </li>
+                @foreach (var p in PageNumbersToShow)
+                {
+                    <li class="page-item @(p == Bids.CurrentPage ? "active" : "")">
+                        <button class="page-link"
+                                @onclick="(() => GoToPage(p))">
+                            @p
+                        </button>
+                    </li>
+                }
 
-        </ul>
-    </nav>
+                <li class="page-item @(Bids.CurrentPage >= Bids.TotalPages ? "disabled" : "")">
+                    <button class="page-link"
+                            @onclick="NextPage"
+                            disabled="@(Bids.CurrentPage >= Bids.TotalPages)">
+                        Next →
+                    </button>
+                </li>
+
+            </ul>
+        </nav>
+    }
 }
