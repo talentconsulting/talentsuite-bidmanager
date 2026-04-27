@@ -88,6 +88,17 @@ public partial class IngestSummary : ComponentBase
             return;
         }
 
+        var missingLength = Model.Response.Questions
+            .Where(q => string.IsNullOrWhiteSpace(q.Length))
+            .ToList();
+
+        if (missingLength.Count > 0)
+        {
+            ErrorText = $"{missingLength.Count} question(s) are missing a Length value. Please fill in the Length field for all questions before saving.";
+            ShowQuestions = true;
+            return;
+        }
+
         IsBusy = true;
         try
         {
