@@ -50,7 +50,7 @@ public sealed class HomePaginationFilteringTests : Bunit.TestContext
             BaseAddress = new Uri("https://localhost")
         });
 
-        var cut = RenderComponent<Home>();
+        var cut = Render<Home>();
 
         cut.WaitForState(() => cut.FindAll("select").Count == 1);
         cut.Find("select").Change("Submitted");
