@@ -1205,6 +1205,13 @@ jobs:
           chmod +x scripts/ci/import-keycloak-realm.sh
           scripts/ci/import-keycloak-realm.sh
 
+      - name: Configure Keycloak SMTP
+        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          chmod +x scripts/ci/configure-keycloak-smtp.sh
+          scripts/ci/configure-keycloak-smtp.sh
+
       - name: Refresh Azure Login (OIDC) before frontend deploy
         if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'frontend') }}
         uses: azure/login@v2
