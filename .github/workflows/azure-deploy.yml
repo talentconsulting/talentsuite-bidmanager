@@ -4,17 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       deployment_mode:
-        description: "Choose whether to provision infrastructure first or only deploy application code."
+        description: 'Choose whether to provision infrastructure first or only deploy application code.'
         required: true
-        default: "infra-and-apps"
+        default: 'infra-and-apps'
         type: choice
         options:
           - infra-and-apps
           - apps-only
       deploy_target:
-        description: "Choose which application component to deploy."
+        description: 'Choose which application component to deploy.'
         required: true
-        default: "all"
+        default: 'all'
         type: choice
         options:
           - all
@@ -38,12 +38,12 @@ jobs:
       AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZD_WORKING_DIR: "."
-      DOTNET_LAUNCH_PROFILE: "https-azure"
-      TALENTSUITE_FORCE_AZURE_INFRA: "true"
+      AZD_WORKING_DIR: '.'
+      DOTNET_LAUNCH_PROFILE: 'https-azure'
+      TALENTSUITE_FORCE_AZURE_INFRA: 'true'
 
       # ---- AppHost mode switch ----
-      TALENTSUITE_INFRA_MODE: "azure"
+      TALENTSUITE_INFRA_MODE: 'azure'
 
       # ---- App configuration (non-secret) ----
       AuthenticationEnabled: ${{ vars.AUTHENTICATION_ENABLED }}
@@ -98,7 +98,7 @@ jobs:
       - name: Setup azd
         uses: Azure/setup-azd@v2
         with:
-          version: 1.23.14
+          version: 1.24.2
 
       - name: Enable azd operations alpha feature
         run: |

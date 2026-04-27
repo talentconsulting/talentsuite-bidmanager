@@ -18,10 +18,10 @@ jobs:
       AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZD_WORKING_DIR: "."
-      DOTNET_LAUNCH_PROFILE: "https-azure"
-      TALENTSUITE_FORCE_AZURE_INFRA: "true"
-      TALENTSUITE_INFRA_MODE: "azure"
+      AZD_WORKING_DIR: '.'
+      DOTNET_LAUNCH_PROFILE: 'https-azure'
+      TALENTSUITE_FORCE_AZURE_INFRA: 'true'
+      TALENTSUITE_INFRA_MODE: 'azure'
 
       AuthenticationEnabled: ${{ vars.AUTHENTICATION_ENABLED }}
       UseInMemoryData: ${{ vars.USE_IN_MEMORY_DATA }}
@@ -73,7 +73,7 @@ jobs:
       - name: Setup azd
         uses: Azure/setup-azd@v2
         with:
-          version: 1.23.14
+          version: 1.24.2
 
       - name: Validate required inputs
         run: |
@@ -169,7 +169,7 @@ jobs:
       - name: Pre-sync Container App secrets from GitHub secrets to Key Vault refs
         working-directory: ${{ env.AZD_WORKING_DIR }}
         env:
-          EXCLUDE_CONTAINERAPPS: "keycloak,grafana"
+          EXCLUDE_CONTAINERAPPS: 'keycloak,grafana'
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
@@ -231,7 +231,7 @@ jobs:
         if: ${{ success() }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         env:
-          EXCLUDE_CONTAINERAPPS: "keycloak,grafana"
+          EXCLUDE_CONTAINERAPPS: 'keycloak,grafana'
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
