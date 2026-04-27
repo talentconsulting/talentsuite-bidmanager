@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TalentSuite.Server.Bids.Services;
 using TalentSuite.Server;
+using TalentSuite.Shared.Bids.Ai;
 using TalentSuite.Shared.Messaging;
 using TalentSuite.Server.Users.Services;
 

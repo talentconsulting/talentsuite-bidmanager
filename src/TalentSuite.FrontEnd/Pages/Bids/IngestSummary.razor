@@ -193,8 +193,14 @@ else
                                                     </div>
 
                                                     <div class="col-md-2">
-                                                        <label class="form-label mb-1">Length</label>
-                                                        <InputText class="form-control"
+                                                        <label class="form-label mb-1">
+                                                            Length
+                                                            @if (string.IsNullOrWhiteSpace(q.Length))
+                                                            {
+                                                                <span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem">required</span>
+                                                            }
+                                                        </label>
+                                                        <InputText class="@($"form-control {(string.IsNullOrWhiteSpace(q.Length) ? "border-warning" : "")}")"
                                                                    @bind-Value="q.Length" />
                                                     </div>
 
