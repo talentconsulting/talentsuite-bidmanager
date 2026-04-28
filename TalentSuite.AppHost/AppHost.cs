@@ -12,6 +12,9 @@ using Azure.Provisioning.Expressions;
 var builder = DistributedApplication.CreateBuilder(args);
 const string InfrastructureModeVariable = "TALENTSUITE_INFRA_MODE";
 const string ForceAzureInfrastructureVariable = "TALENTSUITE_FORCE_AZURE_INFRA";
+
+var local = builder.ExecutionContext.IsRunMode;
+
 var infrastructureMode = Environment.GetEnvironmentVariable(InfrastructureModeVariable)
                          ?? "local";
 var forceAzureInfrastructure = string.Equals(
@@ -152,11 +155,11 @@ var keycloakContainerDbPassword = keycloakDbPassword;
 var keycloak = builder.AddKeycloak(
             "keycloak",
             adminPassword: keycloakContainerAdminPassword,
-            port: useLocalInfrastructure ? null : 80)
+            port: local ? null : 80)
     .WithEnvironment("KC_DB", "mssql");
 var keycloakHttpEndpoint = keycloak.Resource.GetEndpoint("http");
 
-if (useLocalInfrastructure)
+if (local)
 {
     keycloak.WithRealmImport("./keycloak/realms");
 }
@@ -176,7 +179,7 @@ else
         });
 }
 var messaging = builder.AddAzureServiceBus("messaging");
-if (useLocalInfrastructure)
+if (local)
 {
     messaging.RunAsEmulator();
 }
@@ -185,20 +188,20 @@ messaging.AddServiceBusQueue("invite-user");
 messaging.AddServiceBusQueue("bid-submitted");
 messaging.AddServiceBusQueue("comment-saved-with-mentions");
 var storage = builder.AddAzureStorage("storage");
-if (useLocalInfrastructure)
+if (local)
 {
     storage.RunAsEmulator(emulator => emulator
         .WithDataVolume("talentsuite-azurite-data", isReadOnly: false));
 }
 
-var bidStorage = useLocalInfrastructure
+var bidStorage = local
     ? storage.AddBlobs("bidstorage")
     : builder.AddAzureStorage("bidcontentstorage").AddBlobs("bidstorage");
 IResourceBuilder<ProjectResource> server;
 IResourceBuilder<AzureSqlServerResource>? sql = null;
 IResourceBuilder<AzureContainerAppEnvironmentResource>? defaultAcaEnvironment = null;
 IResourceBuilder<AzureContainerAppEnvironmentResource>? privateAcaEnvironment = null;
-if (useLocalInfrastructure)
+if (local)
 {
     var localSql = builder.AddSqlServer("sql", password: sqlPassword, port: 14330)
         .WithDataVolume("talentsuite-sql-data", isReadOnly: false);
@@ -298,7 +301,7 @@ else
         .WithEnvironment("KC_DB_PASSWORD", keycloakContainerDbPassword)
         .WithComputeEnvironment(privateAcaEnvironment)
         .WaitFor(keycloakDb);
-    
+
     server = builder.AddProject<TalentSuite_Server>("talentserver")
         .WithReference(appDb)
         .WithReference(keycloak)
@@ -339,7 +342,7 @@ var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
     .WaitFor(messaging)
     .WaitFor(server);
 
-if (!useLocalInfrastructure)
+if (!local)
 {
     functions.WithComputeEnvironment(privateAcaEnvironment!);
 }
@@ -365,7 +368,7 @@ var grafana = builder.AddDockerfile("grafana", "../ops/grafana")
     .WithEnvironment("GRAFANA_AZURE_MONITOR_SUBSCRIPTION_ID", grafanaAzureMonitorSubscriptionId);
 var grafanaHttpEndpoint = grafana.GetEndpoint("http");
 
-if (useLocalInfrastructure)
+if (local)
 {
     grafana
         .WithEnvironment("GF_SERVER_ROOT_URL", grafanaHttpEndpoint)
@@ -424,13 +427,13 @@ else
         });
 }
 
-if (!useLocalInfrastructure)
+if (!local)
 {
     server.WithRoleAssignments(messaging, ServiceBusBuiltInRole.AzureServiceBusDataSender);
     functions.WithRoleAssignments(messaging, ServiceBusBuiltInRole.AzureServiceBusDataReceiver);
 }
 
-if (useLocalInfrastructure)
+if (local)
 {
     builder.AddProject<TalentSuite_FrontEnd>("talentfrontend")
         .WithEnvironment("AUTHENTICATION_ENABLED", authenticationEnabled)
