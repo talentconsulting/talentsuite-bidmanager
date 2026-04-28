@@ -1153,7 +1153,7 @@ jobs:
             --set publicNetworkAccess=Disabled >/dev/null
 
       - name: Wait for keycloak healthy
-        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
+        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
         run: |
           set -euo pipefail
 
@@ -1206,7 +1206,7 @@ jobs:
           scripts/ci/import-keycloak-realm.sh
 
       - name: Configure Keycloak SMTP
-        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
+        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           chmod +x scripts/ci/configure-keycloak-smtp.sh
