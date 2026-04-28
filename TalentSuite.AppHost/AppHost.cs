@@ -10,19 +10,8 @@ using Azure.Provisioning;
 using Azure.Provisioning.Expressions;
 
 var builder = DistributedApplication.CreateBuilder(args);
-const string InfrastructureModeVariable = "TALENTSUITE_INFRA_MODE";
-const string ForceAzureInfrastructureVariable = "TALENTSUITE_FORCE_AZURE_INFRA";
 
 var local = builder.ExecutionContext.IsRunMode;
-
-var infrastructureMode = Environment.GetEnvironmentVariable(InfrastructureModeVariable)
-                         ?? "local";
-var forceAzureInfrastructure = string.Equals(
-    Environment.GetEnvironmentVariable(ForceAzureInfrastructureVariable),
-    "true",
-    StringComparison.OrdinalIgnoreCase);
-var useLocalInfrastructure = !forceAzureInfrastructure
-    && string.Equals(infrastructureMode, "local", StringComparison.OrdinalIgnoreCase);
 
 var keycloakPassword = builder.AddParameter(
                                 "KeycloakPassword",
@@ -236,8 +225,14 @@ if (local)
 }
 else
 {
-    defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev");
-    _ = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
+    var logAnalytics = builder.AddAzureLogAnalyticsWorkspace("log-analytics");
+    var appInsights = builder.AddAzureApplicationInsights("talentbidmanager-insights")
+        .WithLogAnalyticsWorkspace(logAnalytics);
+    // Azure Container Registry
+    var acr = builder.AddAzureContainerRegistry("TalentSuite-ACR");
+
+    //defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev");
+    //_ = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
 
     sql = builder.AddAzureSqlServer("sql")
         .ConfigureInfrastructure(infra =>
@@ -277,7 +272,10 @@ else
         .WithParameter("sqlServerName", sql.Resource.NameOutputReference);
     var privateNetwork = builder.AddBicepTemplate("private-network", "Infrastructure/private-network.bicep")
         .WithParameter("sqlServerName", sql.Resource.NameOutputReference);
+
     privateAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev-private")
+        .WithAzureLogAnalyticsWorkspace(logAnalytics)
+        .WithAzureContainerRegistry(acr)
         .ConfigureInfrastructure(infra =>
         {
             var containerAppEnvironment = infra.GetProvisionableResources()
@@ -306,6 +304,7 @@ else
         .WithReference(appDb)
         .WithReference(keycloak)
         .WithReference(messaging)
+        .WithReference(appInsights)
         .WithEnvironment("AUTHENTICATION_ENABLED", authenticationEnabled)
         .WithEnvironment("USE_IN_MEMORY_DATA", useInMemoryData)
         .WithEnvironment("AzureServiceBus__InviteUserEntityName", "invite-user")
