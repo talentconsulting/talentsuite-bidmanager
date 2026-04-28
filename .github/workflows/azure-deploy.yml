@@ -1159,23 +1159,26 @@ jobs:
 
           resource_group="rg-${AZURE_ENV_NAME}"
 
-          for _ in $(seq 1 60); do
+          for _ in $(seq 1 30); do
             latest_revision="$(az containerapp show \
               --name keycloak \
               --resource-group "$resource_group" \
               --query properties.latestRevisionName -o tsv)"
+            echo "Latest revision: $latest_revision"
 
             running_state="$(az containerapp revision show \
               --name keycloak \
               --resource-group "$resource_group" \
               --revision "$latest_revision" \
               --query properties.runningState -o tsv 2>/dev/null || true)"
+            echo "Running state: $running_state"
 
             health_state="$(az containerapp revision show \
               --name keycloak \
               --resource-group "$resource_group" \
               --revision "$latest_revision" \
               --query properties.healthState -o tsv 2>/dev/null || true)"
+            echo "Health state: $health_state"
 
             if [ "$running_state" = "Running" ] && [ "$health_state" = "Healthy" ]; then
               keycloak_fqdn="$(az containerapp show \
@@ -1184,13 +1187,14 @@ jobs:
                 --query properties.configuration.ingress.fqdn -o tsv)"
 
               echo "Checking Keycloak health at: https://${keycloak_fqdn}/realms/master/.well-known/openid-configuration"
+              
               if [ -n "$keycloak_fqdn" ] && curl -fsS "https://${keycloak_fqdn}/realms/master/.well-known/openid-configuration" >/dev/null 2>&1; then
                 echo "Keycloak is healthy at https://${keycloak_fqdn}"
                 exit 0
               fi
             fi
             
-            sleep 30
+            sleep 10
           done
 
           echo "Keycloak did not become healthy in time"
