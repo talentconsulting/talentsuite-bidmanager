@@ -1159,7 +1159,7 @@ jobs:
 
           resource_group="rg-${AZURE_ENV_NAME}"
 
-          for _ in $(seq 1 30); do
+          for _ in $(seq 1 60); do
             latest_revision="$(az containerapp show \
               --name keycloak \
               --resource-group "$resource_group" \
@@ -1188,7 +1188,7 @@ jobs:
               fi
             fi
 
-            sleep 10
+            sleep 30
           done
 
           echo "Keycloak did not become healthy in time"
