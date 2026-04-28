@@ -145,7 +145,8 @@ var keycloak = builder.AddKeycloak(
             "keycloak",
             adminPassword: keycloakContainerAdminPassword,
             port: local ? null : 80)
-    .WithEnvironment("KC_DB", "mssql");
+    .WithEnvironment("KC_DB", "mssql")
+    .WithOtlpExporter();
 var keycloakHttpEndpoint = keycloak.Resource.GetEndpoint("http");
 
 if (local)
@@ -186,26 +187,78 @@ if (local)
 var bidStorage = local
     ? storage.AddBlobs("bidstorage")
     : builder.AddAzureStorage("bidcontentstorage").AddBlobs("bidstorage");
-IResourceBuilder<ProjectResource> server;
-IResourceBuilder<AzureSqlServerResource>? sql = null;
-IResourceBuilder<AzureContainerAppEnvironmentResource>? defaultAcaEnvironment = null;
+
+#region MsSqlServer
+
+var msSql = builder.AddAzureSqlServer("sql");
+
+var appDb = msSql.AddDatabase("talentconsultingdb");
+var keycloakDb = msSql.AddDatabase("keycloakdb");
+
+#endregion
+
+#region Apps
+
+var server = builder.AddProject<TalentSuite_Server>("talentserver");
+
+var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
+    .WithReference(server)
+    .WithReference(bidStorage)
+    .WithEnvironment("WEBSITES_PORT", "8080")
+    .WithEnvironment("ASPNETCORE_URLS", "http://+:8080")
+    .WithEnvironment("InviteEmail__Enabled", inviteEmailEnabled)
+    .WithEnvironment("InviteEmail__FrontendBaseUrl", "https://localhost:5173")
+    .WithEnvironment("InviteEmail__FromEmail", inviteFromEmail)
+    .WithEnvironment("InviteEmail__FromDisplayName", "TalentSuite")
+    .WithEnvironment("InviteEmail__SmtpHost", inviteSmtpHost)
+    .WithEnvironment("InviteEmail__SmtpPort", inviteSmtpPort)
+    .WithEnvironment("InviteEmail__SmtpEnableSsl", inviteSmtpEnableSsl)
+    .WithEnvironment("InviteEmail__SmtpUsername", inviteSmtpUsername)
+    .WithEnvironment("InviteEmail__SmtpPassword", inviteSmtpPassword)
+    .WithEnvironment("GoogleDriveSync__Enabled", googleDriveSyncEnabled)
+    .WithEnvironment("GoogleDriveSync__SourceContainerName", googleDriveSyncSourceContainerName)
+    .WithEnvironment("GoogleDriveSync__DriveFolderId", googleDriveSyncDriveFolderId)
+    .WithEnvironment("GoogleDriveSync__ServiceAccountJsonBase64", googleDriveSyncServiceAccountJsonBase64)
+    .WaitFor(messaging)
+    .WaitFor(server);
+
+//if (!useLocalInfrastructure)
+//{
+//    functions.WithComputeEnvironment(privateAcaEnvironment!);
+//}
+
+#endregion
+
+//IResourceBuilder<ProjectResource> server;
+//IResourceBuilder<AzureSqlServerResource>? sql = null;
+//IResourceBuilder<AzureContainerAppEnvironmentResource>? defaultAcaEnvironment = null;
 IResourceBuilder<AzureContainerAppEnvironmentResource>? privateAcaEnvironment = null;
 if (local)
 {
-    var localSql = builder.AddSqlServer("sql", password: sqlPassword, port: 14330)
-        .WithDataVolume("talentsuite-sql-data", isReadOnly: false);
-    var appDb = localSql.AddDatabase("talentconsultingdb");
-    var keycloakDb = localSql.AddDatabase("keycloakdb");
+    // var localSql = builder.AddSqlServer("sql", password: sqlPassword, port: 14330)
+    //     .WithDataVolume("talentsuite-sql-data", isReadOnly: false);
+    // var appDb = localSql.AddDatabase("talentconsultingdb");
+    // var keycloakDb = localSql.AddDatabase("keycloakdb");
+
+    msSql.RunAsContainer(opt =>
+    {
+        opt.WithImage("mssql/server:2022-latest")
+           .WithImagePullPolicy(ImagePullPolicy.Always)
+           .WithDataVolume("talentsuite-sql-data")
+           .WithLifetime(ContainerLifetime.Persistent)
+           .WithHostPort(14330)
+           .WithIconName("DatabaseColor")
+           .WithPassword(sqlPassword);
+    });
 
     keycloak
-        .WithEnvironment("KC_DB_URL",
-            "jdbc:sqlserver://sql:1433;databaseName=keycloakdb;encrypt=false;trustServerCertificate=true")
+        .WithEnvironment("KC_DB_URL", keycloakDb.Resource.JdbcConnectionString)
+        //"jdbc:sqlserver://sql:1433;databaseName=keycloakdb;encrypt=false;trustServerCertificate=true")
         .WithEnvironment("KC_DB_USERNAME", "sa")
         .WithEnvironment("KC_DB_PASSWORD", sqlPassword)
         .WaitFor(keycloakDb);
 
-    server = builder.AddProject<TalentSuite_Server>("talentserver")
-        .WithReference(appDb)
+    server.WithReference(appDb)
         .WithReference(keycloak)
         .WithReference(messaging)
         .WithEnvironment("KEYCLOAK_HTTP", keycloakHttpEndpoint)
@@ -229,12 +282,14 @@ else
     var appInsights = builder.AddAzureApplicationInsights("talentbidmanager-insights")
         .WithLogAnalyticsWorkspace(logAnalytics);
     // Azure Container Registry
-    var acr = builder.AddAzureContainerRegistry("TalentSuite-ACR");
+    var acr = builder.AddAzureContainerRegistry("TalentSuite-ACR")
+                     .WithPurgeTask("0 1 * * *", ago: TimeSpan.FromDays(7), keep: 5);
 
     //defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev");
     //_ = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
 
-    sql = builder.AddAzureSqlServer("sql")
+    //sql = builder.AddAzureSqlServer("sql")
+    msSql
         .ConfigureInfrastructure(infra =>
         {
             var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
@@ -268,10 +323,11 @@ else
                 };
             }
         });
+
     _ = builder.AddBicepTemplate("sql-connection-policy", "Infrastructure/sql-connection-policy.bicep")
-        .WithParameter("sqlServerName", sql.Resource.NameOutputReference);
+        .WithParameter("sqlServerName", msSql.Resource.NameOutputReference);
     var privateNetwork = builder.AddBicepTemplate("private-network", "Infrastructure/private-network.bicep")
-        .WithParameter("sqlServerName", sql.Resource.NameOutputReference);
+        .WithParameter("sqlServerName", msSql.Resource.NameOutputReference);
 
     privateAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev-private")
         .WithAzureLogAnalyticsWorkspace(logAnalytics)
@@ -289,8 +345,8 @@ else
                     .AsProvisioningParameter(infra, "acaInfrastructureSubnetId")
             };
         });
-    var appDb = sql.AddDatabase("talentconsultingdb");
-    var keycloakDb = sql.AddDatabase("keycloakdb");
+    // var appDb = sql.AddDatabase("talentconsultingdb");
+    // var keycloakDb = sql.AddDatabase("keycloakdb");
 
     keycloak
         .WithEnvironment("KC_DB_URL", keycloakDb.Resource.JdbcConnectionString)
@@ -300,7 +356,7 @@ else
         .WithComputeEnvironment(privateAcaEnvironment)
         .WaitFor(keycloakDb);
 
-    server = builder.AddProject<TalentSuite_Server>("talentserver")
+    server
         .WithReference(appDb)
         .WithReference(keycloak)
         .WithReference(messaging)
@@ -318,33 +374,37 @@ else
         .WithComputeEnvironment(privateAcaEnvironment)
         .WaitFor(appDb)
         .WaitFor(keycloak);
+
+    functions
+        .WithReference(appInsights)
+        .WithComputeEnvironment(privateAcaEnvironment!);
 }
 
-var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
-    .WithReference(server)
-    .WithReference(bidStorage)
-    .WithEnvironment("WEBSITES_PORT", "8080")
-    .WithEnvironment("ASPNETCORE_URLS", "http://+:8080")
-    .WithEnvironment("InviteEmail__Enabled", inviteEmailEnabled)
-    .WithEnvironment("InviteEmail__FrontendBaseUrl", "https://localhost:5173")
-    .WithEnvironment("InviteEmail__FromEmail", inviteFromEmail)
-    .WithEnvironment("InviteEmail__FromDisplayName", "TalentSuite")
-    .WithEnvironment("InviteEmail__SmtpHost", inviteSmtpHost)
-    .WithEnvironment("InviteEmail__SmtpPort", inviteSmtpPort)
-    .WithEnvironment("InviteEmail__SmtpEnableSsl", inviteSmtpEnableSsl)
-    .WithEnvironment("InviteEmail__SmtpUsername", inviteSmtpUsername)
-    .WithEnvironment("InviteEmail__SmtpPassword", inviteSmtpPassword)
-    .WithEnvironment("GoogleDriveSync__Enabled", googleDriveSyncEnabled)
-    .WithEnvironment("GoogleDriveSync__SourceContainerName", googleDriveSyncSourceContainerName)
-    .WithEnvironment("GoogleDriveSync__DriveFolderId", googleDriveSyncDriveFolderId)
-    .WithEnvironment("GoogleDriveSync__ServiceAccountJsonBase64", googleDriveSyncServiceAccountJsonBase64)
-    .WaitFor(messaging)
-    .WaitFor(server);
+// var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
+//     .WithReference(server)
+//     .WithReference(bidStorage)
+//     .WithEnvironment("WEBSITES_PORT", "8080")
+//     .WithEnvironment("ASPNETCORE_URLS", "http://+:8080")
+//     .WithEnvironment("InviteEmail__Enabled", inviteEmailEnabled)
+//     .WithEnvironment("InviteEmail__FrontendBaseUrl", "https://localhost:5173")
+//     .WithEnvironment("InviteEmail__FromEmail", inviteFromEmail)
+//     .WithEnvironment("InviteEmail__FromDisplayName", "TalentSuite")
+//     .WithEnvironment("InviteEmail__SmtpHost", inviteSmtpHost)
+//     .WithEnvironment("InviteEmail__SmtpPort", inviteSmtpPort)
+//     .WithEnvironment("InviteEmail__SmtpEnableSsl", inviteSmtpEnableSsl)
+//     .WithEnvironment("InviteEmail__SmtpUsername", inviteSmtpUsername)
+//     .WithEnvironment("InviteEmail__SmtpPassword", inviteSmtpPassword)
+//     .WithEnvironment("GoogleDriveSync__Enabled", googleDriveSyncEnabled)
+//     .WithEnvironment("GoogleDriveSync__SourceContainerName", googleDriveSyncSourceContainerName)
+//     .WithEnvironment("GoogleDriveSync__DriveFolderId", googleDriveSyncDriveFolderId)
+//     .WithEnvironment("GoogleDriveSync__ServiceAccountJsonBase64", googleDriveSyncServiceAccountJsonBase64)
+//     .WaitFor(messaging)
+//     .WaitFor(server);
 
-if (!local)
-{
-    functions.WithComputeEnvironment(privateAcaEnvironment!);
-}
+// if (!local)
+// {
+//     functions.WithComputeEnvironment(privateAcaEnvironment!);
+// }
 
 var grafana = builder.AddDockerfile("grafana", "../ops/grafana")
     .WithHttpEndpoint(targetPort: 3000, name: "http")
