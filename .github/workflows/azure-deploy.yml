@@ -1183,11 +1183,13 @@ jobs:
                 --resource-group "$resource_group" \
                 --query properties.configuration.ingress.fqdn -o tsv)"
 
+              echo "Checking Keycloak health at: https://${keycloak_fqdn}/realms/master/.well-known/openid-configuration"
               if [ -n "$keycloak_fqdn" ] && curl -fsS "https://${keycloak_fqdn}/realms/master/.well-known/openid-configuration" >/dev/null 2>&1; then
+                echo "Keycloak is healthy at https://${keycloak_fqdn}"
                 exit 0
               fi
             fi
-
+            
             sleep 30
           done
 
