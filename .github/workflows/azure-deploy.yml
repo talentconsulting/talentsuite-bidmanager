@@ -1180,7 +1180,7 @@ jobs:
               --query properties.healthState -o tsv 2>/dev/null || true)"
             echo "Health state: $health_state"
 
-            if [ "$running_state" = "Running" ] && [ "$health_state" = "Healthy" ]; then
+            if { [ "$running_state" = "Running" ] || [ "$running_state" = "RunningAtMaxScale" ]; } && [ "$health_state" = "Healthy" ]; then
               keycloak_fqdn="$(az containerapp show \
                 --name keycloak \
                 --resource-group "$resource_group" \
