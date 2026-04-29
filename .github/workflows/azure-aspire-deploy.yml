@@ -48,14 +48,22 @@ jobs:
     env:
       # ---- azd / Azure context ----
       AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
-      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      #AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+
+      #AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      Azure__Location: ${{ vars.AZURE_LOCATION }}
+      Azure__SubscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }} 
+      Azure__ResourceGroup: ${{ vars.AZURE_RESOURCE_GROUP }}
       AZD_WORKING_DIR: '.'
       DOTNET_LAUNCH_PROFILE: 'https-azure'
       TALENTSUITE_FORCE_AZURE_INFRA: 'true'
 
       # ---- AppHost mode switch ----
       TALENTSUITE_INFRA_MODE: 'azure'
+
+      # --- Aspire CLI configuration ----
+        Parameters__keycloakAdminUsername: ${{ vars.KEYCLOAK_ADMIN_USERNAME }}
+        Parameters__keycloakAdminPassword: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
 
       # ---- App configuration (non-secret) ----
       AuthenticationEnabled: ${{ vars.AUTHENTICATION_ENABLED }}
@@ -136,4 +144,4 @@ jobs:
 
       - name: Aspire Do
         run: |
-          aspire do diagnostics
+          aspire do diagnostics --environment ${{ inputs.environment }}
