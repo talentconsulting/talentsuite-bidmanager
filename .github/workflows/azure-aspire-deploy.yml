@@ -53,7 +53,8 @@ jobs:
       #AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       Azure__Location: ${{ vars.AZURE_LOCATION }}
       Azure__SubscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      Azure__ResourceGroup: ${{ vars.AZURE_RESOURCE_GROUP }}
+      Azure__ResourceGroup: 'rg-talentsuite-${{ inputs.environment }}'
+
       AZD_WORKING_DIR: '.'
       DOTNET_LAUNCH_PROFILE: 'https-azure'
       TALENTSUITE_FORCE_AZURE_INFRA: 'true'
@@ -64,15 +65,46 @@ jobs:
       # --- Aspire CLI configuration ----
       Parameters__keycloakAdminUsername: ${{ vars.KEYCLOAK_ADMIN_USERNAME }}
       Parameters__keycloakAdminPassword: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+      Parameters__SqlPassword: ${{ secrets.SQL_PASSWORD }}
+      Parameters__KeycloakDbUsername: ${{ vars.KEYCLOAK_DB_USERNAME }}
+      Parameters__KeycloakDbPassword: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
+      Parameters__AuthenticationEnabled: ${{ vars.AUTHENTICATION_ENABLED }}
+      Parameters__UseInMemoryData: ${{ vars.USE_IN_MEMORY_DATA }}
+      Parameters__InviteEmailEnabled: ${{ vars.INVITE_EMAIL_ENABLED }}
+      Parameters__InviteFromEmail: ${{ vars.INVITE_FROM_EMAIL }}
+      Parameters__InviteSmtpHost: ${{ vars.INVITE_SMTP_HOST }}
+      Parameters__InviteSmtpPort: ${{ vars.INVITE_SMTP_PORT }}
+      Parameters__InviteSmtpEnableSsl: ${{ vars.INVITE_SMTP_ENABLE_SSL }}
+      Parameters__InviteSmtpUsername: ${{ vars.INVITE_SMTP_USERNAME }}
+      Parameters__InviteSmtpPassword: ${{ secrets.INVITE_SMTP_PASSWORD }}
+      Parameters__GoogleDriveSyncEnabled: ${{ vars.GOOGLE_DRIVE_SYNC_ENABLED }}
+      Parameters__GoogleDriveSyncSourceContainerName: ${{ vars.GOOGLE_DRIVE_SYNC_SOURCE_CONTAINER_NAME }}
+      Parameters__GoogleDriveSyncDriveFolderId: ${{ vars.GOOGLE_DRIVE_SYNC_DRIVE_FOLDER_ID }}
+      Parameters__GoogleDriveSyncServiceAccountJsonBase64: ${{ secrets.GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64 }}
+      Parameters__DocumentIntelligenceEndpoint: ${{ vars.DOCUMENT_INTELLIGENCE_ENDPOINT }}
+      Parameters__DocumentIntelligenceApiKey: ${{ secrets.DOCUMENT_INTELLIGENCE_API_KEY }}
+      Parameters__AzureOpenAIEndpoint: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+      Parameters__AzureOpenAIApiKey: ${{ secrets.AZURE_OPENAI_API_KEY }}
+      Parameters__AzureOpenAIChatDeployment: ${{ vars.AZURE_OPENAI_CHAT_DEPLOYMENT }}
+      Parameters__AzureAIFoundryProjectEndpoint: ${{ vars.AZURE_AI_FOUNDRY_PROJECT_ENDPOINT }}
+      Parameters__AgentsAgentId: ${{ vars.AGENTS_AGENT_ID }}
+      Parameters__FrontendPublicOrigin: ${{ vars.FRONTEND_PUBLIC_ORIGIN }}
+      Parameters__ApiPublicOrigin: ${{ vars.API_PUBLIC_ORIGIN }}
+      Parameters__KeycloakPublicOrigin: ${{ vars.KEYCLOAK_PUBLIC_ORIGIN }}
+      Parameters__GrafanaEntraEnabled: ${{ vars.GRAFANA_ENTRA_ENABLED }}
+      Parameters__GrafanaEntraClientId: ${{ vars.GRAFANA_ENTRA_CLIENT_ID }}
+      Parameters__GrafanaEntraTenantId: ${{ vars.GRAFANA_ENTRA_TENANT_ID }}
+      Parameters__GrafanaPublicOrigin: ${{ vars.GRAFANA_PUBLIC_ORIGIN }}
+      Parameters__GrafanaAzureMonitorSubscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       # ---- App configuration (non-secret) ----
-      AuthenticationEnabled: ${{ vars.AUTHENTICATION_ENABLED }}
+      #AuthenticationEnabled: ${{ vars.AUTHENTICATION_ENABLED }}
       ApiPublicOrigin: ${{ vars.API_PUBLIC_ORIGIN }}
-      UseInMemoryData: ${{ vars.USE_IN_MEMORY_DATA }}
+      #UseInMemoryData: ${{ vars.USE_IN_MEMORY_DATA }}
       KeycloakClientId: ${{ vars.KEYCLOAK_CLIENT_ID }}
-      KeycloakDbUsername: ${{ vars.KEYCLOAK_DB_USERNAME }}
+      #KeycloakDbUsername: ${{ vars.KEYCLOAK_DB_USERNAME }}
       KeyVaultName: ${{ vars.KEY_VAULT_NAME }}
-      InviteEmailEnabled: ${{ vars.INVITE_EMAIL_ENABLED }}
+      #InviteEmailEnabled: ${{ vars.INVITE_EMAIL_ENABLED }}
       InviteFromEmail: ${{ vars.INVITE_FROM_EMAIL }}
       InviteSmtpHost: ${{ vars.INVITE_SMTP_HOST }}
       InviteSmtpPort: ${{ vars.INVITE_SMTP_PORT }}
