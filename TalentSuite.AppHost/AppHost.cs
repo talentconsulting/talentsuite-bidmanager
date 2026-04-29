@@ -18,11 +18,11 @@ var keycloakPassword = builder.AddParameter(
                                 value: "admin",
                                 secret: true,
                                 publishValueAsDefault: false);
-var keycloakPasswordPlaceholder = builder.AddParameter(
-                                "KeycloakPasswordPlaceholder",
-                                value: "placeholder-keycloak-admin-password",
-                                secret: false,
-                                publishValueAsDefault: true);
+// var keycloakPasswordPlaceholder = builder.AddParameter(
+//                                 "KeycloakPasswordPlaceholder",
+//                                 value: "placeholder-keycloak-admin-password",
+//                                 secret: false,
+//                                 publishValueAsDefault: true);
 var sqlPassword = builder.AddParameter(
                                 "SqlPassword",
                                 value: "Your_strong_password123!",
@@ -38,11 +38,11 @@ var keycloakDbPassword = builder.AddParameter(
                                 value: "unused",
                                 secret: true,
                                 publishValueAsDefault: false);
-var keycloakDbPasswordPlaceholder = builder.AddParameter(
-                                "KeycloakDbPasswordPlaceholder",
-                                value: "placeholder-keycloak-db-password",
-                                secret: false,
-                                publishValueAsDefault: true);
+// var keycloakDbPasswordPlaceholder = builder.AddParameter(
+//                                 "KeycloakDbPasswordPlaceholder",
+//                                 value: "placeholder-keycloak-db-password",
+//                                 secret: false,
+//                                 publishValueAsDefault: true);
 var authenticationEnabled = builder.AddParameter(
                                 "AuthenticationEnabled",
                                 value: "true",
@@ -138,15 +138,14 @@ var grafanaAzureMonitorSubscriptionId = builder.AddParameter(
                                 value: "",
                                 secret: false,
                                 publishValueAsDefault: true);
-var keycloakContainerAdminPassword = keycloakPassword;
-var keycloakContainerDbPassword = keycloakDbPassword;
 
 var keycloak = builder.AddKeycloak(
             "keycloak",
-            adminPassword: keycloakContainerAdminPassword,
+            adminPassword: keycloakPassword,
             port: local ? null : 80)
     .WithEnvironment("KC_DB", "mssql")
     .WithOtlpExporter();
+
 var keycloakHttpEndpoint = keycloak.Resource.GetEndpoint("http");
 
 if (local)
@@ -351,8 +350,8 @@ else
     keycloak
         .WithEnvironment("KC_DB_URL", keycloakDb.Resource.JdbcConnectionString)
         .WithEnvironment("KC_DB_USERNAME", keycloakDbUsername)
-        .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", keycloakContainerAdminPassword)
-        .WithEnvironment("KC_DB_PASSWORD", keycloakContainerDbPassword)
+        .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", keycloakPassword)
+        .WithEnvironment("KC_DB_PASSWORD", keycloakDbPassword)
         .WithComputeEnvironment(privateAcaEnvironment)
         .WaitFor(keycloakDb);
 
