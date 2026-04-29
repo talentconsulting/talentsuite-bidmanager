@@ -156,7 +156,12 @@ jobs:
       - name: Enable azd operations alpha feature
         run: |
           azd config set alpha.azd.operations on
-
+      - uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
       - name: Install Aspire CLI
         uses: timheuer/setup-aspire@v0.1.0
 
