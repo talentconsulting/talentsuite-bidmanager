@@ -164,16 +164,20 @@ jobs:
           test -n "${{ secrets.AZURE_CLIENT_ID }}" || (echo "AZURE_CLIENT_ID missing" && exit 1)
           test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
           test -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
-          test -n "${AuthenticationEnabled:-}" || (echo "AUTHENTICATION_ENABLED var missing" && exit 1)
-          test -n "${UseInMemoryData:-}" || (echo "USE_IN_MEMORY_DATA var missing" && exit 1)
-          test -n "${KeycloakClientId:-}" || (echo "KEYCLOAK_CLIENT_ID var missing" && exit 1)
-          test -n "${KeycloakDbUsername:-}" || (echo "KEYCLOAK_DB_USERNAME var missing" && exit 1)
-          test -n "${InviteSmtpUsername:-}" || (echo "INVITE_SMTP_USERNAME var missing" && exit 1)
-          test -n "${SqlPassword:-}" || (echo "SQL_PASSWORD secret missing" && exit 1)
-          test -n "${KeycloakPassword:-}" || (echo "KEYCLOAK_PASSWORD secret missing" && exit 1)
-          test -n "${KeycloakDbPassword:-}" || (echo "KEYCLOAK_DB_PASSWORD secret missing" && exit 1)
-          test -n "${InviteSmtpPassword:-}" || (echo "INVITE_SMTP_PASSWORD secret missing" && exit 1)
+          test -n "${Parameters__AuthenticationEnabled:-}" || (echo "AUTHENTICATION_ENABLED var missing" && exit 1)
+          test -n "${Parameters__UseInMemoryData:-}" || (echo "USE_IN_MEMORY_DATA var missing" && exit 1)
+          test -n "${Parameters__KeycloakClientId:-}" || (echo "KEYCLOAK_CLIENT_ID var missing" && exit 1)
+          test -n "${Parameters__KeycloakDbUsername:-}" || (echo "KEYCLOAK_DB_USERNAME var missing" && exit 1)
+          test -n "${Parameters__InviteSmtpUsername:-}" || (echo "INVITE_SMTP_USERNAME var missing" && exit 1)
+          test -n "${Parameters__SqlPassword:-}" || (echo "SQL_PASSWORD secret missing" && exit 1)
+          test -n "${Parameters__KeycloakPassword:-}" || (echo "KEYCLOAK_PASSWORD secret missing" && exit 1)
+          test -n "${Parameters__KeycloakDbPassword:-}" || (echo "KEYCLOAK_DB_PASSWORD secret missing" && exit 1)
+          test -n "${Parameters__InviteSmtpPassword:-}" || (echo "INVITE_SMTP_PASSWORD secret missing" && exit 1)
 
       - name: Aspire Do
         run: |
           aspire do diagnostics --environment ${{ inputs.environment }}
+
+      - name: Aspire Do build
+        run: |
+          aspire do build --environment ${{ inputs.environment }}
