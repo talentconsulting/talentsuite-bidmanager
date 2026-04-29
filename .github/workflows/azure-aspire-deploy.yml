@@ -48,7 +48,7 @@ jobs:
     env:
       # ---- azd / Azure context ----
       AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
-      #AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
 
       #AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       Azure__Location: ${{ vars.AZURE_LOCATION }}
@@ -65,7 +65,7 @@ jobs:
       # --- Aspire CLI configuration ----
       Parameters__KeycloakClientId: ${{ vars.KEYCLOAK_CLIENT_ID }}
       Parameters__keycloakAdminUsername: ${{ vars.KEYCLOAK_ADMIN_USERNAME }}
-      Parameters__keycloakAdminPassword: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+      Parameters__keycloakPassword: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
       Parameters__SqlPassword: ${{ secrets.SQL_PASSWORD }}
       Parameters__KeycloakDbUsername: ${{ vars.KEYCLOAK_DB_USERNAME }}
       Parameters__KeycloakDbPassword: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
