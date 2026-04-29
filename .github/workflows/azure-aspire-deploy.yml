@@ -64,8 +64,8 @@ jobs:
 
       # --- Aspire CLI configuration ----
       Parameters__KeycloakClientId: ${{ vars.KEYCLOAK_CLIENT_ID }}
-      Parameters__keycloakAdminUsername: ${{ vars.KEYCLOAK_ADMIN_USERNAME }}
-      Parameters__keycloakPassword: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+      Parameters__KeycloakAdminUsername: ${{ vars.KEYCLOAK_ADMIN_USERNAME }}
+      Parameters__KeycloakPassword: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
       Parameters__SqlPassword: ${{ secrets.SQL_PASSWORD }}
       Parameters__KeycloakDbUsername: ${{ vars.KEYCLOAK_DB_USERNAME }}
       Parameters__KeycloakDbPassword: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
