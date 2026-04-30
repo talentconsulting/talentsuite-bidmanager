@@ -247,7 +247,8 @@ if (local)
            .WithLifetime(ContainerLifetime.Persistent)
            .WithHostPort(14330)
            .WithIconName("DatabaseColor")
-           .WithPassword(sqlPassword);
+           .WithPassword(sqlPassword)
+           .WithDbGate();
     });
 
     keycloak

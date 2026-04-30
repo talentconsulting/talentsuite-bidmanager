@@ -135,7 +135,20 @@ public class UserService : IUserService
     public async Task<UserModel?> ResendInvite(string userId, CancellationToken ct = default)
     {
         var user = await _userRepository.ResendInvite(userId, ct);
-        return user is null ? null : _mapper.ToModel(user);
+        if (user is null)
+            return null;
+
+        await _azureServiceBusClient.PublishAsync(
+            _inviteUserEntityName,
+            new InviteUserCommand
+            {
+                UserId = user.Id,
+                Email = user.Email,
+                InvitationToken = user.InvitationToken
+            },
+            ct);
+
+        return _mapper.ToModel(user);
     }
 
     public async Task<UserModel?> RegisterInvitedUser(string invitationToken, string username, string password, CancellationToken ct = default)

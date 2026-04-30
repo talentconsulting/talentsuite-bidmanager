@@ -87,7 +87,7 @@ public sealed class SqlServerUserRepository : IManageUsers
             Name = updatedUser.Name,
             Email = updatedUser.Email,
             Role = updatedUser.Role,
-            HasAcceptedRegistration = updatedUser.HasAcceptedRegistration,
+            HasAcceptedRegistration = existing.HasAcceptedRegistration && updatedUser.HasAcceptedRegistration,
             IdentityProvider = existing.IdentityProvider,
             IdentitySubject = existing.IdentitySubject,
             IdentityUsername = existing.IdentityUsername,

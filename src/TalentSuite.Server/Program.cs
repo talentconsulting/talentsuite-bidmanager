@@ -22,6 +22,8 @@ builder.Services.AddControllers();
 // Optional: keep Razor Pages for the default Error page
 builder.Services.AddRazorPages();
 
+builder.AddSqlServerClient(connectionName: "talentconsultingdb");
+
 // Ingestion service
 builder.Services.AddBidServices(builder.Configuration);
 builder.Services.AddUserServices(builder.Configuration);

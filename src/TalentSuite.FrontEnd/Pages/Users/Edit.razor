@@ -67,7 +67,7 @@
                     <a class="btn btn-outline-secondary" href="/users">Cancel</a>
                     <button type="button"
                             class="btn btn-outline-warning"
-                            disabled="@IsResendingInvite || Form.HasAcceptedRegistration"
+                            disabled="@(IsResendingInvite || Form.HasAcceptedRegistration)"
                             @onclick="ResendInviteAsync">
                         @(IsResendingInvite ? "Resending..." : "Resend Invite")
                     </button>
@@ -123,6 +123,8 @@
                 Role = user.Role,
                 HasAcceptedRegistration = user.HasAcceptedRegistration
             };
+            Console.WriteLine($"IsResendingInvite: {IsResendingInvite}");
+            Console.WriteLine($"Loaded user: {user.Name} ({user.Email}), Role: {user.Role}, Accepted: {user.HasAcceptedRegistration}");
         }
         catch (Exception ex)
         {
