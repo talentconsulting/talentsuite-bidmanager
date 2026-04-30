@@ -123,8 +123,6 @@
                 Role = user.Role,
                 HasAcceptedRegistration = user.HasAcceptedRegistration
             };
-            Console.WriteLine($"IsResendingInvite: {IsResendingInvite}");
-            Console.WriteLine($"Loaded user: {user.Name} ({user.Email}), Role: {user.Role}, Accepted: {user.HasAcceptedRegistration}");
         }
         catch (Exception ex)
         {
