@@ -166,6 +166,37 @@ jobs:
           azd auth login --check-status >/dev/null
           azd env refresh --environment "${AZURE_ENV_NAME}" --no-prompt
 
+          resource_group="rg-${AZURE_ENV_NAME}"
+          appi_name="appi-talentsuite-${AZURE_ENV_NAME}"
+          connection_string="$(az resource show \
+            --resource-group "$resource_group" \
+            --name "$appi_name" \
+            --resource-type "Microsoft.Insights/components" \
+            --query 'properties.ConnectionString || properties.connectionString' \
+            -o tsv 2>/dev/null || true)"
+
+          if [ -z "$connection_string" ]; then
+            az resource create \
+              --resource-group "$resource_group" \
+              --name "$appi_name" \
+              --resource-type "Microsoft.Insights/components" \
+              --api-version "2020-02-02" \
+              --location "${AZURE_LOCATION}" \
+              --properties '{"Application_Type":"web","Flow_Type":"Bluefield","IngestionMode":"ApplicationInsights"}' \
+              >/dev/null
+
+            connection_string="$(az resource show \
+              --resource-group "$resource_group" \
+              --name "$appi_name" \
+              --resource-type "Microsoft.Insights/components" \
+              --query 'properties.ConnectionString || properties.connectionString' \
+              -o tsv)"
+          fi
+
+          test -n "$connection_string" || (echo "Could not resolve Application Insights connection string in $resource_group" && exit 1)
+
+          azd env set APPLICATIONINSIGHTS_CONNECTION_STRING "$connection_string" --environment "${AZURE_ENV_NAME}"
+
       - name: Pre-sync Container App secrets from GitHub secrets to Key Vault refs
         working-directory: ${{ env.AZD_WORKING_DIR }}
         env:
@@ -330,6 +361,11 @@ jobs:
             --name talentserver \
             --resource-group "$resource_group" \
             --set-env-vars APPLICATIONINSIGHTS_CONNECTION_STRING="$connection_string" >/dev/null
+
+          az containerapp update \
+            --name talentserver \
+            --resource-group "$resource_group" \
+            --set-env-vars TALENTBIDMANAGER_INSIGHTS_APPINSIGHTSCONNECTIONSTRING="$connection_string" >/dev/null
 
       - name: Grant talentserver managed identity access to Azure AI Foundry
         if: ${{ success() && env.AzureAIFoundryProjectEndpoint != '' }}
