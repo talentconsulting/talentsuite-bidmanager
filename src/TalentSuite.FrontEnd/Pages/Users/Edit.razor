@@ -67,7 +67,7 @@
                     <a class="btn btn-outline-secondary" href="/users">Cancel</a>
                     <button type="button"
                             class="btn btn-outline-warning"
-                            disabled="@IsResendingInvite || Form.HasAcceptedRegistration"
+                            disabled="@(IsResendingInvite || Form.HasAcceptedRegistration)"
                             @onclick="ResendInviteAsync">
                         @(IsResendingInvite ? "Resending..." : "Resend Invite")
                     </button>
