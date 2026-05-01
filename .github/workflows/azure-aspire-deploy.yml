@@ -186,4 +186,5 @@ jobs:
 
       - name: Aspire Do build
         run: |
+          env
           aspire do provision-azure-bicep-resources --environment ${{ inputs.environment }}
