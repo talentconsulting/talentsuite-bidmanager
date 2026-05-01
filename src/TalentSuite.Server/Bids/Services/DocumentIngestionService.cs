@@ -178,7 +178,7 @@ Do not invent missing metadata from earlier or later chunks.
                 "You are a strict information extraction engine. Return ONLY valid JSON. No markdown, no commentary."
             ),
             new UserChatMessage($"""
-Extract bid questions (from {stage.ToString()} section of the document only), without changing the text on the question, the document text below.
+Extract bid questions (from {stage.ToString()} section of the document only), without modifying the question text in the description property for each question.
 
 Return a JSON payload which contains an array of objects on a field called questions with EXACTLY these fields:
   - category (string)

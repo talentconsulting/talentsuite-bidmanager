@@ -82,7 +82,7 @@ public class InMemoryUserRepository : IManageUsers
             Name = updatedUser.Name,
             Email = updatedUser.Email,
             Role = updatedUser.Role,
-            HasAcceptedRegistration = existing.HasAcceptedRegistration && updatedUser.HasAcceptedRegistration,
+            HasAcceptedRegistration = updatedUser.HasAcceptedRegistration,
             IdentityProvider = existing.IdentityProvider,
             IdentitySubject = existing.IdentitySubject,
             IdentityUsername = existing.IdentityUsername,
