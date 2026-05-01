@@ -362,7 +362,22 @@ else
         .WithReference(keycloak)
         .WithReference(messaging)
         //.WithReference(appInsights)
+        .WithEnvironment("AUTHENTICATION_ENABLED", authenticationEnabled)
+        .WithEnvironment("USE_IN_MEMORY_DATA", useInMemoryData)
+        .WithEnvironment("AzureServiceBus__InviteUserEntityName", "invite-user")
+        .WithEnvironment("AzureServiceBus__BidSubmittedEntityName", "bid-submitted")
+        .WithEnvironment("AzureServiceBus__CommentSavedWithMentionsEntityName", "comment-saved-with-mentions")
+        .WithEnvironment("KEYCLOAK_REALM", "TalentConsulting")
+        .WithEnvironment("KEYCLOAK_ADMIN_REALM", "master")
+        .WithEnvironment("KEYCLOAK_ADMIN_USERNAME", "admin")
+        .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", keycloakPassword)
+        .WithEnvironment("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
+        .WithComputeEnvironment(privateAcaEnvironment)
+        .WaitFor(appDb)
+        .WaitFor(keycloak);
 
+    functions
+        //.WithReference(appInsights)
         .WithComputeEnvironment(privateAcaEnvironment!);
 }
 
