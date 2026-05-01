@@ -231,7 +231,7 @@ if (!string.IsNullOrWhiteSpace(builder.Configuration["Parameters:GoogleDriveSync
 
 //IResourceBuilder<ProjectResource> server;
 //IResourceBuilder<AzureSqlServerResource>? sql = null;
-//IResourceBuilder<AzureContainerAppEnvironmentResource>? defaultAcaEnvironment = null;
+IResourceBuilder<AzureContainerAppEnvironmentResource>? defaultAcaEnvironment = null;
 IResourceBuilder<AzureContainerAppEnvironmentResource>? privateAcaEnvironment = null;
 if (local)
 {
@@ -279,15 +279,15 @@ if (local)
 }
 else
 {
-    var logAnalytics = builder.AddAzureLogAnalyticsWorkspace("log-analytics");
-    var appInsights = builder.AddAzureApplicationInsights("talentbidmanager-insights")
-        .WithLogAnalyticsWorkspace(logAnalytics);
-    // Azure Container Registry
-    var acr = builder.AddAzureContainerRegistry("TalentSuite-ACR")
-                     .WithPurgeTask("0 1 * * *", ago: TimeSpan.FromDays(7), keep: 5);
+    // var logAnalytics = builder.AddAzureLogAnalyticsWorkspace("log-analytics");
+    // var appInsights = builder.AddAzureApplicationInsights("talentbidmanager-insights")
+    //     .WithLogAnalyticsWorkspace(logAnalytics);
+    // // Azure Container Registry
+    // var acr = builder.AddAzureContainerRegistry("TalentSuite-ACR")
+    //                  .WithPurgeTask("0 1 * * *", ago: TimeSpan.FromDays(7), keep: 5);
 
-    //defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev");
-    //_ = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
+    defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev");
+    _ = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
 
     //sql = builder.AddAzureSqlServer("sql")
     msSql
@@ -331,8 +331,8 @@ else
         .WithParameter("sqlServerName", msSql.Resource.NameOutputReference);
 
     privateAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev-private")
-        .WithAzureLogAnalyticsWorkspace(logAnalytics)
-        .WithAzureContainerRegistry(acr)
+        //.WithAzureLogAnalyticsWorkspace(logAnalytics)
+        //.WithAzureContainerRegistry(acr)
         .ConfigureInfrastructure(infra =>
         {
             var containerAppEnvironment = infra.GetProvisionableResources()
@@ -361,21 +361,7 @@ else
         .WithReference(appDb)
         .WithReference(keycloak)
         .WithReference(messaging)
-        .WithEnvironment("AUTHENTICATION_ENABLED", authenticationEnabled)
-        .WithEnvironment("USE_IN_MEMORY_DATA", useInMemoryData)
-        .WithEnvironment("AzureServiceBus__InviteUserEntityName", "invite-user")
-        .WithEnvironment("AzureServiceBus__BidSubmittedEntityName", "bid-submitted")
-        .WithEnvironment("AzureServiceBus__CommentSavedWithMentionsEntityName", "comment-saved-with-mentions")
-        .WithEnvironment("KEYCLOAK_REALM", "TalentConsulting")
-        .WithEnvironment("KEYCLOAK_ADMIN_REALM", "master")
-        .WithEnvironment("KEYCLOAK_ADMIN_USERNAME", "admin")
-        .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", keycloakPassword)
-        .WithEnvironment("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
-        .WithComputeEnvironment(privateAcaEnvironment)
-        .WaitFor(appDb)
-        .WaitFor(keycloak);
-
-    functions
+        //.WithReference(appInsights)
         .WithComputeEnvironment(privateAcaEnvironment!);
 }
 
