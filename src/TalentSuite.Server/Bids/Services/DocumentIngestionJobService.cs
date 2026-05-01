@@ -70,7 +70,10 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
 
         PersistJobStateAsync(jobState, cancellationToken).GetAwaiter().GetResult();
 
-        _ = Task.Run(() => ProcessJobAsync(jobId, jobState, fileBytes, jobState.FileName, stage, cancellationToken), CancellationToken.None);
+        // The background job must outlive the request that created it.
+        _ = Task.Run(
+            () => ProcessJobAsync(jobId, jobState, fileBytes, jobState.FileName, stage, CancellationToken.None),
+            CancellationToken.None);
 
         return jobId;
     }
