@@ -217,9 +217,10 @@ var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
     .WithEnvironment("GoogleDriveSync__Enabled", googleDriveSyncEnabled)
     .WithEnvironment("GoogleDriveSync__SourceContainerName", googleDriveSyncSourceContainerName)
     .WithEnvironment("GoogleDriveSync__DriveFolderId", googleDriveSyncDriveFolderId)
-    .WithEnvironment("GoogleDriveSync__ServiceAccountJsonBase64", googleDriveSyncServiceAccountJsonBase64)
     .WaitFor(messaging)
     .WaitFor(server);
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Parameters:GoogleDriveSyncServiceAccountJsonBase64"]))
+    functions.WithEnvironment("GoogleDriveSync__ServiceAccountJsonBase64", googleDriveSyncServiceAccountJsonBase64);
 
 //if (!useLocalInfrastructure)
 //{
