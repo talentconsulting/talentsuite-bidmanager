@@ -377,6 +377,7 @@ else
 
     functions
         //.WithReference(appInsights)
+
         .WithComputeEnvironment(privateAcaEnvironment!);
 }
 
