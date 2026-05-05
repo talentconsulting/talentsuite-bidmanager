@@ -362,6 +362,7 @@ else
         .WithReference(keycloak)
         .WithReference(messaging)
         //.WithReference(appInsights)
+
         .WithComputeEnvironment(privateAcaEnvironment!);
 }
 
