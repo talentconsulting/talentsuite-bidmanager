@@ -361,6 +361,7 @@ else
         .WithReference(appDb)
         .WithReference(keycloak)
         .WithReference(messaging)
+        //.WithReference(appInsights)
         .WithEnvironment("AUTHENTICATION_ENABLED", authenticationEnabled)
         .WithEnvironment("USE_IN_MEMORY_DATA", useInMemoryData)
         .WithEnvironment("AzureServiceBus__InviteUserEntityName", "invite-user")
@@ -377,7 +378,6 @@ else
 
     functions
         //.WithReference(appInsights)
-
         .WithComputeEnvironment(privateAcaEnvironment!);
 }
 
