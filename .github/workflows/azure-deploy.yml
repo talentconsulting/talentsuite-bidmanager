@@ -537,18 +537,44 @@ jobs:
           test -n "$frontend_base_url" || (echo "Could not resolve frontend static website endpoint in $resource_group" && exit 1)
           frontend_base_url="${frontend_base_url%/}"
 
-          az containerapp update \
-            --name "$app_name" \
-            --resource-group "$resource_group" \
-            --set-env-vars \
-              InviteEmail__Enabled="${InviteEmailEnabled}" \
-              InviteEmail__FrontendBaseUrl="${frontend_base_url}" \
-              InviteEmail__FromEmail="${InviteFromEmail}" \
-              InviteEmail__FromDisplayName=TalentSuite \
-              InviteEmail__SmtpHost="${InviteSmtpHost}" \
-              InviteEmail__SmtpPort="${InviteSmtpPort}" \
-              InviteEmail__SmtpEnableSsl="${InviteSmtpEnableSsl}" \
-              InviteEmail__SmtpUsername="${InviteSmtpUsername}" >/dev/null
+          attempts=5
+          delay_seconds=15
+          for attempt in $(seq 1 "$attempts"); do
+            if az containerapp update \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --set-env-vars \
+                InviteEmail__Enabled="${InviteEmailEnabled}" \
+                InviteEmail__FrontendBaseUrl="${frontend_base_url}" \
+                InviteEmail__FromEmail="${InviteFromEmail}" \
+                InviteEmail__FromDisplayName=TalentSuite \
+                InviteEmail__SmtpHost="${InviteSmtpHost}" \
+                InviteEmail__SmtpPort="${InviteSmtpPort}" \
+                InviteEmail__SmtpEnableSsl="${InviteSmtpEnableSsl}" \
+                InviteEmail__SmtpUsername="${InviteSmtpUsername}" >/dev/null; then
+              break
+            fi
+
+            if [ "$attempt" -eq "$attempts" ]; then
+              echo "Failed to configure invite email settings for $app_name after $attempts attempts."
+              az containerapp update \
+                --name "$app_name" \
+                --resource-group "$resource_group" \
+                --set-env-vars \
+                  InviteEmail__Enabled="${InviteEmailEnabled}" \
+                  InviteEmail__FrontendBaseUrl="${frontend_base_url}" \
+                  InviteEmail__FromEmail="${InviteFromEmail}" \
+                  InviteEmail__FromDisplayName=TalentSuite \
+                  InviteEmail__SmtpHost="${InviteSmtpHost}" \
+                  InviteEmail__SmtpPort="${InviteSmtpPort}" \
+                  InviteEmail__SmtpEnableSsl="${InviteSmtpEnableSsl}" \
+                  InviteEmail__SmtpUsername="${InviteSmtpUsername}"
+              exit 1
+            fi
+
+            echo "Retrying invite email settings update for $app_name in ${delay_seconds}s (attempt $attempt/$attempts)..."
+            sleep "$delay_seconds"
+          done
 
           echo "Configured invite email settings for $app_name using frontend base URL $frontend_base_url"
 
