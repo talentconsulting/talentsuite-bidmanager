@@ -17,6 +17,13 @@
         </div>
         <a class="btn btn-primary" href="/authentication/login">Sign in</a>
     }
+    else if (IsAlreadyAccepted)
+    {
+        <div class="alert alert-info">
+            This invitation has already been accepted. Please sign in to your account.
+        </div>
+        <a class="btn btn-primary" href="/authentication/login">Sign in</a>
+    }
     else
     {
         @if (!string.IsNullOrWhiteSpace(ErrorText))

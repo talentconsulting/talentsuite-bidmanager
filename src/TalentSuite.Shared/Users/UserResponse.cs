@@ -53,6 +53,12 @@ public class ResendInviteResponse
     public DateTimeOffset? InvitationExpiresAtUtc { get; set; }
 }
 
+public class InviteValidationResponse
+{
+    // "valid", "already_accepted", "invalid_or_expired"
+    public string Status { get; set; } = string.Empty;
+}
+
 public class CurrentUserProfileResponse
 {
     public string Id { get; set; } = string.Empty;

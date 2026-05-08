@@ -187,7 +187,6 @@ public sealed class SqlServerUserRepository : IManageUsers
         if (!string.IsNullOrWhiteSpace(email))
             matched.Email = email;
         matched.HasAcceptedRegistration = true;
-        matched.InvitationToken = string.Empty;
         matched.InvitationExpiresAtUtc = null;
 
         await using var connection = new SqlConnection(_connectionString);

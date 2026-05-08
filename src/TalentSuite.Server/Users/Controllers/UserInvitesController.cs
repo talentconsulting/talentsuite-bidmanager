@@ -148,6 +148,15 @@ public class UserInvitesController : ControllerBase
     }
 
     [AllowAnonymous]
+    [HttpGet("accept-invite/validate")]
+    public async Task<ActionResult<InviteValidationResponse>> ValidateInviteToken(
+        [FromQuery] string token, CancellationToken ct)
+    {
+        var status = await _userService.ValidateInviteToken(token, ct);
+        return Ok(new InviteValidationResponse { Status = status });
+    }
+
+    [AllowAnonymous]
     [HttpPost("accept-invite/register")]
     public async Task<ActionResult<UserResponse>> RegisterFromInvite([FromBody] RegisterInviteRequest request, CancellationToken ct)
     {

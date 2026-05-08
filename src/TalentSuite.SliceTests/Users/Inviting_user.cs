@@ -62,6 +62,61 @@ public class Inviting_user : SliceTestBase
         Assert.That(keycloak.CreatedIdentities.Single().Username, Is.EqualTo("register.user"));
     }
 
+    [Test]
+    public async Task ValidateToken_ForPendingToken_ReturnsValid()
+    {
+        var created = await CreateUserAsync("validate.pending@talentconsulting.local");
+
+        var response = await Client.GetAsync(
+            $"/api/users/accept-invite/validate?token={Uri.EscapeDataString(created.InvitationToken)}");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var body = await response.Content.ReadFromJsonAsync<InviteValidationResponse>();
+        Assert.That(body!.Status, Is.EqualTo("valid"));
+    }
+
+    [Test]
+    public async Task ValidateToken_AfterAcceptance_ReturnsAlreadyAccepted()
+    {
+        var created = await CreateUserAsync("validate.accepted@talentconsulting.local");
+
+        await Client.PostAsJsonAsync("/api/users/accept-invite/register", new RegisterInviteRequest
+        {
+            InvitationToken = created.InvitationToken,
+            Username = "validate.accepted",
+            Password = "Passw0rd!"
+        });
+
+        var response = await Client.GetAsync(
+            $"/api/users/accept-invite/validate?token={Uri.EscapeDataString(created.InvitationToken)}");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var body = await response.Content.ReadFromJsonAsync<InviteValidationResponse>();
+        Assert.That(body!.Status, Is.EqualTo("already_accepted"));
+    }
+
+    [Test]
+    public async Task RegisterInvite_WithAlreadyAcceptedToken_ReturnsBadRequest()
+    {
+        var created = await CreateUserAsync("reuse.token@talentconsulting.local");
+
+        var firstResponse = await Client.PostAsJsonAsync("/api/users/accept-invite/register", new RegisterInviteRequest
+        {
+            InvitationToken = created.InvitationToken,
+            Username = "reuse.token",
+            Password = "Passw0rd!"
+        });
+        Assert.That(firstResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var secondResponse = await Client.PostAsJsonAsync("/api/users/accept-invite/register", new RegisterInviteRequest
+        {
+            InvitationToken = created.InvitationToken,
+            Username = "reuse.token2",
+            Password = "Passw0rd!"
+        });
+        Assert.That(secondResponse.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
     private async Task<UserResponse> CreateUserAsync(string email)
     {
         var createResponse = await Client.PostAsJsonAsync("/api/users", new CreateUserRequest

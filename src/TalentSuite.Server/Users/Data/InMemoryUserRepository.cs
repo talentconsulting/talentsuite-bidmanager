@@ -150,7 +150,6 @@ public class InMemoryUserRepository : IManageUsers
         if (!string.IsNullOrWhiteSpace(email))
             matched.Email = email;
         matched.HasAcceptedRegistration = true;
-        matched.InvitationToken = string.Empty;
         matched.InvitationExpiresAtUtc = null;
 
         return Task.FromResult<UserDataModel?>(matched);
