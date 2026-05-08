@@ -1,7 +1,11 @@
 param location string = resourceGroup().location
 param sqlServerName string
+param environmentName string = resourceGroup().name
 
-var vnetName = 'vnet-talentsuite-dev'
+var normalizedEnvironmentName = startsWith(environmentName, 'rg-')
+  ? substring(environmentName, 3)
+  : environmentName
+var vnetName = 'vnet-talentsuite-${normalizedEnvironmentName}'
 var acaSubnetName = 'aca-infrastructure'
 var privateEndpointSubnetName = 'private-endpoints'
 //var talentgatewaySubnetName = 'talent-appgateway-subnet'
@@ -71,7 +75,7 @@ resource sqlPrivateDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLink
 }
 
 resource sqlPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-07-01' = {
-  name: 'pep-sql-talentsuite-dev'
+  name: 'pep-sql-talentsuite-${normalizedEnvironmentName}'
   location: location
   properties: {
     subnet: {
