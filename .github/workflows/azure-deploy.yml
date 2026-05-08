@@ -3,6 +3,11 @@ name: Azure Deploy
 on:
   workflow_dispatch:
     inputs:
+      target_environment:
+        description: 'GitHub environment to use for this deployment.'
+        required: true
+        default: 'dev'
+        type: environment
       deployment_mode:
         description: 'Choose whether to provision infrastructure first or only deploy application code.'
         required: true
@@ -32,10 +37,10 @@ jobs:
       id-token: write
       contents: read
     runs-on: ubuntu-latest
-    environment: dev
+    environment: ${{ inputs.target_environment }}
     env:
       # ---- azd / Azure context ----
-      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_ENV_NAME: ${{ inputs.target_environment }}
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AZD_WORKING_DIR: '.'
