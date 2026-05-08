@@ -37,7 +37,9 @@ jobs:
 
       - name: Validate required inputs
         run: |
-          test -n "${AZURE_ENV_NAME:-}" || (echo "AZURE_ENV_NAME missing" && exit 1)
+          resolved_env_name="${AZURE_ENV_NAME:-${{ inputs.target_environment }}}"
+          test -n "$resolved_env_name" || (echo "Could not resolve Azure environment name" && exit 1)
+          echo "AZURE_ENV_NAME=$resolved_env_name" >> "$GITHUB_ENV"
 
       - name: Resolve environment defaults
         run: |
