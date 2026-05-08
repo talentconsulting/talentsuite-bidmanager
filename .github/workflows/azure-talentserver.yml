@@ -72,8 +72,6 @@ jobs:
 
       - name: Setup azd
         uses: Azure/setup-azd@v2
-        with:
-          version: 1.24.2
 
       - name: Validate required inputs
         run: |
