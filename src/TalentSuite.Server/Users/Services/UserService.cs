@@ -14,6 +14,7 @@ public interface IUserService
     Task<bool> UpdateUser(string userId, UserModel request, CancellationToken ct = default);
     Task<bool> DeleteUser(string userId, CancellationToken ct = default);
     Task<UserModel?> ResendInvite(string userId, CancellationToken ct = default);
+    Task<string> ValidateInviteToken(string token, CancellationToken ct = default);
     Task<UserModel?> RegisterInvitedUser(string invitationToken, string username, string password, CancellationToken ct = default);
     Task<UserModel?> AcceptInvite(
         string invitationToken,
@@ -149,6 +150,27 @@ public class UserService : IUserService
             ct);
 
         return _mapper.ToModel(user);
+    }
+
+    public async Task<string> ValidateInviteToken(string token, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return "invalid_or_expired";
+
+        var users = await _userRepository.GetUsers(ct);
+        var user = users.FirstOrDefault(u =>
+            string.Equals(u.InvitationToken, token, StringComparison.Ordinal));
+
+        if (user is null)
+            return "invalid_or_expired";
+
+        if (user.HasAcceptedRegistration)
+            return "already_accepted";
+
+        if (!user.InvitationExpiresAtUtc.HasValue || user.InvitationExpiresAtUtc.Value < DateTimeOffset.UtcNow)
+            return "invalid_or_expired";
+
+        return "valid";
     }
 
     public async Task<UserModel?> RegisterInvitedUser(string invitationToken, string username, string password, CancellationToken ct = default)

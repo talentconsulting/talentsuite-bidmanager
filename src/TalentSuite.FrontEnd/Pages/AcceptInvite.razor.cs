@@ -12,6 +12,7 @@ public partial class AcceptInvite
 
     private bool IsLoading { get; set; } = true;
     private bool IsSuccess { get; set; }
+    private bool IsAlreadyAccepted { get; set; }
     private string? ErrorText { get; set; }
     private bool IsSubmitting { get; set; }
     private string Username { get; set; } = string.Empty;
@@ -20,15 +21,28 @@ public partial class AcceptInvite
 
     protected override async Task OnParametersSetAsync()
     {
+        IsLoading = true;
+
         if (string.IsNullOrWhiteSpace(InvitationToken))
         {
-            IsLoading = false;
             ErrorText = "Invitation token is missing.";
+            IsLoading = false;
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(Username))
+        var status = await ApiClient.ValidateTokenAsync(InvitationToken);
+        if (status == "already_accepted")
+        {
+            IsAlreadyAccepted = true;
+        }
+        else if (status != "valid")
+        {
+            ErrorText = "This invitation link is invalid or has expired. Please contact your administrator.";
+        }
+        else if (string.IsNullOrWhiteSpace(Username))
+        {
             Username = BuildDefaultUsername();
+        }
 
         IsLoading = false;
     }

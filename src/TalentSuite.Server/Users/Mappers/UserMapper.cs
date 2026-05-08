@@ -10,7 +10,18 @@ public partial class UserMapper
 {
     public partial UserModel ToModel(UserDataModel source);
     public partial UserDataModel ToDataModel(UserModel source);
-    public partial UserResponse ToResponse(UserModel source);
+
+    public UserResponse ToResponse(UserModel source)
+    {
+        var response = MapToResponse(source);
+        if (source.HasAcceptedRegistration)
+            response.InvitationToken = string.Empty;
+        return response;
+    }
+
+    private partial UserResponse MapToResponse(UserModel source);
     public partial List<UserModel> ToModels(List<UserDataModel> source);
-    public partial List<UserResponse> ToResponses(List<UserModel> source);
+
+    public List<UserResponse> ToResponses(List<UserModel> source) =>
+        source.Select(ToResponse).ToList();
 }

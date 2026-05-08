@@ -5,6 +5,18 @@ namespace TalentSuite.FrontEnd.Pages;
 
 public sealed class AcceptInviteApiClient(HttpClient http)
 {
+    public async Task<string> ValidateTokenAsync(string invitationToken, CancellationToken ct = default)
+    {
+        var response = await http.GetAsync(
+            $"api/users/accept-invite/validate?token={Uri.EscapeDataString(invitationToken)}", ct);
+
+        if (!response.IsSuccessStatusCode)
+            return "invalid_or_expired";
+
+        var body = await response.Content.ReadFromJsonAsync<InviteValidationResponse>(ct);
+        return body?.Status ?? "invalid_or_expired";
+    }
+
     public async Task AcceptInviteAsync(string invitationToken, CancellationToken ct = default)
     {
         var response = await http.PostAsJsonAsync("api/users/accept-invite", new AcceptInviteRequest
