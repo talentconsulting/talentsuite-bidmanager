@@ -48,7 +48,14 @@ jobs:
           env_suffix="${AZURE_ENV_NAME}"
           frontdoor_resource_group="rg-talentsuite-common"
           target_resource_group="rg-${AZURE_ENV_NAME}"
-          profile_name="talentsuite-afd"
+          case "$env_suffix" in
+            production)
+              profile_name="talentsuite-production-envs-afd"
+              ;;
+            *)
+              profile_name="talentsuite-lower-envs-afd"
+              ;;
+          esac
           sku="Standard_AzureFrontDoor"
           frontend_patterns="/*"
           endpoint_name="talentsuite-${env_suffix}"
