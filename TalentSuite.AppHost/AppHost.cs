@@ -12,6 +12,7 @@ using Azure.Provisioning.Expressions;
 var builder = DistributedApplication.CreateBuilder(args);
 
 var local = builder.ExecutionContext.IsRunMode;
+var azureEnvironmentName = builder.Configuration["AZURE_ENV_NAME"] ?? "dev";
 
 var keycloakPassword = builder.AddParameter(
                                 "KeycloakPassword",
@@ -286,7 +287,7 @@ else
     // var acr = builder.AddAzureContainerRegistry("TalentSuite-ACR")
     //                  .WithPurgeTask("0 1 * * *", ago: TimeSpan.FromDays(7), keep: 5);
 
-    defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev");
+    defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment($"aca-{azureEnvironmentName}");
     _ = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
 
     //sql = builder.AddAzureSqlServer("sql")
@@ -330,7 +331,7 @@ else
     var privateNetwork = builder.AddBicepTemplate("private-network", "Infrastructure/private-network.bicep")
         .WithParameter("sqlServerName", msSql.Resource.NameOutputReference);
 
-    privateAcaEnvironment = builder.AddAzureContainerAppEnvironment("aca-dev-private")
+    privateAcaEnvironment = builder.AddAzureContainerAppEnvironment($"aca-{azureEnvironmentName}-private")
         //.WithAzureLogAnalyticsWorkspace(logAnalytics)
         //.WithAzureContainerRegistry(acr)
         .ConfigureInfrastructure(infra =>
