@@ -1,5 +1,6 @@
 @page "/bids/manage/{BidId}"
 @inherits BidManage
+@using TalentSuite.Shared.Bids
 
 <NavigationLock OnBeforeInternalNavigation="ConfirmInternalNavigationAsync" />
 
@@ -175,6 +176,38 @@
                             <div class="d-flex gap-2 align-items-center">
                             </div>
                         </div>
+                        <div class="mb-3">
+                            @if (QuestionAssignedUsers.Count > 0)
+                            {
+                                <div class="d-flex flex-wrap gap-1 align-items-center">
+                                    <span class="text-muted small me-1">Assigned:</span>
+                                    @foreach (var user in QuestionAssignedUsers)
+                                    {
+                                        <span class="badge @(user.Role == QuestionUserRole.Owner ? "bg-primary" : user.Role == QuestionUserRole.Reviewer ? "bg-info" : "bg-warning")">
+                                            @user.Name
+                                            @if (user.Role == QuestionUserRole.Owner)
+                                            {
+                                                <span class="ms-1 opacity-75">(owner)</span>
+                                            }
+                                            else if (user.Role == QuestionUserRole.Reviewer)
+                                            {
+                                                <span class="ms-1 opacity-75">(reviewer)</span>
+                                            }
+                                            else if (user.Role == QuestionUserRole.Support)
+                                            {
+                                                <span class="ms-1  opacity-75">(support)</span>
+                                            }
+                                            
+                                        </span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">No users assigned to this question.</span>
+                            }
+                        </div>
+
 
                         <div class="card shadow-sm mb-3">
                             <div class="card-body">
