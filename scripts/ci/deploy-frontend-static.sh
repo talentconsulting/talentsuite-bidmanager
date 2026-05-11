@@ -69,6 +69,12 @@ resolve_resource_group() {
     return 0
   fi
 
+  resource_group="rg-${AZURE_ENV_NAME}"
+  if [ "$(az group exists --name "$resource_group" 2>/dev/null || true)" = "true" ]; then
+    printf '%s' "$resource_group"
+    return 0
+  fi
+
   resource_group="$(az resource list \
     --name talentserver \
     --resource-type "Microsoft.App/containerApps" \
