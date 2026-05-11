@@ -1028,6 +1028,7 @@ public sealed class SqlServerBidRepository : IManageBids
                     BidId = bid.Id,
                     BidTitle = bidTitle,
                     QuestionId = question.Id,
+                    QuestionNumber = question.Number ?? string.Empty,
                     QuestionTitle = string.IsNullOrWhiteSpace(question.Title)
                         ? $"#{question.Number}"
                         : question.Title,
