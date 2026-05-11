@@ -3,6 +3,11 @@ name: Azure Deploy
 on:
   workflow_dispatch:
     inputs:
+      target_environment:
+        description: 'GitHub environment to use for this deployment.'
+        required: true
+        default: 'dev'
+        type: environment
       deployment_mode:
         description: 'Choose whether to provision infrastructure first or only deploy application code.'
         required: true
@@ -32,10 +37,10 @@ jobs:
       id-token: write
       contents: read
     runs-on: ubuntu-latest
-    environment: dev
+    environment: ${{ inputs.target_environment }}
     env:
       # ---- azd / Azure context ----
-      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_ENV_NAME: ${{ inputs.target_environment }}
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AZD_WORKING_DIR: '.'
@@ -86,10 +91,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Azure Login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -97,8 +102,6 @@ jobs:
 
       - name: Setup azd
         uses: Azure/setup-azd@v2
-        with:
-          version: 1.24.2
 
       - name: Enable azd operations alpha feature
         run: |
@@ -534,18 +537,44 @@ jobs:
           test -n "$frontend_base_url" || (echo "Could not resolve frontend static website endpoint in $resource_group" && exit 1)
           frontend_base_url="${frontend_base_url%/}"
 
-          az containerapp update \
-            --name "$app_name" \
-            --resource-group "$resource_group" \
-            --set-env-vars \
-              InviteEmail__Enabled="${InviteEmailEnabled}" \
-              InviteEmail__FrontendBaseUrl="${frontend_base_url}" \
-              InviteEmail__FromEmail="${InviteFromEmail}" \
-              InviteEmail__FromDisplayName=TalentSuite \
-              InviteEmail__SmtpHost="${InviteSmtpHost}" \
-              InviteEmail__SmtpPort="${InviteSmtpPort}" \
-              InviteEmail__SmtpEnableSsl="${InviteSmtpEnableSsl}" \
-              InviteEmail__SmtpUsername="${InviteSmtpUsername}" >/dev/null
+          attempts=5
+          delay_seconds=15
+          for attempt in $(seq 1 "$attempts"); do
+            if az containerapp update \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --set-env-vars \
+                InviteEmail__Enabled="${InviteEmailEnabled}" \
+                InviteEmail__FrontendBaseUrl="${frontend_base_url}" \
+                InviteEmail__FromEmail="${InviteFromEmail}" \
+                InviteEmail__FromDisplayName=TalentSuite \
+                InviteEmail__SmtpHost="${InviteSmtpHost}" \
+                InviteEmail__SmtpPort="${InviteSmtpPort}" \
+                InviteEmail__SmtpEnableSsl="${InviteSmtpEnableSsl}" \
+                InviteEmail__SmtpUsername="${InviteSmtpUsername}" >/dev/null; then
+              break
+            fi
+
+            if [ "$attempt" -eq "$attempts" ]; then
+              echo "Failed to configure invite email settings for $app_name after $attempts attempts."
+              az containerapp update \
+                --name "$app_name" \
+                --resource-group "$resource_group" \
+                --set-env-vars \
+                  InviteEmail__Enabled="${InviteEmailEnabled}" \
+                  InviteEmail__FrontendBaseUrl="${frontend_base_url}" \
+                  InviteEmail__FromEmail="${InviteFromEmail}" \
+                  InviteEmail__FromDisplayName=TalentSuite \
+                  InviteEmail__SmtpHost="${InviteSmtpHost}" \
+                  InviteEmail__SmtpPort="${InviteSmtpPort}" \
+                  InviteEmail__SmtpEnableSsl="${InviteSmtpEnableSsl}" \
+                  InviteEmail__SmtpUsername="${InviteSmtpUsername}"
+              exit 1
+            fi
+
+            echo "Retrying invite email settings update for $app_name in ${delay_seconds}s (attempt $attempt/$attempts)..."
+            sleep "$delay_seconds"
+          done
 
           echo "Configured invite email settings for $app_name using frontend base URL $frontend_base_url"
 
@@ -1220,7 +1249,7 @@ jobs:
 
       - name: Refresh Azure Login (OIDC) before frontend deploy
         if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'frontend') }}
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}

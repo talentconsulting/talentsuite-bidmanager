@@ -3,109 +3,11 @@ name: Azure AI Bootstrap
 on:
   workflow_dispatch:
     inputs:
-      resource_group:
-        description: Azure resource group to create/update
+      target_environment:
+        description: GitHub environment to use for this deployment
         required: true
-        default: rg-dev
-        type: string
-      location:
-        description: Azure region for new resources
-        required: true
-        default: uksouth
-        type: string
-      document_intelligence_account:
-        description: Azure AI Document Intelligence account name
-        required: false
-        default: docintelligence-talentsuite-dev
-        type: string
-      document_intelligence_custom_domain:
-        description: Azure AI Document Intelligence custom domain
-        required: false
-        default: docintelligence-talentsuite-dev
-        type: string
-      document_intelligence_sku:
-        description: Azure AI Document Intelligence SKU
-        required: true
-        default: S0
-        type: choice
-        options:
-          - S0
-          - F0
-      foundry_account:
-        description: Azure AI Foundry account name
-        required: false
-        default: foundry-talentsuite-dev
-        type: string
-      foundry_project:
-        description: Azure AI Foundry project name
-        required: false
-        default: foundry-prj-talentsuite-dev
-        type: string
-      foundry_model_deployment:
-        description: Azure AI Foundry model deployment name
-        required: false
-        default: gpt-4o
-        type: string
-      foundry_model_name:
-        description: Azure AI Foundry model name
-        required: false
-        default: gpt-4o
-        type: string
-      foundry_model_version:
-        description: Azure AI Foundry model version
-        required: false
-        default: 2024-11-20
-        type: string
-      agent_name:
-        description: Azure AI Foundry agent name
-        required: true
-        default: foundry-agent-talentsuite-dev
-        type: string
-      openai_account:
-        description: Azure OpenAI account name override
-        required: false
-        default: openai-talentsuite-dev
-        type: string
-      openai_model_deployment:
-        description: Azure OpenAI deployment name
-        required: false
-        default: gpt-4-1
-        type: string
-      openai_model_name:
-        description: Azure OpenAI model name
-        required: false
-        default: gpt-4.1
-        type: string
-      openai_model_version:
-        description: Azure OpenAI model version
-        required: false
-        default: 2025-04-14
-        type: string
-      search_service:
-        description: Azure AI Search service name override
-        required: false
-        default: aisearch-talentsuite-dev
-        type: string
-      search_index_name:
-        description: Existing or desired Azure AI Search index name
-        required: false
-        default: index-talentsuite-dev
-        type: string
-      auto_index_blob_storage:
-        description: Discover Aspire bid blob storage and build Search datasource/index/indexer
-        required: true
-        default: true
-        type: boolean
-      storage_account:
-        description: Optional storage account override for blob indexing
-        required: false
-        default: ""
-        type: string
-      storage_container:
-        description: Optional blob container override for blob indexing
-        required: false
-        default: ""
-        type: string
+        default: dev
+        type: environment
 
 permissions:
   contents: read
@@ -116,16 +18,18 @@ jobs:
       id-token: write
       contents: read
     runs-on: ubuntu-latest
-    environment: dev
+    environment: ${{ inputs.target_environment }}
     env:
+      AZURE_ENV_NAME: ${{ inputs.target_environment }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Azure Login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -136,9 +40,66 @@ jobs:
           test -n "${{ secrets.AZURE_CLIENT_ID }}" || (echo "AZURE_CLIENT_ID missing" && exit 1)
           test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
           test -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
-          test -n "${{ github.event.inputs.resource_group }}" || (echo "resource_group input missing" && exit 1)
-          test -n "${{ github.event.inputs.location }}" || (echo "location input missing" && exit 1)
-          test -n "${{ github.event.inputs.agent_name }}" || (echo "agent_name input missing" && exit 1)
+          test -n "${AZURE_ENV_NAME:-}" || (echo "AZURE_ENV_NAME missing" && exit 1)
+          test -n "${AZURE_LOCATION:-}" || (echo "AZURE_LOCATION missing" && exit 1)
+
+      - name: Resolve environment defaults
+        run: |
+          set -euo pipefail
+
+          env_suffix="${AZURE_ENV_NAME}"
+          resource_group="rg-${env_suffix}"
+          document_intelligence_account="docintelligence-talentsuite-${env_suffix}"
+          document_intelligence_custom_domain="docintelligence-talentsuite-${env_suffix}"
+          foundry_account="foundry-talentsuite-${env_suffix}"
+          foundry_project="foundry-prj-talentsuite-${env_suffix}"
+          foundry_model_deployment="gpt-4o"
+          foundry_model_name="gpt-4o"
+          foundry_model_version="2024-11-20"
+          agent_name="foundry-agent-talentsuite-${env_suffix}"
+          openai_account="openai-talentsuite-${env_suffix}"
+          openai_model_deployment="gpt-4-1"
+          openai_model_name="gpt-4.1"
+          openai_model_version="2025-04-14"
+          search_service="aisearch-talentsuite-${env_suffix}"
+          search_index_name="index-talentsuite-${env_suffix}"
+          storage_container="bidlibrary"
+          storage_account="$(az storage account list \
+            --resource-group "$resource_group" \
+            --query "[?starts_with(name, 'bidcontentstorage')][0].name" \
+            -o tsv 2>/dev/null || true)"
+
+          test -n "$storage_account" || (echo "Could not resolve bid content storage account in $resource_group" && exit 1)
+
+          case "$env_suffix" in
+            production)
+              document_intelligence_sku="F0"
+              ;;
+            *)
+              document_intelligence_sku="S0"
+              ;;
+          esac
+
+          {
+            echo "BOOTSTRAP_RESOURCE_GROUP=$resource_group"
+            echo "BOOTSTRAP_DOCUMENT_INTELLIGENCE_ACCOUNT=$document_intelligence_account"
+            echo "BOOTSTRAP_DOCUMENT_INTELLIGENCE_CUSTOM_DOMAIN=$document_intelligence_custom_domain"
+            echo "BOOTSTRAP_DOCUMENT_INTELLIGENCE_SKU=$document_intelligence_sku"
+            echo "BOOTSTRAP_FOUNDRY_ACCOUNT=$foundry_account"
+            echo "BOOTSTRAP_FOUNDRY_PROJECT=$foundry_project"
+            echo "BOOTSTRAP_FOUNDRY_MODEL_DEPLOYMENT=$foundry_model_deployment"
+            echo "BOOTSTRAP_FOUNDRY_MODEL_NAME=$foundry_model_name"
+            echo "BOOTSTRAP_FOUNDRY_MODEL_VERSION=$foundry_model_version"
+            echo "BOOTSTRAP_AGENT_NAME=$agent_name"
+            echo "BOOTSTRAP_OPENAI_ACCOUNT=$openai_account"
+            echo "BOOTSTRAP_OPENAI_MODEL_DEPLOYMENT=$openai_model_deployment"
+            echo "BOOTSTRAP_OPENAI_MODEL_NAME=$openai_model_name"
+            echo "BOOTSTRAP_OPENAI_MODEL_VERSION=$openai_model_version"
+            echo "BOOTSTRAP_SEARCH_SERVICE=$search_service"
+            echo "BOOTSTRAP_SEARCH_INDEX_NAME=$search_index_name"
+            echo "BOOTSTRAP_STORAGE_ACCOUNT=$storage_account"
+            echo "BOOTSTRAP_STORAGE_CONTAINER=$storage_container"
+          } >> "$GITHUB_ENV"
 
       - name: Bootstrap Azure AI resources
         id: bootstrap
@@ -149,61 +110,28 @@ jobs:
 
           args=(
             --subscription "${AZURE_SUBSCRIPTION_ID}"
-            --resource-group "${{ github.event.inputs.resource_group }}"
-            --location "${{ github.event.inputs.location }}"
-            --agent-name "${{ github.event.inputs.agent_name }}"
-            --foundry-model-deployment "${{ github.event.inputs.foundry_model_deployment }}"
-            --foundry-model-name "${{ github.event.inputs.foundry_model_name }}"
-            --foundry-model-version "${{ github.event.inputs.foundry_model_version }}"
-            --openai-model-deployment "${{ github.event.inputs.openai_model_deployment }}"
-            --openai-model-name "${{ github.event.inputs.openai_model_name }}"
-            --openai-model-version "${{ github.event.inputs.openai_model_version }}"
+            --resource-group "${BOOTSTRAP_RESOURCE_GROUP}"
+            --location "${AZURE_LOCATION}"
+            --agent-name "${BOOTSTRAP_AGENT_NAME}"
+            --foundry-model-deployment "${BOOTSTRAP_FOUNDRY_MODEL_DEPLOYMENT}"
+            --foundry-model-name "${BOOTSTRAP_FOUNDRY_MODEL_NAME}"
+            --foundry-model-version "${BOOTSTRAP_FOUNDRY_MODEL_VERSION}"
+            --openai-model-deployment "${BOOTSTRAP_OPENAI_MODEL_DEPLOYMENT}"
+            --openai-model-name "${BOOTSTRAP_OPENAI_MODEL_NAME}"
+            --openai-model-version "${BOOTSTRAP_OPENAI_MODEL_VERSION}"
+            --document-intelligence-account "${BOOTSTRAP_DOCUMENT_INTELLIGENCE_ACCOUNT}"
+            --document-intelligence-custom-domain "${BOOTSTRAP_DOCUMENT_INTELLIGENCE_CUSTOM_DOMAIN}"
+            --document-intelligence-sku "${BOOTSTRAP_DOCUMENT_INTELLIGENCE_SKU}"
+            --foundry-account "${BOOTSTRAP_FOUNDRY_ACCOUNT}"
+            --foundry-project "${BOOTSTRAP_FOUNDRY_PROJECT}"
+            --openai-account "${BOOTSTRAP_OPENAI_ACCOUNT}"
+            --search-service "${BOOTSTRAP_SEARCH_SERVICE}"
+            --search-index-name "${BOOTSTRAP_SEARCH_INDEX_NAME}"
+            --storage-account "${BOOTSTRAP_STORAGE_ACCOUNT}"
+            --storage-container "${BOOTSTRAP_STORAGE_CONTAINER}"
+            --auto-index-blob-storage
             --emit-azd-env
           )
-
-          if [ -n "${{ github.event.inputs.document_intelligence_account }}" ]; then
-            args+=(--document-intelligence-account "${{ github.event.inputs.document_intelligence_account }}")
-          fi
-
-          if [ -n "${{ github.event.inputs.document_intelligence_custom_domain }}" ]; then
-            args+=(--document-intelligence-custom-domain "${{ github.event.inputs.document_intelligence_custom_domain }}")
-          fi
-
-          if [ -n "${{ github.event.inputs.document_intelligence_sku }}" ]; then
-            args+=(--document-intelligence-sku "${{ github.event.inputs.document_intelligence_sku }}")
-          fi
-
-          if [ -n "${{ github.event.inputs.foundry_account }}" ]; then
-            args+=(--foundry-account "${{ github.event.inputs.foundry_account }}")
-          fi
-
-          if [ -n "${{ github.event.inputs.foundry_project }}" ]; then
-            args+=(--foundry-project "${{ github.event.inputs.foundry_project }}")
-          fi
-
-          if [ -n "${{ github.event.inputs.openai_account }}" ]; then
-            args+=(--openai-account "${{ github.event.inputs.openai_account }}")
-          fi
-
-          if [ -n "${{ github.event.inputs.search_service }}" ]; then
-            args+=(--search-service "${{ github.event.inputs.search_service }}")
-          fi
-
-          if [ -n "${{ github.event.inputs.search_index_name }}" ]; then
-            args+=(--search-index-name "${{ github.event.inputs.search_index_name }}")
-          fi
-
-          if [ "${{ github.event.inputs.auto_index_blob_storage }}" = "true" ]; then
-            args+=(--auto-index-blob-storage)
-          fi
-
-          if [ -n "${{ github.event.inputs.storage_account || 'bidcontentstoragemwfumoe' }}" ]; then
-            args+=(--storage-account "${{ github.event.inputs.storage_account || 'bidcontentstoragemwfumoe' }}")
-          fi
-
-          if [ -n "${{ github.event.inputs.storage_container || 'bidlibrary' }}" ]; then
-            args+=(--storage-container "${{ github.event.inputs.storage_container || 'bidlibrary' }}")
-          fi
 
           output_file="$(mktemp)"
           scripts/ci/provision-foundry-agent-stack.sh "${args[@]}" | tee "$output_file"

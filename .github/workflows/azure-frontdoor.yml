@@ -3,64 +3,11 @@ name: Azure Front Door
 on:
   workflow_dispatch:
     inputs:
-      profile_name:
-        description: "Azure Front Door profile name"
+      target_environment:
+        description: "GitHub environment to use for this deployment"
         required: true
-        default: "talentsuite-afd"
-        type: string
-      endpoint_name:
-        description: "Azure Front Door endpoint name"
-        required: true
-        default: "talentsuite-dev"
-        type: string
-      auth_endpoint_name:
-        description: "Azure Front Door endpoint name for the optional Keycloak auth domain"
-        required: false
-        default: "talentsuite-auth-dev"
-        type: string
-      api_endpoint_name:
-        description: "Azure Front Door endpoint name for the optional API domain"
-        required: false
-        default: "talentsuite-api-dev"
-        type: string
-      grafana_endpoint_name:
-        description: "Azure Front Door endpoint name for the optional Grafana domain"
-        required: false
-        default: "talentsuite-grafana-dev"
-        type: string
-      sku:
-        description: "Azure Front Door SKU"
-        required: true
-        default: "Standard_AzureFrontDoor"
-        type: choice
-        options:
-          - Standard_AzureFrontDoor
-          - Premium_AzureFrontDoor
-      frontend_patterns:
-        description: "Route patterns for the frontend origin"
-        required: true
-        default: "/*"
-        type: string
-      custom_domain:
-        description: "Optional custom domain to attach, e.g. dev.talentsuite.uk"
-        required: false
-        default: "dev.talentsuite.uk"
-        type: string
-      auth_domain:
-        description: "Keycloak custom domain to attach, e.g. auth-dev.talentsuite.uk"
-        required: true
-        default: "auth-dev.talentsuite.uk"
-        type: string
-      api_domain:
-        description: "API custom domain to attach, e.g. dev-api.talentsuite.uk"
-        required: true
-        default: "dev-api.talentsuite.uk"
-        type: string
-      grafana_domain:
-        description: "Grafana custom domain to attach, e.g. grafana-dev.talentsuite.uk"
-        required: false
-        default: "grafana-dev.talentsuite.uk"
-        type: string
+        default: "dev"
+        type: environment
 
 permissions:
   contents: read
@@ -71,7 +18,7 @@ jobs:
       id-token: write
       contents: read
     runs-on: ubuntu-latest
-    environment: dev
+    environment: ${{ inputs.target_environment }}
     env:
       AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
@@ -79,10 +26,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Azure Login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -90,38 +37,87 @@ jobs:
 
       - name: Validate required inputs
         run: |
-          test -n "${AZURE_ENV_NAME:-}" || (echo "AZURE_ENV_NAME missing" && exit 1)
-          test -n "${{ github.event.inputs.profile_name }}" || (echo "profile_name missing" && exit 1)
-          test -n "${{ github.event.inputs.endpoint_name }}" || (echo "endpoint_name missing" && exit 1)
+          resolved_env_name="${AZURE_ENV_NAME:-${{ inputs.target_environment }}}"
+          test -n "$resolved_env_name" || (echo "Could not resolve Azure environment name" && exit 1)
+          echo "AZURE_ENV_NAME=$resolved_env_name" >> "$GITHUB_ENV"
+
+      - name: Resolve environment defaults
+        run: |
+          set -euo pipefail
+
+          env_suffix="${AZURE_ENV_NAME}"
+          frontdoor_resource_group="rg-talentsuite-common"
+          target_resource_group="rg-${AZURE_ENV_NAME}"
+          case "$env_suffix" in
+            production)
+              profile_name="talentsuite-production-envs-afd"
+              ;;
+            *)
+              profile_name="talentsuite-lower-envs-afd"
+              ;;
+          esac
+          sku="Standard_AzureFrontDoor"
+          frontend_patterns="/*"
+          endpoint_name="talentsuite-${env_suffix}"
+          auth_endpoint_name="talentsuite-auth-${env_suffix}"
+          api_endpoint_name="talentsuite-api-${env_suffix}"
+          grafana_endpoint_name="talentsuite-grafana-${env_suffix}"
+          custom_domain="${env_suffix}.talentsuite.uk"
+          auth_domain="auth-${env_suffix}.talentsuite.uk"
+          api_domain="${env_suffix}-api.talentsuite.uk"
+          grafana_domain="grafana-${env_suffix}.talentsuite.uk"
+
+          {
+            echo "FRONTDOOR_RESOURCE_GROUP=$frontdoor_resource_group"
+            echo "FRONTDOOR_TARGET_RESOURCE_GROUP=$target_resource_group"
+            echo "FRONTDOOR_PROFILE_NAME=$profile_name"
+            echo "FRONTDOOR_SKU=$sku"
+            echo "FRONTDOOR_FRONTEND_PATTERNS=$frontend_patterns"
+            echo "FRONTDOOR_ENDPOINT_NAME=$endpoint_name"
+            echo "FRONTDOOR_AUTH_ENDPOINT_NAME=$auth_endpoint_name"
+            echo "FRONTDOOR_API_ENDPOINT_NAME=$api_endpoint_name"
+            echo "FRONTDOOR_GRAFANA_ENDPOINT_NAME=$grafana_endpoint_name"
+            echo "FRONTDOOR_CUSTOM_DOMAIN=$custom_domain"
+            echo "FRONTDOOR_AUTH_DOMAIN=$auth_domain"
+            echo "FRONTDOOR_API_DOMAIN=$api_domain"
+            echo "FRONTDOOR_GRAFANA_DOMAIN=$grafana_domain"
+          } >> "$GITHUB_ENV"
 
       - name: Provision Azure Front Door
         run: |
           set -euo pipefail
 
-          resource_group="rg-${AZURE_ENV_NAME}"
-          profile_name="${{ github.event.inputs.profile_name }}"
-          endpoint_name="${{ github.event.inputs.endpoint_name }}"
-          auth_endpoint_name="${{ github.event.inputs.auth_endpoint_name }}"
-          api_endpoint_name="${{ github.event.inputs.api_endpoint_name }}"
-          grafana_endpoint_name="${{ github.event.inputs.grafana_endpoint_name }}"
-          sku="${{ github.event.inputs.sku }}"
-          frontend_patterns="${{ github.event.inputs.frontend_patterns }}"
+          frontdoor_resource_group="${FRONTDOOR_RESOURCE_GROUP}"
+          target_resource_group="${FRONTDOOR_TARGET_RESOURCE_GROUP}"
+          profile_name="${FRONTDOOR_PROFILE_NAME}"
+          endpoint_name="${FRONTDOOR_ENDPOINT_NAME}"
+          auth_endpoint_name="${FRONTDOOR_AUTH_ENDPOINT_NAME}"
+          api_endpoint_name="${FRONTDOOR_API_ENDPOINT_NAME}"
+          grafana_endpoint_name="${FRONTDOOR_GRAFANA_ENDPOINT_NAME}"
+          sku="${FRONTDOOR_SKU}"
+          frontend_patterns="${FRONTDOOR_FRONTEND_PATTERNS}"
+          env_suffix="${AZURE_ENV_NAME}"
 
-          frontend_origin_group="frontend-og"
-          frontend_origin_name="frontend-origin"
+          frontend_origin_group="frontend-og-${env_suffix}"
+          frontend_origin_name="frontend-origin-${env_suffix}"
           frontend_route_name="frontend-route"
-          api_origin_group="api-og"
-          api_origin_name="api-origin"
+          api_origin_group="api-og-${env_suffix}"
+          api_origin_name="api-origin-${env_suffix}"
           api_route_name="api-route"
-          keycloak_origin_group="keycloak-og"
-          keycloak_origin_name="keycloak-origin"
+          keycloak_origin_group="keycloak-og-${env_suffix}"
+          keycloak_origin_name="keycloak-origin-${env_suffix}"
           keycloak_route_name="keycloak-route"
-          grafana_origin_group="grafana-og"
-          grafana_origin_name="grafana-origin"
+          grafana_origin_group="grafana-og-${env_suffix}"
+          grafana_origin_name="grafana-origin-${env_suffix}"
           grafana_route_name="grafana-route"
-          auth_domain="${{ github.event.inputs.auth_domain }}"
-          api_domain="${{ github.event.inputs.api_domain }}"
-          grafana_domain="${{ github.event.inputs.grafana_domain }}"
+          auth_domain="${FRONTDOOR_AUTH_DOMAIN}"
+          api_domain="${FRONTDOOR_API_DOMAIN}"
+          grafana_domain="${FRONTDOOR_GRAFANA_DOMAIN}"
+
+          az group create \
+            --name "$frontdoor_resource_group" \
+            --location "${AZURE_LOCATION}" \
+            >/dev/null
 
           azd_values="$(azd env get-values --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
           storage_blob_endpoint="$(printf '%s\n' "$azd_values" | sed -n -E 's/^(export[[:space:]]+)?STORAGE_BLOBENDPOINT=(.*)$/\2/p' | head -n1)"
@@ -131,98 +127,98 @@ jobs:
           fi
 
           storage_account_name="$(echo "$storage_blob_endpoint" | sed -E 's#^https?://([^.]+)\..*$#\1#')"
-          if ! az storage account show --name "$storage_account_name" --resource-group "$resource_group" --query 'name' -o tsv >/dev/null 2>&1; then
+          if ! az storage account show --name "$storage_account_name" --resource-group "$target_resource_group" --query 'name' -o tsv >/dev/null 2>&1; then
             storage_account_name=""
           fi
 
           if [ -z "$storage_account_name" ]; then
             storage_account_name="$(az storage account list \
-              --resource-group "$resource_group" \
+              --resource-group "$target_resource_group" \
               --query "[].name" \
               -o tsv 2>/dev/null | grep -v '^bidcontentstorage' | head -n1 || true)"
           fi
 
-          test -n "$storage_account_name" || (echo "Could not resolve frontend storage account in $resource_group" && exit 1)
+          test -n "$storage_account_name" || (echo "Could not resolve frontend storage account in $target_resource_group" && exit 1)
 
           frontend_host="$(az storage account show \
             --name "$storage_account_name" \
-            --resource-group "$resource_group" \
+            --resource-group "$target_resource_group" \
             --query 'primaryEndpoints.web' \
             -o tsv)"
           frontend_host="${frontend_host#https://}"
           frontend_host="${frontend_host%/}"
-          test -n "$frontend_host" || (echo "Could not resolve frontend static website host in $resource_group" && exit 1)
+          test -n "$frontend_host" || (echo "Could not resolve frontend static website host in $target_resource_group" && exit 1)
 
           api_host="$(az containerapp show \
             --name talentserver \
-            --resource-group "$resource_group" \
+            --resource-group "$target_resource_group" \
             --query 'properties.configuration.ingress.fqdn' \
             -o tsv)"
-          test -n "$api_host" || (echo "Could not resolve public talentserver ingress FQDN in $resource_group" && exit 1)
+          test -n "$api_host" || (echo "Could not resolve public talentserver ingress FQDN in $target_resource_group" && exit 1)
 
           if [ -n "$auth_domain" ]; then
             keycloak_host="$(az containerapp show \
               --name keycloak \
-              --resource-group "$resource_group" \
+              --resource-group "$target_resource_group" \
               --query 'properties.configuration.ingress.fqdn' \
               -o tsv)"
-            test -n "$keycloak_host" || (echo "Could not resolve public keycloak ingress FQDN in $resource_group" && exit 1)
+            test -n "$keycloak_host" || (echo "Could not resolve public keycloak ingress FQDN in $target_resource_group" && exit 1)
           fi
 
           if [ -n "$grafana_domain" ]; then
             grafana_host="$(az containerapp show \
               --name grafana \
-              --resource-group "$resource_group" \
+              --resource-group "$target_resource_group" \
               --query 'properties.configuration.ingress.fqdn' \
               -o tsv)"
-            test -n "$grafana_host" || (echo "Could not resolve public grafana ingress FQDN in $resource_group" && exit 1)
+            test -n "$grafana_host" || (echo "Could not resolve public grafana ingress FQDN in $target_resource_group" && exit 1)
             grafana_origin_host_header="$grafana_host"
           else
             grafana_origin_host_header=""
           fi
 
-          if ! az afd profile show --resource-group "$resource_group" --profile-name "$profile_name" >/dev/null 2>&1; then
+          if ! az afd profile show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" >/dev/null 2>&1; then
             az afd profile create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --sku "$sku" >/dev/null
           fi
 
-          if ! az afd endpoint show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" >/dev/null 2>&1; then
+          if ! az afd endpoint show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" >/dev/null 2>&1; then
             az afd endpoint create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$endpoint_name" \
               --enabled-state Enabled >/dev/null
           fi
 
-          if [ -n "$auth_domain" ] && ! az afd endpoint show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$auth_endpoint_name" >/dev/null 2>&1; then
+          if [ -n "$auth_domain" ] && ! az afd endpoint show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --endpoint-name "$auth_endpoint_name" >/dev/null 2>&1; then
             az afd endpoint create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$auth_endpoint_name" \
               --enabled-state Enabled >/dev/null
           fi
 
-          if [ -n "$api_domain" ] && ! az afd endpoint show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$api_endpoint_name" >/dev/null 2>&1; then
+          if [ -n "$api_domain" ] && ! az afd endpoint show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --endpoint-name "$api_endpoint_name" >/dev/null 2>&1; then
             az afd endpoint create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$api_endpoint_name" \
               --enabled-state Enabled >/dev/null
           fi
 
-          if [ -n "$grafana_domain" ] && ! az afd endpoint show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$grafana_endpoint_name" >/dev/null 2>&1; then
+          if [ -n "$grafana_domain" ] && ! az afd endpoint show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --endpoint-name "$grafana_endpoint_name" >/dev/null 2>&1; then
             az afd endpoint create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$grafana_endpoint_name" \
               --enabled-state Enabled >/dev/null
           fi
 
-          if ! az afd origin-group show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$frontend_origin_group" >/dev/null 2>&1; then
+          if ! az afd origin-group show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --origin-group-name "$frontend_origin_group" >/dev/null 2>&1; then
             az afd origin-group create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --origin-group-name "$frontend_origin_group" \
               --probe-request-type GET \
@@ -235,9 +231,9 @@ jobs:
               --enable-health-probe >/dev/null
           fi
 
-          if ! az afd origin-group show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$api_origin_group" >/dev/null 2>&1; then
+          if ! az afd origin-group show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --origin-group-name "$api_origin_group" >/dev/null 2>&1; then
             az afd origin-group create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --origin-group-name "$api_origin_group" \
               --probe-request-type GET \
@@ -250,9 +246,9 @@ jobs:
               --enable-health-probe >/dev/null
           fi
 
-          if [ -n "$auth_domain" ] && ! az afd origin-group show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$keycloak_origin_group" >/dev/null 2>&1; then
+          if [ -n "$auth_domain" ] && ! az afd origin-group show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --origin-group-name "$keycloak_origin_group" >/dev/null 2>&1; then
             az afd origin-group create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --origin-group-name "$keycloak_origin_group" \
               --probe-request-type GET \
@@ -265,9 +261,9 @@ jobs:
               --enable-health-probe >/dev/null
           fi
 
-          if [ -n "$grafana_domain" ] && ! az afd origin-group show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$grafana_origin_group" >/dev/null 2>&1; then
+          if [ -n "$grafana_domain" ] && ! az afd origin-group show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --origin-group-name "$grafana_origin_group" >/dev/null 2>&1; then
             az afd origin-group create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --origin-group-name "$grafana_origin_group" \
               --probe-request-type GET \
@@ -280,9 +276,9 @@ jobs:
               --enable-health-probe >/dev/null
           fi
 
-          if az afd origin show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$frontend_origin_group" --origin-name "$frontend_origin_name" >/dev/null 2>&1; then
+          if az afd origin show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --origin-group-name "$frontend_origin_group" --origin-name "$frontend_origin_name" >/dev/null 2>&1; then
             az afd origin update \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --origin-group-name "$frontend_origin_group" \
               --origin-name "$frontend_origin_name" \
@@ -295,7 +291,7 @@ jobs:
               --enabled-state Enabled >/dev/null
           else
             az afd origin create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --origin-group-name "$frontend_origin_group" \
               --origin-name "$frontend_origin_name" \
@@ -308,9 +304,9 @@ jobs:
               --enabled-state Enabled >/dev/null
           fi
 
-          if [ -n "$auth_domain" ] && az afd origin show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$keycloak_origin_group" --origin-name "$keycloak_origin_name" >/dev/null 2>&1; then
+          if [ -n "$auth_domain" ] && az afd origin show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --origin-group-name "$keycloak_origin_group" --origin-name "$keycloak_origin_name" >/dev/null 2>&1; then
             az afd origin update \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --origin-group-name "$keycloak_origin_group" \
               --origin-name "$keycloak_origin_name" \
@@ -323,7 +319,7 @@ jobs:
               --enabled-state Enabled >/dev/null
           elif [ -n "$auth_domain" ]; then
             az afd origin create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --origin-group-name "$keycloak_origin_group" \
               --origin-name "$keycloak_origin_name" \
@@ -336,9 +332,9 @@ jobs:
               --enabled-state Enabled >/dev/null
           fi
 
-          if [ -n "$grafana_domain" ] && az afd origin show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$grafana_origin_group" --origin-name "$grafana_origin_name" >/dev/null 2>&1; then
+          if [ -n "$grafana_domain" ] && az afd origin show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --origin-group-name "$grafana_origin_group" --origin-name "$grafana_origin_name" >/dev/null 2>&1; then
             az afd origin update \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --origin-group-name "$grafana_origin_group" \
               --origin-name "$grafana_origin_name" \
@@ -351,7 +347,7 @@ jobs:
               --enabled-state Enabled >/dev/null
           elif [ -n "$grafana_domain" ]; then
             az afd origin create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --origin-group-name "$grafana_origin_group" \
               --origin-name "$grafana_origin_name" \
@@ -364,9 +360,9 @@ jobs:
               --enabled-state Enabled >/dev/null
           fi
 
-          if az afd origin show --resource-group "$resource_group" --profile-name "$profile_name" --origin-group-name "$api_origin_group" --origin-name "$api_origin_name" >/dev/null 2>&1; then
+          if az afd origin show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --origin-group-name "$api_origin_group" --origin-name "$api_origin_name" >/dev/null 2>&1; then
             az afd origin update \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --origin-group-name "$api_origin_group" \
               --origin-name "$api_origin_name" \
@@ -379,7 +375,7 @@ jobs:
               --enabled-state Enabled >/dev/null
           else
             az afd origin create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --origin-group-name "$api_origin_group" \
               --origin-name "$api_origin_name" \
@@ -392,9 +388,9 @@ jobs:
               --enabled-state Enabled >/dev/null
           fi
 
-          if az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" --route-name "$frontend_route_name" >/dev/null 2>&1; then
+          if az afd route show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" --route-name "$frontend_route_name" >/dev/null 2>&1; then
             az afd route update \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$endpoint_name" \
               --route-name "$frontend_route_name" \
@@ -406,7 +402,7 @@ jobs:
               --forwarding-protocol MatchRequest >/dev/null
           else
             az afd route create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$endpoint_name" \
               --route-name "$frontend_route_name" \
@@ -419,9 +415,9 @@ jobs:
           fi
 
           if [ -z "$api_domain" ]; then
-            if az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" --route-name "$api_route_name" >/dev/null 2>&1; then
+            if az afd route show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" --route-name "$api_route_name" >/dev/null 2>&1; then
               az afd route update \
-                --resource-group "$resource_group" \
+                --resource-group "$frontdoor_resource_group" \
                 --profile-name "$profile_name" \
                 --endpoint-name "$endpoint_name" \
                 --route-name "$api_route_name" \
@@ -433,7 +429,7 @@ jobs:
                 --forwarding-protocol MatchRequest >/dev/null
             else
               az afd route create \
-                --resource-group "$resource_group" \
+                --resource-group "$frontdoor_resource_group" \
                 --profile-name "$profile_name" \
                 --endpoint-name "$endpoint_name" \
                 --route-name "$api_route_name" \
@@ -444,18 +440,18 @@ jobs:
                 --https-redirect Enabled \
                 --forwarding-protocol MatchRequest >/dev/null
             fi
-          elif az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" --route-name "$api_route_name" >/dev/null 2>&1; then
+          elif az afd route show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" --route-name "$api_route_name" >/dev/null 2>&1; then
             az afd route delete \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$endpoint_name" \
               --route-name "$api_route_name" \
               --yes >/dev/null
           fi
 
-          if [ -n "$api_domain" ] && az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$api_endpoint_name" --route-name "$api_route_name" >/dev/null 2>&1; then
+          if [ -n "$api_domain" ] && az afd route show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --endpoint-name "$api_endpoint_name" --route-name "$api_route_name" >/dev/null 2>&1; then
             az afd route update \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$api_endpoint_name" \
               --route-name "$api_route_name" \
@@ -467,7 +463,7 @@ jobs:
               --forwarding-protocol MatchRequest >/dev/null
           elif [ -n "$api_domain" ]; then
             az afd route create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$api_endpoint_name" \
               --route-name "$api_route_name" \
@@ -479,9 +475,9 @@ jobs:
               --forwarding-protocol MatchRequest >/dev/null
           fi
 
-          if [ -n "$auth_domain" ] && az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$auth_endpoint_name" --route-name "$keycloak_route_name" >/dev/null 2>&1; then
+          if [ -n "$auth_domain" ] && az afd route show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --endpoint-name "$auth_endpoint_name" --route-name "$keycloak_route_name" >/dev/null 2>&1; then
             az afd route update \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$auth_endpoint_name" \
               --route-name "$keycloak_route_name" \
@@ -493,7 +489,7 @@ jobs:
               --forwarding-protocol MatchRequest >/dev/null
           elif [ -n "$auth_domain" ]; then
             az afd route create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$auth_endpoint_name" \
               --route-name "$keycloak_route_name" \
@@ -505,9 +501,9 @@ jobs:
               --forwarding-protocol MatchRequest >/dev/null
           fi
 
-          if [ -n "$grafana_domain" ] && az afd route show --resource-group "$resource_group" --profile-name "$profile_name" --endpoint-name "$grafana_endpoint_name" --route-name "$grafana_route_name" >/dev/null 2>&1; then
+          if [ -n "$grafana_domain" ] && az afd route show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --endpoint-name "$grafana_endpoint_name" --route-name "$grafana_route_name" >/dev/null 2>&1; then
             az afd route update \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$grafana_endpoint_name" \
               --route-name "$grafana_route_name" \
@@ -519,7 +515,7 @@ jobs:
               --forwarding-protocol MatchRequest >/dev/null
           elif [ -n "$grafana_domain" ]; then
             az afd route create \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$grafana_endpoint_name" \
               --route-name "$grafana_route_name" \
@@ -532,30 +528,29 @@ jobs:
           fi
 
       - name: Configure custom domains
-        if: ${{ github.event.inputs.custom_domain != '' || github.event.inputs.api_domain != '' || github.event.inputs.auth_domain != '' || github.event.inputs.grafana_domain != '' }}
         run: |
           set -euo pipefail
 
-          resource_group="rg-${AZURE_ENV_NAME}"
-          profile_name="${{ github.event.inputs.profile_name }}"
-          endpoint_name="${{ github.event.inputs.endpoint_name }}"
-          auth_endpoint_name="${{ github.event.inputs.auth_endpoint_name }}"
-          api_endpoint_name="${{ github.event.inputs.api_endpoint_name }}"
-          grafana_endpoint_name="${{ github.event.inputs.grafana_endpoint_name }}"
-          custom_domain_host="${{ github.event.inputs.custom_domain }}"
-          auth_domain_host="${{ github.event.inputs.auth_domain }}"
-          api_domain_host="${{ github.event.inputs.api_domain }}"
-          grafana_domain_host="${{ github.event.inputs.grafana_domain }}"
+          frontdoor_resource_group="${FRONTDOOR_RESOURCE_GROUP}"
+          profile_name="${FRONTDOOR_PROFILE_NAME}"
+          endpoint_name="${FRONTDOOR_ENDPOINT_NAME}"
+          auth_endpoint_name="${FRONTDOOR_AUTH_ENDPOINT_NAME}"
+          api_endpoint_name="${FRONTDOOR_API_ENDPOINT_NAME}"
+          grafana_endpoint_name="${FRONTDOOR_GRAFANA_ENDPOINT_NAME}"
+          custom_domain_host="${FRONTDOOR_CUSTOM_DOMAIN}"
+          auth_domain_host="${FRONTDOOR_AUTH_DOMAIN}"
+          api_domain_host="${FRONTDOOR_API_DOMAIN}"
+          grafana_domain_host="${FRONTDOOR_GRAFANA_DOMAIN}"
 
           if [ -n "$custom_domain_host" ]; then
             custom_domain_name="$(printf '%s' "$custom_domain_host" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-')"
 
             if ! az afd custom-domain show \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --custom-domain-name "$custom_domain_name" >/dev/null 2>&1; then
               az afd custom-domain create \
-                --resource-group "$resource_group" \
+                --resource-group "$frontdoor_resource_group" \
                 --profile-name "$profile_name" \
                 --custom-domain-name "$custom_domain_name" \
                 --host-name "$custom_domain_host" \
@@ -564,14 +559,14 @@ jobs:
             fi
 
             az afd route update \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$endpoint_name" \
               --route-name "frontend-route" \
               --custom-domains "$custom_domain_name" >/dev/null
 
             validation_token="$(az afd custom-domain show \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --custom-domain-name "$custom_domain_name" \
               --query 'validationProperties.validationToken' \
@@ -585,11 +580,11 @@ jobs:
             api_domain_name="$(printf '%s' "$api_domain_host" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-')"
 
             if ! az afd custom-domain show \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --custom-domain-name "$api_domain_name" >/dev/null 2>&1; then
               az afd custom-domain create \
-                --resource-group "$resource_group" \
+                --resource-group "$frontdoor_resource_group" \
                 --profile-name "$profile_name" \
                 --custom-domain-name "$api_domain_name" \
                 --host-name "$api_domain_host" \
@@ -598,7 +593,7 @@ jobs:
             fi
 
             az afd route update \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$api_endpoint_name" \
               --route-name "api-route" \
@@ -606,7 +601,7 @@ jobs:
               --link-to-default-domain Disabled >/dev/null
 
             api_validation_token="$(az afd custom-domain show \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --custom-domain-name "$api_domain_name" \
               --query 'validationProperties.validationToken' \
@@ -620,11 +615,11 @@ jobs:
             auth_domain_name="$(printf '%s' "$auth_domain_host" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-')"
 
             if ! az afd custom-domain show \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --custom-domain-name "$auth_domain_name" >/dev/null 2>&1; then
               az afd custom-domain create \
-                --resource-group "$resource_group" \
+                --resource-group "$frontdoor_resource_group" \
                 --profile-name "$profile_name" \
                 --custom-domain-name "$auth_domain_name" \
                 --host-name "$auth_domain_host" \
@@ -633,7 +628,7 @@ jobs:
             fi
 
             az afd route update \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$auth_endpoint_name" \
               --route-name "keycloak-route" \
@@ -641,7 +636,7 @@ jobs:
               --link-to-default-domain Disabled >/dev/null
 
             auth_validation_token="$(az afd custom-domain show \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --custom-domain-name "$auth_domain_name" \
               --query 'validationProperties.validationToken' \
@@ -655,11 +650,11 @@ jobs:
             grafana_domain_name="$(printf '%s' "$grafana_domain_host" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-')"
 
             if ! az afd custom-domain show \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --custom-domain-name "$grafana_domain_name" >/dev/null 2>&1; then
               az afd custom-domain create \
-                --resource-group "$resource_group" \
+                --resource-group "$frontdoor_resource_group" \
                 --profile-name "$profile_name" \
                 --custom-domain-name "$grafana_domain_name" \
                 --host-name "$grafana_domain_host" \
@@ -668,7 +663,7 @@ jobs:
             fi
 
             az afd route update \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$grafana_endpoint_name" \
               --route-name "grafana-route" \
@@ -676,7 +671,7 @@ jobs:
               --link-to-default-domain Disabled >/dev/null
 
             grafana_validation_token="$(az afd custom-domain show \
-              --resource-group "$resource_group" \
+              --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --custom-domain-name "$grafana_domain_name" \
               --query 'validationProperties.validationToken' \
@@ -691,38 +686,35 @@ jobs:
       - name: Show Front Door endpoint
         run: |
           az afd endpoint show \
-            --resource-group "rg-${AZURE_ENV_NAME}" \
-            --profile-name "${{ github.event.inputs.profile_name }}" \
-            --endpoint-name "${{ github.event.inputs.endpoint_name }}" \
+            --resource-group "${FRONTDOOR_RESOURCE_GROUP}" \
+            --profile-name "${FRONTDOOR_PROFILE_NAME}" \
+            --endpoint-name "${FRONTDOOR_ENDPOINT_NAME}" \
             --query hostName \
             -o tsv
 
       - name: Show Auth Front Door endpoint
-        if: ${{ github.event.inputs.auth_domain != '' }}
         run: |
           az afd endpoint show \
-            --resource-group "rg-${AZURE_ENV_NAME}" \
-            --profile-name "${{ github.event.inputs.profile_name }}" \
-            --endpoint-name "${{ github.event.inputs.auth_endpoint_name }}" \
+            --resource-group "${FRONTDOOR_RESOURCE_GROUP}" \
+            --profile-name "${FRONTDOOR_PROFILE_NAME}" \
+            --endpoint-name "${FRONTDOOR_AUTH_ENDPOINT_NAME}" \
             --query hostName \
             -o tsv
 
       - name: Show API Front Door endpoint
-        if: ${{ github.event.inputs.api_domain != '' }}
         run: |
           az afd endpoint show \
-            --resource-group "rg-${AZURE_ENV_NAME}" \
-            --profile-name "${{ github.event.inputs.profile_name }}" \
-            --endpoint-name "${{ github.event.inputs.api_endpoint_name }}" \
+            --resource-group "${FRONTDOOR_RESOURCE_GROUP}" \
+            --profile-name "${FRONTDOOR_PROFILE_NAME}" \
+            --endpoint-name "${FRONTDOOR_API_ENDPOINT_NAME}" \
             --query hostName \
             -o tsv
 
       - name: Show Grafana Front Door endpoint
-        if: ${{ github.event.inputs.grafana_domain != '' }}
         run: |
           az afd endpoint show \
-            --resource-group "rg-${AZURE_ENV_NAME}" \
-            --profile-name "${{ github.event.inputs.profile_name }}" \
-            --endpoint-name "${{ github.event.inputs.grafana_endpoint_name }}" \
+            --resource-group "${FRONTDOOR_RESOURCE_GROUP}" \
+            --profile-name "${FRONTDOOR_PROFILE_NAME}" \
+            --endpoint-name "${FRONTDOOR_GRAFANA_ENDPOINT_NAME}" \
             --query hostName \
             -o tsv
