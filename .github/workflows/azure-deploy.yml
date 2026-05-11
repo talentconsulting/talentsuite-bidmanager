@@ -107,6 +107,10 @@ jobs:
         run: |
           azd config set alpha.azd.operations on
 
+      - name: Show inputs
+        run:
+          echo '${{ toJson(inputs) }}' >> $GITHUB_STEP_SUMMARY
+
       - name: Validate Azure login inputs
         run: |
           test -n "${{ secrets.AZURE_CLIENT_ID }}" || (echo "AZURE_CLIENT_ID missing" && exit 1)
