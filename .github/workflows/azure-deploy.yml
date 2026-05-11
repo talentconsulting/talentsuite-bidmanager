@@ -1,6 +1,20 @@
 name: Azure Deploy
 
 on:
+  workflow_call:
+    inputs:
+      target_environment:
+        description: 'GitHub environment to use for this deployment.'
+        required: true
+        type: string
+      deployment_mode:
+        description: 'Choose whether to provision infrastructure first or only deploy application code.'
+        required: true
+        type: string
+      deploy_target:
+        description: 'Choose which application component to deploy.'
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       target_environment:
