@@ -763,6 +763,7 @@ public sealed class BidService : IBidService
                 BidId = x.BidId,
                 BidTitle = x.BidTitle,
                 QuestionId = x.QuestionId,
+                QuestionNumber = x.QuestionNumber,
                 QuestionTitle = x.QuestionTitle,
                 Role = x.Role
             })
