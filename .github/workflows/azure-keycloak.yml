@@ -1,0 +1,25 @@
+name: Azure Keycloak
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 'GitHub environment to use for this deployment.'
+        required: true
+        default: 'dev'
+        type: environment
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-keycloak:
+    uses: ./.github/workflows/azure-deploy.yml
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      target_environment: ${{ inputs.target_environment }}
+      deployment_mode: apps-only
+      deploy_target: keycloak
+    secrets: inherit
