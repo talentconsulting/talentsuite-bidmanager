@@ -160,10 +160,9 @@
           return refreshTokenExpiry;
         }
 
-        if (typeof user.expires_at === "number") {
-          return user.expires_at;
-        }
-
+        // Do not fall back to access token expiry — access tokens are short-lived
+        // and will be silently renewed via the refresh token grant. Using access
+        // token expiry here would trigger spurious session warnings every few minutes.
         return null;
       };
 
@@ -180,10 +179,10 @@
           return refreshTokenExpiry <= nowInSeconds + skewInSeconds;
         }
 
-        if (typeof user.expires_at === "number") {
-          return user.expires_at <= nowInSeconds + skewInSeconds;
-        }
-
+        // Cannot determine refresh token expiry from cached data. Do not treat an
+        // expired access token as an expired session — the oidc-client will use the
+        // refresh token grant to silently obtain a new access token on the next request.
+        // Real refresh failures are caught by recoverFromRefreshFailure().
         return false;
       };
 
@@ -377,11 +376,13 @@
             options.automaticSilentRenew = false;
             options.monitorSession = false;
             options.checkSessionIntervalInSeconds = 0;
+            options.useRefreshTokens = true;
 
             if (options.providerOptions && typeof options.providerOptions === "object") {
               options.providerOptions.automaticSilentRenew = false;
               options.providerOptions.monitorSession = false;
               options.providerOptions.checkSessionIntervalInSeconds = 0;
+              options.providerOptions.useRefreshTokens = true;
             }
           }
 
