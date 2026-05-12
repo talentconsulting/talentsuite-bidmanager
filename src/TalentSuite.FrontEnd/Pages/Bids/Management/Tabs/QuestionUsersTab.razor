@@ -80,9 +80,9 @@
                                                             style="max-width: 180px;"
                                                             value="@user.Role"
                                                             @onchange="e => OnAssignedRoleChanged.InvokeAsync((user.Id, e))">
-                                                        <option value="Owner">Owner</option>
-                                                        <option value="Reviewer">Reviewer</option>
-                                                        <option value="Support">Support</option>
+                                                        <option value="Owner">@(user.Role == QuestionUserRole.Owner ? "✓ " : "")Owner</option>
+                                                        <option value="Reviewer">@(user.Role == QuestionUserRole.Reviewer ? "✓ " : "")Reviewer</option>
+                                                        <option value="Support">@(user.Role == QuestionUserRole.Support ? "✓ " : "")Support</option>
                                                     </select>
                                                     <button type="button"
                                                             class="btn btn-sm btn-outline-danger"
