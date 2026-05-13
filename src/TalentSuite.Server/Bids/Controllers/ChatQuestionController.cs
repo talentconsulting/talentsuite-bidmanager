@@ -46,8 +46,11 @@ public class ChatQuestionController : ControllerBase
                     resolvedQuestionId,
                     userId);
 
+            var lengthConstraint = string.IsNullOrWhiteSpace(question.Length)
+                ? ""
+                : $" Keep your response within the following length: {question.Length}.";
             var systemPrompt =
-                $"Please use the bid library we have to return the answer to the question: ${question.Description}";
+                $"Please use the bid library we have to return the answer to the question: ${question.Description}.{lengthConstraint}";
 
             var userPrompt = $"""{chatQuestionRequest.FreeTextQuestion}""";
 
@@ -142,8 +145,11 @@ public class ChatQuestionController : ControllerBase
         {
             var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, resolvedQuestionId);
             var persistedThreadId = await _bidService.GetChatThreadId(chatQuestionRequest.BidId, resolvedQuestionId, userId, ct);
+            var lengthConstraint = string.IsNullOrWhiteSpace(question.Length)
+                ? ""
+                : $" Keep your response within the following length: {question.Length}.";
             var systemPrompt =
-                $"Please use the bid library we have to return the answer to the question: ${question.Description}";
+                $"Please use the bid library we have to return the answer to the question: ${question.Description}.{lengthConstraint}";
             var assistantResponse = new System.Text.StringBuilder();
 
             var startedAt = DateTimeOffset.UtcNow;
