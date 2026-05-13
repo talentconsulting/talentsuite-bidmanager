@@ -160,6 +160,9 @@ else
         .WithArgs("--proxy-headers=xforwarded")
         .WithArgs("--http-enabled=true")
         .WithArgs("--hostname-strict=false")
+        .WithArgs("--metrics-enabled=true")
+        .WithArgs("--event-metrics-user-events=login,logout,register")
+        .WithArgs("--features=http-optimized-serializers")
         .PublishAsAzureContainerApp((_, app) =>
         {
             app.Template ??= new();
