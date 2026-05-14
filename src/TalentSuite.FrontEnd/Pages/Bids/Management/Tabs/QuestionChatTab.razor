@@ -21,12 +21,6 @@
                   @oninput="e => OnChatQuestionTextChanged.InvokeAsync(e.Value?.ToString())"
                   disabled="@IsBusy"
                   @onkeydown="OnQuestionKeyDown"></textarea>
-        <div class="d-flex justify-content-end gap-3 mt-1">
-            <small class="text-muted">@WordCount words</small>
-            <small class="text-muted">@CharCountWithSpaces chars (inc. spaces)</small>
-            <small class="text-muted">@CharCountNoSpaces chars (exc. spaces)</small>
-        </div>
-
         <label class="form-label fw-bold mt-3">Response</label>
         <div class="border rounded p-3 bg-light"
              id="@ChatScrollContainerId"
@@ -57,6 +51,11 @@
                         </div>
                         @if (isAssistant)
                         {
+                            <div class="d-flex justify-content-end gap-3 mt-1">
+                                <small class="text-muted">@ResponseWordCount(message.Content) words</small>
+                                <small class="text-muted">@ResponseCharCountWithSpaces(message.Content) chars (inc. spaces)</small>
+                                <small class="text-muted">@ResponseCharCountNoSpaces(message.Content) chars (exc. spaces)</small>
+                            </div>
                             <div class="mt-2">
                                 <button type="button"
                                         class="btn btn-outline-secondary btn-sm"
@@ -83,13 +82,12 @@
     [Parameter] public EventCallback OnSubmitChat { get; set; }
     [Parameter] public EventCallback<string> OnAddChatToDrafts { get; set; }
 
-    private int WordCount => string.IsNullOrWhiteSpace(ChatQuestionText)
-        ? 0
-        : ChatQuestionText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+    private static int ResponseWordCount(string? content) =>
+        string.IsNullOrWhiteSpace(content) ? 0 : content.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
 
-    private int CharCountWithSpaces => ChatQuestionText?.Length ?? 0;
+    private static int ResponseCharCountWithSpaces(string? content) => content?.Length ?? 0;
 
-    private int CharCountNoSpaces => ChatQuestionText?.Count(c => !char.IsWhiteSpace(c)) ?? 0;
+    private static int ResponseCharCountNoSpaces(string? content) => content?.Count(c => !char.IsWhiteSpace(c)) ?? 0;
 
     private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
         .DisableHtml()
