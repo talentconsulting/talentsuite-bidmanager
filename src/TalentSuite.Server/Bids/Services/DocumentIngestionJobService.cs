@@ -83,12 +83,20 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerUserKey);
         cancellationToken.ThrowIfCancellationRequested();
 
+        var liveJobs = _jobs.Values
+            .Where(job => string.Equals(job.OwnerUserKey, ownerUserKey, StringComparison.OrdinalIgnoreCase))
+            .Select(ToResponse)
+            .ToDictionary(job => job.JobId, StringComparer.OrdinalIgnoreCase);
+
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IManageBids>();
         var jobs = repository.GetDocumentIngestionJobsForUser(ownerUserKey, cancellationToken)
             .GetAwaiter()
             .GetResult()
             .Select(ToResponse)
+            .Where(job => !liveJobs.ContainsKey(job.JobId))
+            .Concat(liveJobs.Values)
+            .OrderByDescending(job => job.CreatedAtUtc)
             .ToList();
 
         return Task.FromResult(jobs);
@@ -99,6 +107,12 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
         ArgumentException.ThrowIfNullOrWhiteSpace(jobId);
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerUserKey);
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (_jobs.TryGetValue(jobId, out var liveJob)
+            && string.Equals(liveJob.OwnerUserKey, ownerUserKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult<DocumentIngestionJobStatusResponse?>(ToResponse(liveJob));
+        }
 
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IManageBids>();
