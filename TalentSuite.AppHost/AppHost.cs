@@ -203,7 +203,9 @@ var server = builder.AddProject<TalentSuite_Server>("talentserver");
 
 var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
     .WithReference(server)
+    .WithReference(storage)
     .WithReference(bidStorage)
+    .WithReference(messaging)
     .WithEnvironment("WEBSITES_PORT", "8080")
     .WithEnvironment("ASPNETCORE_URLS", "http://+:8080")
     .WithEnvironment("InviteEmail__Enabled", inviteEmailEnabled)
@@ -220,6 +222,25 @@ var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
     .WithEnvironment("GoogleDriveSync__DriveFolderId", googleDriveSyncDriveFolderId)
     .WaitFor(messaging)
     .WaitFor(server);
+
+if (local)
+{
+    functions.WithEnvironment(context =>
+    {
+        if (context.EnvironmentVariables.TryGetValue("ConnectionStrings__messaging", out var value)
+            && value is not null)
+        {
+            context.EnvironmentVariables["AzureWebJobsServiceBus"] = value;
+        }
+
+        if (context.EnvironmentVariables.TryGetValue("ConnectionStrings__storage", out var storageValue)
+            && storageValue is not null)
+        {
+            context.EnvironmentVariables["AzureWebJobsStorage"] = storageValue;
+        }
+    });
+}
+
 if (!string.IsNullOrWhiteSpace(builder.Configuration["Parameters:GoogleDriveSyncServiceAccountJsonBase64"]))
     functions.WithEnvironment("GoogleDriveSync__ServiceAccountJsonBase64", googleDriveSyncServiceAccountJsonBase64);
 
