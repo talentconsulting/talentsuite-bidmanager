@@ -216,7 +216,7 @@ jobs:
           azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
 
       - name: Refresh azd environment outputs from existing provisioned infra
-        if: ${{ github.event.inputs.deployment_mode == 'apps-only' }}
+        if: ${{ inputs.deployment_mode == 'apps-only' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -226,7 +226,7 @@ jobs:
           echo "Refreshed azd environment outputs for apps-only deploy."
 
       - name: Re-seed azd environment after refresh
-        if: ${{ github.event.inputs.deployment_mode == 'apps-only' }}
+        if: ${{ inputs.deployment_mode == 'apps-only' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -271,7 +271,7 @@ jobs:
           azd env set GrafanaEntraClientSecret "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
 
       - name: Provision
-        if: ${{ github.event.inputs.deployment_mode != 'apps-only' }}
+        if: ${{ inputs.deployment_mode != 'apps-only' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -329,7 +329,7 @@ jobs:
           azd provision --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Disable SQL Entra-only auth for Keycloak SQL login
-        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' }}
+        if: ${{ success() && inputs.deployment_mode != 'apps-only' }}
         run: |
           resource_group="rg-${AZURE_ENV_NAME}"
           sql_server_name="$(az sql server list --resource-group "$resource_group" --query '[0].name' -o tsv)"
@@ -348,7 +348,7 @@ jobs:
           fi
 
       - name: Ensure dedicated Keycloak SQL login exists
-        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' }}
+        if: ${{ success() && inputs.deployment_mode != 'apps-only' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -384,16 +384,16 @@ jobs:
             --database "keycloakdb"
 
       - name: Pre-sync Container App secrets from GitHub secrets to Key Vault refs
-        if: ${{ success() && github.event.inputs.deploy_target != 'frontend' }}
+        if: ${{ success() && inputs.deploy_target != 'frontend' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         env:
-          EXCLUDE_CONTAINERAPPS: ${{ github.event.inputs.deploy_target == 'all' && '' || github.event.inputs.deploy_target == 'talentfunctions' && 'keycloak,talentserver,talentfrontend,grafana' || github.event.inputs.deploy_target == 'talentserver' && 'keycloak,talentfunctions,talentfrontend,grafana' || github.event.inputs.deploy_target == 'keycloak' && 'talentserver,talentfunctions,talentfrontend,grafana' || github.event.inputs.deploy_target == 'grafana' && 'keycloak,talentserver,talentfunctions,talentfrontend' || '' }}
+          EXCLUDE_CONTAINERAPPS: ${{ inputs.deploy_target == 'all' && '' || inputs.deploy_target == 'talentfunctions' && 'keycloak,talentserver,talentfrontend,grafana' || inputs.deploy_target == 'talentserver' && 'keycloak,talentfunctions,talentfrontend,grafana' || inputs.deploy_target == 'keycloak' && 'talentserver,talentfunctions,talentfrontend,grafana' || inputs.deploy_target == 'grafana' && 'keycloak,talentserver,talentfunctions,talentfrontend' || '' }}
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
 
       - name: Deploy
-        if: ${{ github.event.inputs.deploy_target != 'frontend' }}
+        if: ${{ inputs.deploy_target != 'frontend' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -442,7 +442,7 @@ jobs:
 
           # Use placeholders in AppHost for azd manifest generation; real values are
           # rebound to Key Vault references in the post-sync step.
-          deploy_target="${{ github.event.inputs.deploy_target }}"
+          deploy_target="${{ inputs.deploy_target }}"
           if [ "$deploy_target" = "all" ]; then
             env \
               principalId="${AZD_PRINCIPAL_ID}" \
@@ -476,16 +476,16 @@ jobs:
           fi
 
       - name: Post-sync Container App secrets from GitHub secrets to Key Vault refs
-        if: ${{ success() && github.event.inputs.deploy_target != 'frontend' }}
+        if: ${{ success() && inputs.deploy_target != 'frontend' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         env:
-          EXCLUDE_CONTAINERAPPS: ${{ github.event.inputs.deploy_target == 'all' && '' || github.event.inputs.deploy_target == 'talentfunctions' && 'keycloak,talentserver,talentfrontend,grafana' || github.event.inputs.deploy_target == 'talentserver' && 'keycloak,talentfunctions,talentfrontend,grafana' || github.event.inputs.deploy_target == 'keycloak' && 'talentserver,talentfunctions,talentfrontend,grafana' || github.event.inputs.deploy_target == 'grafana' && 'keycloak,talentserver,talentfunctions,talentfrontend' || '' }}
+          EXCLUDE_CONTAINERAPPS: ${{ inputs.deploy_target == 'all' && '' || inputs.deploy_target == 'talentfunctions' && 'keycloak,talentserver,talentfrontend,grafana' || inputs.deploy_target == 'talentserver' && 'keycloak,talentfunctions,talentfrontend,grafana' || inputs.deploy_target == 'keycloak' && 'talentserver,talentfunctions,talentfrontend,grafana' || inputs.deploy_target == 'grafana' && 'keycloak,talentserver,talentfunctions,talentfrontend' || '' }}
         run: |
           chmod +x scripts/ci/sync-containerapp-secrets-keyvault.sh
           scripts/ci/sync-containerapp-secrets-keyvault.sh
 
       - name: Configure Service Bus identity settings for talentfunctions
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentfunctions') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'talentfunctions') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -544,7 +544,7 @@ jobs:
           echo "Configured AzureWebJobsServiceBus identity settings for $app_name using $servicebus_fqdn"
 
       - name: Configure invite email settings for talentfunctions
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentfunctions') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'talentfunctions') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -609,7 +609,7 @@ jobs:
           echo "Configured invite email settings for $app_name using frontend base URL $frontend_base_url"
 
       - name: Configure Google Drive sync settings for talentfunctions
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentfunctions') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'talentfunctions') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -628,7 +628,7 @@ jobs:
           echo "Configured Google Drive sync settings for $app_name"
 
       - name: Configure AzureWebJobsStorage identity settings for talentfunctions
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentfunctions') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'talentfunctions') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -747,7 +747,7 @@ jobs:
           echo "Configured AzureWebJobsStorage identity settings for $app_name using $blob_service_uri and $queue_service_uri"
 
       - name: Configure BidStorage identity settings for talentfunctions
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentfunctions') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'talentfunctions') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -861,7 +861,7 @@ jobs:
           echo "Configured BidStorage identity settings for $app_name using $blob_service_uri"
 
       - name: Configure Application Insights for talentfunctions
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentfunctions') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'talentfunctions') }}
         run: |
           set -euo pipefail
 
@@ -900,7 +900,7 @@ jobs:
             --set-env-vars APPLICATIONINSIGHTS_CONNECTION_STRING="$connection_string" >/dev/null
 
       - name: Remove legacy bidstorage env vars from talentfunctions
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentfunctions') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'talentfunctions') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -916,7 +916,7 @@ jobs:
           echo "Removed legacy bidstorage env vars from $app_name"
 
       - name: Configure Grafana settings
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'grafana') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'grafana') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -974,7 +974,7 @@ jobs:
           echo "Configured Grafana settings for $app_name"
 
       - name: Configure Azure AI settings for talentserver
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'talentserver') }}
         run: |
           set -euo pipefail
 
@@ -1030,7 +1030,7 @@ jobs:
           fi
 
       - name: Configure Application Insights for talentserver
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'talentserver') }}
         run: |
           set -euo pipefail
 
@@ -1069,7 +1069,7 @@ jobs:
             --set-env-vars APPLICATIONINSIGHTS_CONNECTION_STRING="$connection_string" >/dev/null
 
       - name: Grant talentserver managed identity access to Azure AI Foundry
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') && env.AzureAIFoundryProjectEndpoint != '' }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'talentserver') && env.AzureAIFoundryProjectEndpoint != '' }}
         run: |
           set -euo pipefail
 
@@ -1143,7 +1143,7 @@ jobs:
           fi
 
       - name: Enable talentserver ingress
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'talentserver') }}
         run: |
           az containerapp revision set-mode \
             --name talentserver \
@@ -1158,7 +1158,7 @@ jobs:
             --transport auto
 
       - name: Configure talentserver health probes
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'talentserver') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'talentserver') }}
         run: |
           set -euo pipefail
 
@@ -1175,7 +1175,7 @@ jobs:
             --set properties.template.containers[0].probes="$probes" >/dev/null
 
       - name: Configure keycloak health probes
-        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
+        if: ${{ success() && inputs.deployment_mode != 'apps-only' && (inputs.deploy_target == 'all' || inputs.deploy_target == 'keycloak') }}
         run: |
           set -euo pipefail
 
@@ -1197,7 +1197,7 @@ jobs:
             --set properties.template.containers[0].probes="$probes" >/dev/null
 
       - name: Disable SQL public network access
-        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' }}
+        if: ${{ success() && inputs.deployment_mode != 'apps-only' }}
         run: |
           set -euo pipefail
 
@@ -1212,7 +1212,7 @@ jobs:
             --set publicNetworkAccess=Disabled >/dev/null
 
       - name: Wait for keycloak healthy
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'keycloak') }}
         run: |
           set -euo pipefail
 
@@ -1264,21 +1264,21 @@ jobs:
           exit 1
 
       - name: Import Keycloak realm if missing
-        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
+        if: ${{ success() && inputs.deployment_mode != 'apps-only' && (inputs.deploy_target == 'all' || inputs.deploy_target == 'keycloak') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           chmod +x scripts/ci/import-keycloak-realm.sh
           scripts/ci/import-keycloak-realm.sh
 
       - name: Configure Keycloak SMTP
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'keycloak') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'keycloak') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           chmod +x scripts/ci/configure-keycloak-smtp.sh
           scripts/ci/configure-keycloak-smtp.sh
 
       - name: Refresh Azure Login (OIDC) before frontend deploy
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'frontend') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'frontend') }}
         uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -1286,7 +1286,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Refresh azd environment outputs before frontend deploy
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'frontend') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'frontend') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
@@ -1295,7 +1295,7 @@ jobs:
           azd env refresh --environment "${AZURE_ENV_NAME}" --no-prompt
 
       - name: Deploy frontend as static website
-        if: ${{ success() && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'frontend') }}
+        if: ${{ success() && (inputs.deploy_target == 'all' || inputs.deploy_target == 'frontend') }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         env:
           DEPLOYER_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -1304,7 +1304,7 @@ jobs:
           scripts/ci/deploy-frontend-static.sh
 
       - name: Tag resource group and Azure resources
-        if: ${{ success() && github.event.inputs.deployment_mode != 'apps-only' }}
+        if: ${{ success() && inputs.deployment_mode != 'apps-only' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           chmod +x scripts/ci/tag-azure-resources.sh
