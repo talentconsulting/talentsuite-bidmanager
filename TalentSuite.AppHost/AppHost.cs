@@ -203,7 +203,6 @@ var server = builder.AddProject<TalentSuite_Server>("talentserver");
 
 var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
     .WithReference(server)
-    .WithReference(storage)
     .WithReference(bidStorage)
     .WithReference(messaging)
     .WithEnvironment("WEBSITES_PORT", "8080")

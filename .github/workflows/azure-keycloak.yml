@@ -1,4 +1,4 @@
-name: Azure Keycloak
+name: Azure Keycloak Apps Only
 
 on:
   workflow_dispatch:
