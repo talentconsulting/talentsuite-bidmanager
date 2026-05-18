@@ -132,8 +132,8 @@ resolve_aspire_storage_account() {
 
   resolved="$(az storage account list \
     --resource-group "$rg" \
-    --query "[?starts_with(name, 'bidcontentstorage')][0].name" \
-    -o tsv 2>/dev/null || true)"
+    --query "[].name" \
+    -o tsv 2>/dev/null | grep '^bidcontentstorage' | head -n1 || true)"
   if [ -n "$resolved" ]; then
     printf '%s' "$resolved"
     return 0
