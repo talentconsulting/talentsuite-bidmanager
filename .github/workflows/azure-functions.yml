@@ -1,4 +1,4 @@
-name: Azure Functions
+name: Azure Functions Apps Only
 
 on:
   workflow_dispatch:

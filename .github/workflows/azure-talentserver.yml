@@ -1,4 +1,4 @@
-name: Azure TalentServer
+name: Azure TalentServer Apps Only
 
 on:
   workflow_dispatch:

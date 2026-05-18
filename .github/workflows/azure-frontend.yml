@@ -1,4 +1,4 @@
-name: Azure Frontend
+name: Azure Frontend Apps Only
 
 on:
   workflow_dispatch:
