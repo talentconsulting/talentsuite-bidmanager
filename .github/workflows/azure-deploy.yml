@@ -122,8 +122,7 @@ jobs:
           azd config set alpha.azd.operations on
 
       - name: Show inputs
-        run:
-          echo '${{ toJson(inputs) }}' >> $GITHUB_STEP_SUMMARY
+        run: echo '${{ toJson(inputs) }}' >> $GITHUB_STEP_SUMMARY
 
       - name: Validate Azure login inputs
         run: |
@@ -1105,20 +1104,22 @@ jobs:
             local scope="$1"
             local attempt
             for attempt in 1 2 3 4 5 6; do
-              echo "Ensuring Azure AI User on scope: $scope (attempt $attempt/6)"
-              az role assignment create \
+              echo "Ensuring Azure AI Developer on scope: $scope (attempt $attempt/6)"
+              create_output="$(az role assignment create \
                 --assignee-object-id "$identity_principal_id" \
                 --assignee-principal-type ServicePrincipal \
-                --role "Azure AI User" \
+                --role "Azure AI Developer" \
                 --scope "$scope" \
-                --only-show-errors >/dev/null 2>&1 || true
+                --only-show-errors 2>&1)" || {
+                echo "az role assignment create output: $create_output"
+              }
 
               if az role assignment list \
                 --assignee-object-id "$identity_principal_id" \
                 --scope "$scope" \
-                --query "[?roleDefinitionName=='Azure AI User'] | length(@)" \
-                -o tsv | grep -qx '1'; then
-                echo "Verified Azure AI User on $scope"
+                --query "[?roleDefinitionName=='Azure AI Developer'] | length(@)" \
+                -o tsv | grep -qvx '0'; then
+                echo "Verified Azure AI Developer on $scope"
                 return 0
               fi
 
@@ -1128,7 +1129,7 @@ jobs:
               fi
             done
 
-            echo "Failed to verify Azure AI User role assignment on $scope for principal $identity_principal_id"
+            echo "Failed to verify Azure AI Developer role assignment on $scope for principal $identity_principal_id"
             az role assignment list \
               --assignee-object-id "$identity_principal_id" \
               --scope "$scope" \
@@ -1139,7 +1140,7 @@ jobs:
           ensure_role_assignment "$foundry_account_id"
 
           if ! ensure_role_assignment "$foundry_project_id"; then
-            echo "Project-scope Azure AI User assignment could not be verified. Continuing because account-scope assignment succeeded."
+            echo "Project-scope Azure AI Developer assignment could not be verified. Continuing because account-scope assignment succeeded."
           fi
 
       - name: Enable talentserver ingress
