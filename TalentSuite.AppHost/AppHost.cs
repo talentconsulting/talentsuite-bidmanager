@@ -59,6 +59,11 @@ var inviteEmailEnabled = builder.AddParameter(
                                 value: "false",
                                 secret: false,
                                 publishValueAsDefault: true);
+var inviteFrontendBaseUrl = builder.AddParameter(
+                                "InviteFrontendBaseUrl",
+                                value: "",
+                                secret: false,
+                                publishValueAsDefault: true);
 var inviteFromEmail = builder.AddParameter(
                                 "InviteFromEmail",
                                 value: "",
@@ -208,7 +213,7 @@ var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
     .WithEnvironment("WEBSITES_PORT", "8080")
     .WithEnvironment("ASPNETCORE_URLS", "http://+:8080")
     .WithEnvironment("InviteEmail__Enabled", inviteEmailEnabled)
-    .WithEnvironment("InviteEmail__FrontendBaseUrl", "https://localhost:5173")
+    .WithEnvironment("InviteEmail__FrontendBaseUrl", inviteFrontendBaseUrl)
     .WithEnvironment("InviteEmail__FromEmail", inviteFromEmail)
     .WithEnvironment("InviteEmail__FromDisplayName", "TalentSuite")
     .WithEnvironment("InviteEmail__SmtpHost", inviteSmtpHost)
@@ -224,6 +229,7 @@ var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
 
 if (local)
 {
+    functions.WithEnvironment("InviteEmail__FrontendBaseUrl", "https://localhost:5173");
     functions.WithEnvironment(context =>
     {
         if (context.EnvironmentVariables.TryGetValue("ConnectionStrings__messaging", out var value)
