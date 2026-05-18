@@ -305,18 +305,18 @@ get_current_principal_object_id() {
 
 ensure_role_assignment() {
   local principal_id="$1"
-  local role_name="$2"
+  local role_ref="$2"
   local scope="$3"
 
   if ! az role assignment list \
     --assignee-object-id "$principal_id" \
     --scope "$scope" \
-    --query "[?roleDefinitionName=='${role_name}'][0].id" \
+    --query "[?roleDefinitionName=='${role_ref}' || roleDefinitionId=='/providers/Microsoft.Authorization/roleDefinitions/${role_ref}' || ends_with(roleDefinitionId, '/${role_ref}')][0].id" \
     -o tsv | grep -q .; then
     az role assignment create \
       --assignee-object-id "$principal_id" \
       --assignee-principal-type ServicePrincipal \
-      --role "$role_name" \
+      --role "$role_ref" \
       --scope "$scope" >/dev/null
   fi
 }
@@ -1152,9 +1152,10 @@ require_value "Azure AI Foundry account resource id" "$foundry_account_id"
 foundry_project_id="${foundry_account_id}/projects/${foundry_project_name}"
 current_principal_id="$(get_current_principal_object_id || true)"
 if [ -n "$current_principal_id" ]; then
+  azure_ai_user_role_id="53ca6127-db72-4b80-b1b0-d745d6d5456d"
   echo "Ensuring current principal has Azure AI User on Foundry account and project"
-  ensure_role_assignment "$current_principal_id" "Azure AI User" "$foundry_account_id"
-  ensure_role_assignment "$current_principal_id" "Azure AI User" "$foundry_project_id"
+  ensure_role_assignment "$current_principal_id" "$azure_ai_user_role_id" "$foundry_account_id"
+  ensure_role_assignment "$current_principal_id" "$azure_ai_user_role_id" "$foundry_project_id"
   echo "Waiting for Azure AI User role assignment to propagate"
   sleep 30
 fi
