@@ -142,6 +142,16 @@ resolve_aspire_storage_account() {
   resolved="$(az resource list \
     --resource-group "$rg" \
     --resource-type "Microsoft.Storage/storageAccounts/blobServices/containers" \
+    --query "[?name=='default/bidlibrary'].split(id, '/')[8] | [0]" \
+    -o tsv 2>/dev/null || true)"
+  if [ -n "$resolved" ]; then
+    printf '%s' "$resolved"
+    return 0
+  fi
+
+  resolved="$(az resource list \
+    --resource-group "$rg" \
+    --resource-type "Microsoft.Storage/storageAccounts/blobServices/containers" \
     --query "[?name=='default/bidstorage'].split(id, '/')[8] | [0]" \
     -o tsv 2>/dev/null || true)"
   printf '%s' "$resolved"
