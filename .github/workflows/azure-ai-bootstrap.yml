@@ -85,8 +85,6 @@ jobs:
               -o tsv 2>/dev/null || true)"
           fi
 
-          test -n "$storage_account" || (echo "Could not resolve bid content storage account in $resource_group" && exit 1)
-
           case "$env_suffix" in
             production)
               document_intelligence_sku="F0"
@@ -143,11 +141,14 @@ jobs:
             --openai-account "${BOOTSTRAP_OPENAI_ACCOUNT}"
             --search-service "${BOOTSTRAP_SEARCH_SERVICE}"
             --search-index-name "${BOOTSTRAP_SEARCH_INDEX_NAME}"
-            --storage-account "${BOOTSTRAP_STORAGE_ACCOUNT}"
             --storage-container "${BOOTSTRAP_STORAGE_CONTAINER}"
             --auto-index-blob-storage
             --emit-azd-env
           )
+
+          if [ -n "${BOOTSTRAP_STORAGE_ACCOUNT:-}" ]; then
+            args+=(--storage-account "${BOOTSTRAP_STORAGE_ACCOUNT}")
+          fi
 
           output_file="$(mktemp)"
           scripts/ci/provision-foundry-agent-stack.sh "${args[@]}" | tee "$output_file"
