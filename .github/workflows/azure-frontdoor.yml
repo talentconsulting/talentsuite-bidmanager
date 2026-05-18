@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.target_environment }}
     env:
-      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_ENV_NAME: ${{ inputs.target_environment }}
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
@@ -87,6 +87,29 @@ jobs:
         run: |
           set -euo pipefail
 
+          resolve_public_containerapp_host() {
+            local resource_group="$1"
+            local app_name="$2"
+            local ingress_json
+            local fqdn
+            local external
+
+            ingress_json="$(az containerapp show \
+              --name "$app_name" \
+              --resource-group "$resource_group" \
+              --query 'properties.configuration.ingress' \
+              -o json)"
+
+            fqdn="$(printf '%s' "$ingress_json" | jq -r '.fqdn // empty')"
+            external="$(printf '%s' "$ingress_json" | jq -r '.external // false')"
+
+            if [ -n "$fqdn" ] && [ "$external" = "true" ] && printf '%s' "$fqdn" | grep -q '\.internal\.'; then
+              fqdn="${fqdn/.internal./.}"
+            fi
+
+            printf '%s' "$fqdn"
+          }
+
           frontdoor_resource_group="${FRONTDOOR_RESOURCE_GROUP}"
           target_resource_group="${FRONTDOOR_TARGET_RESOURCE_GROUP}"
           profile_name="${FRONTDOOR_PROFILE_NAME}"
@@ -149,28 +172,16 @@ jobs:
           frontend_host="${frontend_host%/}"
           test -n "$frontend_host" || (echo "Could not resolve frontend static website host in $target_resource_group" && exit 1)
 
-          api_host="$(az containerapp show \
-            --name talentserver \
-            --resource-group "$target_resource_group" \
-            --query 'properties.configuration.ingress.fqdn' \
-            -o tsv)"
+          api_host="$(resolve_public_containerapp_host "$target_resource_group" "talentserver")"
           test -n "$api_host" || (echo "Could not resolve public talentserver ingress FQDN in $target_resource_group" && exit 1)
 
           if [ -n "$auth_domain" ]; then
-            keycloak_host="$(az containerapp show \
-              --name keycloak \
-              --resource-group "$target_resource_group" \
-              --query 'properties.configuration.ingress.fqdn' \
-              -o tsv)"
+            keycloak_host="$(resolve_public_containerapp_host "$target_resource_group" "keycloak")"
             test -n "$keycloak_host" || (echo "Could not resolve public keycloak ingress FQDN in $target_resource_group" && exit 1)
           fi
 
           if [ -n "$grafana_domain" ]; then
-            grafana_host="$(az containerapp show \
-              --name grafana \
-              --resource-group "$target_resource_group" \
-              --query 'properties.configuration.ingress.fqdn' \
-              -o tsv)"
+            grafana_host="$(resolve_public_containerapp_host "$target_resource_group" "grafana")"
             test -n "$grafana_host" || (echo "Could not resolve public grafana ingress FQDN in $target_resource_group" && exit 1)
             grafana_origin_host_header="$grafana_host"
           else
