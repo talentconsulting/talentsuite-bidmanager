@@ -22,6 +22,8 @@ public partial class AcceptInvite
     protected override async Task OnParametersSetAsync()
     {
         IsLoading = true;
+        ErrorText = null;
+        IsAlreadyAccepted = false;
 
         if (string.IsNullOrWhiteSpace(InvitationToken))
         {
