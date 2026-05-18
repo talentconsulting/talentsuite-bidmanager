@@ -64,10 +64,26 @@ jobs:
           search_service="aisearch-talentsuite-${env_suffix}"
           search_index_name="index-talentsuite-${env_suffix}"
           storage_container="bidlibrary"
-          storage_account="$(az storage account list \
+          storage_account="$(az resource list \
             --resource-group "$resource_group" \
-            --query "[?starts_with(name, 'bidcontentstorage')][0].name" \
+            --resource-type "Microsoft.Storage/storageAccounts" \
+            --query "[?tags.\"aspire-resource-name\"=='bidcontentstorage'][0].name" \
             -o tsv 2>/dev/null || true)"
+
+          if [ -z "$storage_account" ]; then
+            storage_account="$(az storage account list \
+              --resource-group "$resource_group" \
+              --query "[?starts_with(name, 'bidcontentstorage')][0].name" \
+              -o tsv 2>/dev/null || true)"
+          fi
+
+          if [ -z "$storage_account" ]; then
+            storage_account="$(az resource list \
+              --resource-group "$resource_group" \
+              --resource-type "Microsoft.Storage/storageAccounts/blobServices/containers" \
+              --query "[?name=='default/bidstorage'].split(id, '/')[8] | [0]" \
+              -o tsv 2>/dev/null || true)"
+          fi
 
           test -n "$storage_account" || (echo "Could not resolve bid content storage account in $resource_group" && exit 1)
 
