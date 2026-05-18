@@ -122,8 +122,7 @@ jobs:
           azd config set alpha.azd.operations on
 
       - name: Show inputs
-        run:
-          echo '${{ toJson(inputs) }}' >> $GITHUB_STEP_SUMMARY
+        run: echo '${{ toJson(inputs) }}' >> $GITHUB_STEP_SUMMARY
 
       - name: Validate Azure login inputs
         run: |
@@ -1106,18 +1105,20 @@ jobs:
             local attempt
             for attempt in 1 2 3 4 5 6; do
               echo "Ensuring Azure AI User on scope: $scope (attempt $attempt/6)"
-              az role assignment create \
+              create_output="$(az role assignment create \
                 --assignee-object-id "$identity_principal_id" \
                 --assignee-principal-type ServicePrincipal \
                 --role "Azure AI User" \
                 --scope "$scope" \
-                --only-show-errors >/dev/null 2>&1 || true
+                --only-show-errors 2>&1)" || {
+                echo "az role assignment create output: $create_output"
+              }
 
               if az role assignment list \
                 --assignee-object-id "$identity_principal_id" \
                 --scope "$scope" \
                 --query "[?roleDefinitionName=='Azure AI User'] | length(@)" \
-                -o tsv | grep -qx '1'; then
+                -o tsv | grep -qvx '0'; then
                 echo "Verified Azure AI User on $scope"
                 return 0
               fi
