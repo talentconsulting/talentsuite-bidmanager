@@ -73,15 +73,15 @@ jobs:
           if [ -z "$storage_account" ]; then
             storage_account="$(az storage account list \
               --resource-group "$resource_group" \
-              --query "[?starts_with(name, 'bidcontentstorage')][0].name" \
-              -o tsv 2>/dev/null || true)"
+              --query "[].name" \
+              -o tsv 2>/dev/null | grep '^bidcontentstorage' | head -n1 || true)"
           fi
 
           if [ -z "$storage_account" ]; then
             storage_account="$(az resource list \
               --resource-group "$resource_group" \
               --resource-type "Microsoft.Storage/storageAccounts/blobServices/containers" \
-              --query "[?name=='default/bidstorage'].split(id, '/')[8] | [0]" \
+              --query "[?name=='default/bidlibrary'].split(id, '/')[8] | [0]" \
               -o tsv 2>/dev/null || true)"
           fi
 
