@@ -162,8 +162,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
                 await LoadUsersAsync();
             await LoadAssignedUserIdsAsync();
             SyncAvailableUsers();
-            if (CanManageQuestionUsers)
-                await LoadQuestionUsersAsync();
+            await LoadQuestionUsersAsync();
             await LoadQuestionFinalAnswersAsync();
             await LoadBidFilesAsync();
 
@@ -306,9 +305,6 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
     protected async Task LoadQuestionUsersAsync()
     {
-        if (!CanManageQuestionUsers)
-            return;
-
         if (Bid?.Questions is null || Bid.Questions.Count == 0)
             return;
 
