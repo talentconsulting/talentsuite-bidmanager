@@ -204,6 +204,14 @@ for app_name in "${app_names[@]}"; do
     continue
   fi
 
+  containerapp_id="$(az containerapp show --name "$app_name" --resource-group "$resource_group" --query id -o tsv 2>/dev/null || true)"
+  if [ -n "$containerapp_id" ]; then
+    az tag update \
+      --resource-id "$containerapp_id" \
+      --operation Merge \
+      --tags project="TalentSuite" owner="rgparkins" >/dev/null 2>&1 || true
+  fi
+
   az containerapp identity assign --name "$app_name" --resource-group "$resource_group" --system-assigned >/dev/null
   principal_id="$(az containerapp show --name "$app_name" --resource-group "$resource_group" --query identity.principalId -o tsv)"
   test -n "$principal_id" || (echo "Failed to resolve managed identity principalId for $app_name" && exit 1)
