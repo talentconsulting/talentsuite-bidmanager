@@ -10,4 +10,5 @@ public sealed class AssignedQuestionTaskResponse
     public string QuestionNumber { get; set; } = string.Empty;
     public string QuestionTitle { get; set; } = string.Empty;
     public QuestionUserRole Role { get; set; } = QuestionUserRole.Reviewer;
+    public bool NiceToHave { get; set; }
 }

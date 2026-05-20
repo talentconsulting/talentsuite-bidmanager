@@ -777,7 +777,8 @@ public sealed class BidService : IBidService
                 QuestionId = x.QuestionId,
                 QuestionNumber = x.QuestionNumber,
                 QuestionTitle = x.QuestionTitle,
-                Role = x.Role
+                Role = x.Role,
+                NiceToHave = x.NiceToHave
             })
             .ToList();
     }

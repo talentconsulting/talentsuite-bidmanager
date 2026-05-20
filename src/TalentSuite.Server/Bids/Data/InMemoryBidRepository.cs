@@ -686,7 +686,8 @@ public class InMemoryBidRepository : IManageBids
                     QuestionTitle = string.IsNullOrWhiteSpace(question.Title)
                         ? $"#{question.Number}"
                         : question.Title,
-                    Role = match.Role
+                    Role = match.Role,
+                    NiceToHave = question.NiceToHave
                 });
             }
         }
