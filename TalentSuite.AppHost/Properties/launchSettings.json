@@ -1,11 +1,9 @@
 {
-  "$schema": "https://json.schemastore.org/launchsettings.json",
   "profiles": {
     "https": {
       "commandName": "Project",
-      "dotnetRunMessages": true,
       "launchBrowser": true,
-      "applicationUrl": "https://localhost:17077;http://localhost:15073",
+      "inspectUri": "{wsProtocol}://{url.hostname}:{url.port}/_framework/debug/ws-proxy?browser={browserInspectUri}",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "DOTNET_ENVIRONMENT": "Development",
@@ -13,18 +11,22 @@
         "ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL": "https://localhost:21115",
         "ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL": "https://localhost:22127",
         "ASPNETCORE_URLS": "https://localhost:17077;http://localhost:15073"
-      }
+      },
+      "dotnetRunMessages": true,
+      "applicationUrl": "https://localhost:17077;http://localhost:15073",
+      "jsWebView2Debugging": true
     },
     "https-azure": {
       "commandName": "Project",
-      "dotnetRunMessages": true,
       "launchBrowser": true,
-      "applicationUrl": "https://localhost:17077;http://localhost:15073",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "DOTNET_ENVIRONMENT": "Development",
         "TALENTSUITE_INFRA_MODE": "azure"
-      }
+      },
+      "dotnetRunMessages": true,
+      "applicationUrl": "https://localhost:17077;http://localhost:15073"
     }
-  }
+  },
+  "$schema": "https://json.schemastore.org/launchsettings.json"
 }

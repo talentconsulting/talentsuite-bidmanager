@@ -1032,7 +1032,8 @@ public sealed class SqlServerBidRepository : IManageBids
                     QuestionTitle = string.IsNullOrWhiteSpace(question.Title)
                         ? $"#{question.Number}"
                         : question.Title,
-                    Role = (QuestionUserRole)role
+                    Role = (QuestionUserRole)role,
+                    NiceToHave = question.NiceToHave
                 });
             }
         }

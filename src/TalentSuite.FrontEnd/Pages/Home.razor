@@ -108,8 +108,16 @@
                                             <td style="max-width: 420px; white-space: normal; word-break: break-word;">
                                                 @if (!string.IsNullOrWhiteSpace(item.QuestionNumber))
                                                 {
+                                                    @if (item.NiceToHave)
+                                                    {
+                                                        <span class="text-muted me-1">#NTH @item.QuestionNumber</span>
+                                                    }
+                                                    else
+                                                    {
                                                     <span class="text-muted me-1">#@item.QuestionNumber</span>
+                                                    }
                                                 }
+                                                
                                                 @item.QuestionTitle
                                             </td>
                                             <td>@item.Role</td>
