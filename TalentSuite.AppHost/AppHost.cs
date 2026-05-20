@@ -168,8 +168,7 @@ else
         .WithArgs("--hostname-strict=false")
         .PublishAsAzureContainerApp((_, app) =>
         {
-            app.Tags["project"] = "TalentSuite";
-            app.Tags["owner"] = "rgparkins";
+            app.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
             app.Template ??= new();
             app.Template.Scale ??= new ContainerAppScale();
             app.Template.Scale.MinReplicas = 1;
@@ -180,10 +179,7 @@ var messaging = builder.AddAzureServiceBus("messaging")
     .ConfigureInfrastructure(infra =>
     {
         foreach (var ns in infra.GetProvisionableResources().OfType<ServiceBusNamespace>())
-        {
-            ns.Tags["project"] = "TalentSuite";
-            ns.Tags["owner"] = "rgparkins";
-        }
+            ns.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
     });
 if (local)
 {
@@ -197,10 +193,7 @@ var storage = builder.AddAzureStorage("storage")
     .ConfigureInfrastructure(infra =>
     {
         foreach (var sa in infra.GetProvisionableResources().OfType<StorageAccount>())
-        {
-            sa.Tags["project"] = "TalentSuite";
-            sa.Tags["owner"] = "rgparkins";
-        }
+            sa.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
     });
 if (local)
 {
@@ -214,10 +207,7 @@ var bidStorage = local
         .ConfigureInfrastructure(infra =>
         {
             foreach (var sa in infra.GetProvisionableResources().OfType<StorageAccount>())
-            {
-                sa.Tags["project"] = "TalentSuite";
-                sa.Tags["owner"] = "rgparkins";
-            }
+                sa.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
         })
         .AddBlobs("bidstorage");
 
@@ -345,10 +335,7 @@ else
         .ConfigureInfrastructure(infra =>
         {
             foreach (var env in infra.GetProvisionableResources().OfType<ContainerAppManagedEnvironment>())
-            {
-                env.Tags["project"] = "TalentSuite";
-                env.Tags["owner"] = "rgparkins";
-            }
+                env.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
         });
     _ = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
 
@@ -361,8 +348,7 @@ else
             var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
             server.AdministratorLogin = "sqladm72";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
-            server.Tags["project"] = "TalentSuite";
-            server.Tags["owner"] = "rgparkins";
+            server.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
 
             foreach (var database in infra.GetProvisionableResources().OfType<SqlDatabase>())
             {
@@ -377,8 +363,7 @@ else
                 database.AutoPauseDelay = 60;
                 database.MinCapacity = 0.5;
                 database.UseFreeLimit = false;
-                database.Tags["project"] = "TalentSuite";
-                database.Tags["owner"] = "rgparkins";
+                database.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
             }
 
             if (server.Administrators is { } admin)
@@ -414,8 +399,7 @@ else
                     .GetOutput("acaInfrastructureSubnetId")
                     .AsProvisioningParameter(infra, "acaInfrastructureSubnetId")
             };
-            containerAppEnvironment.Tags["project"] = "TalentSuite";
-            containerAppEnvironment.Tags["owner"] = "rgparkins";
+            containerAppEnvironment.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
         });
     // var appDb = sql.AddDatabase("talentconsultingdb");
     // var keycloakDb = sql.AddDatabase("keycloakdb");
@@ -446,8 +430,7 @@ else
         .WithComputeEnvironment(privateAcaEnvironment)
         .PublishAsAzureContainerApp((_, app) =>
         {
-            app.Tags["project"] = "TalentSuite";
-            app.Tags["owner"] = "rgparkins";
+            app.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
         })
         .WaitFor(appDb)
         .WaitFor(keycloak);
@@ -457,8 +440,7 @@ else
         .WithComputeEnvironment(privateAcaEnvironment!)
         .PublishAsAzureContainerApp((_, app) =>
         {
-            app.Tags["project"] = "TalentSuite";
-            app.Tags["owner"] = "rgparkins";
+            app.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
         });
 }
 
@@ -531,8 +513,7 @@ else
         .WithComputeEnvironment(privateAcaEnvironment!)
         .PublishAsAzureContainerApp((_, app) =>
         {
-            app.Tags["project"] = "TalentSuite";
-            app.Tags["owner"] = "rgparkins";
+            app.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
             app.Configuration ??= new();
             app.Configuration.Ingress ??= new();
             app.Configuration.Ingress.External = true;
