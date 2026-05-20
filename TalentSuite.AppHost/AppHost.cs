@@ -2,6 +2,7 @@ using Projects;
 using Azure.Provisioning.ServiceBus;
 using Azure.Provisioning.Sql;
 using Azure.Provisioning.AppContainers;
+using Azure.Provisioning.Storage;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Azure;
 using Aspire.Hosting.Azure.AppContainers;
@@ -167,13 +168,23 @@ else
         .WithArgs("--hostname-strict=false")
         .PublishAsAzureContainerApp((_, app) =>
         {
+            app.Tags["project"] = "TalentSuite";
+            app.Tags["owner"] = "rgparkins";
             app.Template ??= new();
             app.Template.Scale ??= new ContainerAppScale();
             app.Template.Scale.MinReplicas = 1;
             app.Template.Scale.MaxReplicas = 1;
         });
 }
-var messaging = builder.AddAzureServiceBus("messaging");
+var messaging = builder.AddAzureServiceBus("messaging")
+    .ConfigureInfrastructure(infra =>
+    {
+        foreach (var ns in infra.GetProvisionableResources().OfType<ServiceBusNamespace>())
+        {
+            ns.Tags["project"] = "TalentSuite";
+            ns.Tags["owner"] = "rgparkins";
+        }
+    });
 if (local)
 {
     messaging.RunAsEmulator();
@@ -182,7 +193,15 @@ if (local)
 messaging.AddServiceBusQueue("invite-user");
 messaging.AddServiceBusQueue("bid-submitted");
 messaging.AddServiceBusQueue("comment-saved-with-mentions");
-var storage = builder.AddAzureStorage("storage");
+var storage = builder.AddAzureStorage("storage")
+    .ConfigureInfrastructure(infra =>
+    {
+        foreach (var sa in infra.GetProvisionableResources().OfType<StorageAccount>())
+        {
+            sa.Tags["project"] = "TalentSuite";
+            sa.Tags["owner"] = "rgparkins";
+        }
+    });
 if (local)
 {
     storage.RunAsEmulator(emulator => emulator
@@ -191,7 +210,16 @@ if (local)
 
 var bidStorage = local
     ? storage.AddBlobs("bidstorage")
-    : builder.AddAzureStorage("bidcontentstorage").AddBlobs("bidstorage");
+    : builder.AddAzureStorage("bidcontentstorage")
+        .ConfigureInfrastructure(infra =>
+        {
+            foreach (var sa in infra.GetProvisionableResources().OfType<StorageAccount>())
+            {
+                sa.Tags["project"] = "TalentSuite";
+                sa.Tags["owner"] = "rgparkins";
+            }
+        })
+        .AddBlobs("bidstorage");
 
 #region MsSqlServer
 
@@ -313,7 +341,15 @@ else
     // var acr = builder.AddAzureContainerRegistry("TalentSuite-ACR")
     //                  .WithPurgeTask("0 1 * * *", ago: TimeSpan.FromDays(7), keep: 5);
 
-    defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment($"aca-{azureEnvironmentName}");
+    defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment($"aca-{azureEnvironmentName}")
+        .ConfigureInfrastructure(infra =>
+        {
+            foreach (var env in infra.GetProvisionableResources().OfType<ContainerAppManagedEnvironment>())
+            {
+                env.Tags["project"] = "TalentSuite";
+                env.Tags["owner"] = "rgparkins";
+            }
+        });
     _ = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
 
     
@@ -325,6 +361,8 @@ else
             var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
             server.AdministratorLogin = "sqladm72";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
+            server.Tags["project"] = "TalentSuite";
+            server.Tags["owner"] = "rgparkins";
 
             foreach (var database in infra.GetProvisionableResources().OfType<SqlDatabase>())
             {
@@ -339,6 +377,8 @@ else
                 database.AutoPauseDelay = 60;
                 database.MinCapacity = 0.5;
                 database.UseFreeLimit = false;
+                database.Tags["project"] = "TalentSuite";
+                database.Tags["owner"] = "rgparkins";
             }
 
             if (server.Administrators is { } admin)
@@ -374,6 +414,8 @@ else
                     .GetOutput("acaInfrastructureSubnetId")
                     .AsProvisioningParameter(infra, "acaInfrastructureSubnetId")
             };
+            containerAppEnvironment.Tags["project"] = "TalentSuite";
+            containerAppEnvironment.Tags["owner"] = "rgparkins";
         });
     // var appDb = sql.AddDatabase("talentconsultingdb");
     // var keycloakDb = sql.AddDatabase("keycloakdb");
@@ -402,12 +444,22 @@ else
         .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", keycloakPassword)
         .WithEnvironment("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
         .WithComputeEnvironment(privateAcaEnvironment)
+        .PublishAsAzureContainerApp((_, app) =>
+        {
+            app.Tags["project"] = "TalentSuite";
+            app.Tags["owner"] = "rgparkins";
+        })
         .WaitFor(appDb)
         .WaitFor(keycloak);
 
     functions
         //.WithReference(appInsights)
-        .WithComputeEnvironment(privateAcaEnvironment!);
+        .WithComputeEnvironment(privateAcaEnvironment!)
+        .PublishAsAzureContainerApp((_, app) =>
+        {
+            app.Tags["project"] = "TalentSuite";
+            app.Tags["owner"] = "rgparkins";
+        });
 }
 
 var grafana = builder.AddDockerfile("grafana", "../ops/grafana")
@@ -479,6 +531,8 @@ else
         .WithComputeEnvironment(privateAcaEnvironment!)
         .PublishAsAzureContainerApp((_, app) =>
         {
+            app.Tags["project"] = "TalentSuite";
+            app.Tags["owner"] = "rgparkins";
             app.Configuration ??= new();
             app.Configuration.Ingress ??= new();
             app.Configuration.Ingress.External = true;
