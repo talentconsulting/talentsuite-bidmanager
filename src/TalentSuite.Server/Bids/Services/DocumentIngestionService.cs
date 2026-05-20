@@ -259,7 +259,7 @@ DOCUMENT TEXT:
         var chunks = new List<string>();
         var current = new StringBuilder();
 
-        var sheets = workbookPart.Workbook.Sheets?.Elements<Sheet>() ?? Enumerable.Empty<Sheet>();
+        var sheets = workbookPart.Workbook?.Sheets?.Elements<Sheet>() ?? Enumerable.Empty<Sheet>();
         foreach (var sheet in sheets)
         {
             var worksheetPart = workbookPart.GetPartById(sheet.Id!) as WorksheetPart;

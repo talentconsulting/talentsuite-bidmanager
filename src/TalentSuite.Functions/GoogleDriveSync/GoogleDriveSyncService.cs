@@ -27,7 +27,9 @@ public sealed class GoogleDriveSyncService(
             throw new InvalidOperationException("GoogleDriveSync:DriveFolderId is required when GoogleDriveSync:Enabled is true.");
 
         var credentialJson = ResolveServiceAccountJson(configured);
-        var credential = GoogleCredential.FromJson(credentialJson).CreateScoped(DriveService.Scope.DriveReadonly);
+        var credential = CredentialFactory.FromJson<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(credentialJson)
+            .ToGoogleCredential()
+            .CreateScoped(DriveService.Scope.DriveReadonly);
         var driveService = new DriveService(new BaseClientService.Initializer
         {
             HttpClientInitializer = credential,
@@ -50,7 +52,9 @@ public sealed class GoogleDriveSyncService(
             throw new InvalidOperationException("GoogleDriveSync:DriveFolderId is required when GoogleDriveSync:Enabled is true.");
 
         var credentialJson = ResolveServiceAccountJson(configured);
-        var credential = GoogleCredential.FromJson(credentialJson).CreateScoped(DriveService.Scope.Drive);
+        var credential = CredentialFactory.FromJson<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(credentialJson)
+            .ToGoogleCredential()
+            .CreateScoped(DriveService.Scope.Drive);
         var driveService = new DriveService(new BaseClientService.Initializer
         {
             HttpClientInitializer = credential,

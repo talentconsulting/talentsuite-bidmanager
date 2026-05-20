@@ -893,7 +893,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
             var submittedQuestion = ChatQuestionText ?? string.Empty;
             var payload = new ChatQuestionRequest
             {
-                BidId = Bid.Id,
+                BidId = BidId,
                 QuestionId = q.Id,
                 FreeTextQuestion = submittedQuestion,
                 ThreadId = q.ChatThreadId
@@ -1307,6 +1307,8 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
                 throw new InvalidOperationException($"Failed to add draft response: {(int)response.StatusCode} {response.ReasonPhrase}");
 
             var resp = await response.Content.ReadFromJsonAsync<CreateAssetResponse>();
+            if (resp is null || string.IsNullOrWhiteSpace(resp.Id))
+                throw new InvalidOperationException("Failed to add draft response: invalid or empty response received from API.");
                 
             ActiveQuestion.DraftResponses.Add(new DraftResponse
             {
