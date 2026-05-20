@@ -8,6 +8,7 @@ using TalentSuite.Shared.Messaging.Events;
 using TalentSuite.Shared.Tasks;
 using TalentSuite.Server.Users.Data;
 using TalentSuite.Shared.Bids.Ai;
+using TalentSuite.Shared.Users;
 
 namespace TalentSuite.Server.Bids.Services;
 
@@ -21,7 +22,7 @@ public interface IBidService
 
     Task<PagedBidListModel> SearchBids(int page, int pageSize, CancellationToken ct = default);
     
-    Task<List<string>> GetBidUsers(string bidId, CancellationToken ct = default);
+    Task<List<BidUserResponse>> GetBidUsers(string bidId, CancellationToken ct = default);
     
     Task AddBidUser(string bidId, string userId, CancellationToken ct = default);
     
@@ -230,9 +231,20 @@ public sealed class BidService : IBidService
         return response;
     }
 
-    public async Task<List<string>> GetBidUsers(string bidId, CancellationToken ct = default)
+    public async Task<List<BidUserResponse>> GetBidUsers(string bidId, CancellationToken ct = default)
     {
-        return await _repository.GetBidUsers(bidId, ct);
+        var userIds = await _repository.GetBidUsers(bidId, ct);
+        var result = new List<BidUserResponse>(userIds.Count);
+        foreach (var userId in userIds)
+        {
+            var user = await _users.GetUser(userId, ct);
+            result.Add(new BidUserResponse
+            {
+                Id = userId,
+                Name = user?.Name ?? userId
+            });
+        }
+        return result;
     }
 
     public async Task AddBidUser(string bidId, string userId, CancellationToken ct = default)

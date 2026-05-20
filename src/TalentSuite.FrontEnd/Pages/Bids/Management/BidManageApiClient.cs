@@ -114,8 +114,8 @@ public sealed class BidManageApiClient(HttpClient http)
     public Task<CurrentUserAuthorisationResponse?> GetMyAuthorisationAsync(CancellationToken ct = default)
         => http.GetFromJsonAsync<CurrentUserAuthorisationResponse>("api/users/me-authorisation", ct);
 
-    public Task<List<string>?> GetBidUsersAsync(string bidId, CancellationToken ct = default)
-        => http.GetFromJsonAsync<List<string>>($"api/bids/{Uri.EscapeDataString(bidId)}/users", ct);
+    public Task<List<BidUserResponse>?> GetBidUsersAsync(string bidId, CancellationToken ct = default)
+        => http.GetFromJsonAsync<List<BidUserResponse>>($"api/bids/{Uri.EscapeDataString(bidId)}/users", ct);
 
     public Task<List<QuestionAssignmentResponse>?> GetQuestionUsersAsync(string bidId, string questionId, CancellationToken ct = default)
         => http.GetFromJsonAsync<List<QuestionAssignmentResponse>>(

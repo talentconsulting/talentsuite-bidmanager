@@ -316,6 +316,8 @@ else
     defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment($"aca-{azureEnvironmentName}");
     _ = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
 
+    
+
     //sql = builder.AddAzureSqlServer("sql")
     msSql
         .ConfigureInfrastructure(infra =>
@@ -407,32 +409,6 @@ else
         //.WithReference(appInsights)
         .WithComputeEnvironment(privateAcaEnvironment!);
 }
-
-// var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
-//     .WithReference(server)
-//     .WithReference(bidStorage)
-//     .WithEnvironment("WEBSITES_PORT", "8080")
-//     .WithEnvironment("ASPNETCORE_URLS", "http://+:8080")
-//     .WithEnvironment("InviteEmail__Enabled", inviteEmailEnabled)
-//     .WithEnvironment("InviteEmail__FrontendBaseUrl", "https://localhost:5173")
-//     .WithEnvironment("InviteEmail__FromEmail", inviteFromEmail)
-//     .WithEnvironment("InviteEmail__FromDisplayName", "TalentSuite")
-//     .WithEnvironment("InviteEmail__SmtpHost", inviteSmtpHost)
-//     .WithEnvironment("InviteEmail__SmtpPort", inviteSmtpPort)
-//     .WithEnvironment("InviteEmail__SmtpEnableSsl", inviteSmtpEnableSsl)
-//     .WithEnvironment("InviteEmail__SmtpUsername", inviteSmtpUsername)
-//     .WithEnvironment("InviteEmail__SmtpPassword", inviteSmtpPassword)
-//     .WithEnvironment("GoogleDriveSync__Enabled", googleDriveSyncEnabled)
-//     .WithEnvironment("GoogleDriveSync__SourceContainerName", googleDriveSyncSourceContainerName)
-//     .WithEnvironment("GoogleDriveSync__DriveFolderId", googleDriveSyncDriveFolderId)
-//     .WithEnvironment("GoogleDriveSync__ServiceAccountJsonBase64", googleDriveSyncServiceAccountJsonBase64)
-//     .WaitFor(messaging)
-//     .WaitFor(server);
-
-// if (!local)
-// {
-//     functions.WithComputeEnvironment(privateAcaEnvironment!);
-// }
 
 var grafana = builder.AddDockerfile("grafana", "../ops/grafana")
     .WithHttpEndpoint(targetPort: 3000, name: "http")

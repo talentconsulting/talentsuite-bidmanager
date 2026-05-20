@@ -218,26 +218,18 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
         try
         {
-            var userIds = await ApiClient.GetBidUsersAsync(BidId);
+            var bidUsers = await ApiClient.GetBidUsersAsync(BidId);
 
             AssignedUsers.Clear();
 
-            if (userIds is not null)
+            if (bidUsers is not null)
             {
-                foreach (var userId in userIds)
+                foreach (var bidUser in bidUsers)
                 {
-                    if (string.IsNullOrWhiteSpace(userId))
+                    if (string.IsNullOrWhiteSpace(bidUser.Id))
                         continue;
 
-                    var user = AllUsers.FirstOrDefault(u => u.Id == userId);
-                    if (user is not null)
-                    {
-                        AssignedUsers.Add(new UserOption(user.Id, user.Name));
-                        continue;
-                    }
-
-                    // Non-admin users cannot query the full user directory, so fall back to ids.
-                    AssignedUsers.Add(new UserOption(userId, userId));
+                    AssignedUsers.Add(new UserOption(bidUser.Id, bidUser.Name));
                 }
             }
         }

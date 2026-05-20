@@ -33,7 +33,7 @@ public sealed class BidAccessAuthorizationHandler(
             return;
 
         var bidUsers = await bidService.GetBidUsers(bidId);
-        if (bidUsers.Any(x => string.Equals(x, userId, StringComparison.OrdinalIgnoreCase)))
+        if (bidUsers.Any(x => string.Equals(x.Id, userId, StringComparison.OrdinalIgnoreCase)))
         {
             context.Succeed(requirement);
         }
