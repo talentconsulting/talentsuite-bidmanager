@@ -13,7 +13,7 @@ public class BidDataModel
         Id = id;
     }
     
-    public string Id { get; set; }
+    public string Id { get; set; } = string.Empty;
 
     public string? UniqueReference { get; set; }
     public string? Company { get; set; }

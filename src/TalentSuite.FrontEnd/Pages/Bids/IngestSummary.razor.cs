@@ -143,7 +143,7 @@ public partial class IngestSummary : ComponentBase
 
     private class CreatedId
     {
-        public string Result { get; set; }
+        public string Result { get; set; } = string.Empty;
     }
 
     private async Task TryUploadSourceDocumentAsync(string bidId)

@@ -11,10 +11,10 @@ public class QuestionDataModel
     {
     }
 
-    public string Id { get; set; }
+    public string Id { get; set; } = string.Empty;
     public int QuestionOrderIndex { get; set; }
-    public string Category { get; set; }
-    public string Number { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public string Number { get; set; } = string.Empty;
     public string Title { get; set; } = "";
     public string Description { get; set; } = "";
     public string Length { get; set; } = "";

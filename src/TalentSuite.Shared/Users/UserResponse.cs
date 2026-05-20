@@ -2,9 +2,9 @@ namespace TalentSuite.Shared.Users;
 
 public class UserResponse
 {
-    public string Id { get; set; }
-    public string Name { get; set; }
-    public string Email { get; set; }
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
     public UserRole Role { get; set; } = UserRole.User;
     public bool HasAcceptedRegistration { get; set; }
     public string IdentityProvider { get; set; } = string.Empty;
@@ -22,21 +22,21 @@ public class BidUserResponse
 
 public class UserAssignmentRequest
 {
-    public string UserId  { get; set; }
+    public string UserId  { get; set; } = string.Empty;
 }
 
 public class UpdateUserRequest
 {
-    public string Name { get; set; }
-    public string Email { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
     public UserRole Role { get; set; } = UserRole.User;
     public bool HasAcceptedRegistration { get; set; }
 }
 
 public class CreateUserRequest
 {
-    public string Name { get; set; }
-    public string Email { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
     public UserRole Role { get; set; } = UserRole.User;
     public bool HasAcceptedRegistration { get; set; }
 }

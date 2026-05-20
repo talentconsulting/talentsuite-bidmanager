@@ -11,5 +11,5 @@ public sealed class ParsedDocumentResponse
     public string? DeadlineForSubmission { get; set; }
     public string? LengthOfContract { get; set; }
     
-    public List<ParsedQuestionResponse> Questions { get; set; }
+    public List<ParsedQuestionResponse> Questions { get; set; } = new();
 }
