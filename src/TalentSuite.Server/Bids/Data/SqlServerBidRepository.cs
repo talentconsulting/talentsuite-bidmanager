@@ -581,6 +581,26 @@ public sealed class SqlServerBidRepository : IManageBids
             cancellationToken: ct));
     }
 
+    public async Task UpdateBid(BidDataModel bid, CancellationToken ct = default)
+    {
+        if (bid is null || string.IsNullOrWhiteSpace(bid.Id))
+            return;
+
+        await EnsureSchemaAsync(ct);
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE dbo.Bids
+            SET Payload = @Payload
+            WHERE Id = @Id;
+            """,
+            new { Id = bid.Id, Payload = Serialize(bid) },
+            cancellationToken: ct));
+    }
+
     public async Task<BidLibraryPushDataModel> PushBidToLibrary(
         string bidId,
         string performedByUserId,

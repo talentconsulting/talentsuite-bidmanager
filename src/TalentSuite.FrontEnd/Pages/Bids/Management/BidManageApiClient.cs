@@ -219,4 +219,18 @@ public sealed class BidManageApiClient(HttpClient http)
         return await response.Content.ReadFromJsonAsync<DraftCommentResponse>(ct)
                ?? throw new InvalidOperationException("Final answer comment completion response was empty.");
     }
+
+    public async Task UpdateBidOverviewAsync(string bidId, UpdateBidOverviewRequest request, CancellationToken ct = default)
+    {
+        var response = await http.PutAsJsonAsync($"api/bids/{Uri.EscapeDataString(bidId)}", request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Failed to update bid overview: {(int)response.StatusCode} {response.ReasonPhrase}");
+    }
+
+    public async Task UpdateQuestionAsync(string bidId, string questionId, UpdateQuestionRequest request, CancellationToken ct = default)
+    {
+        var response = await http.PutAsJsonAsync($"api/bids/{Uri.EscapeDataString(bidId)}/questions/{Uri.EscapeDataString(questionId)}", request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Failed to update question: {(int)response.StatusCode} {response.ReasonPhrase}");
+    }
 }
