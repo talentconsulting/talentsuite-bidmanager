@@ -13,7 +13,9 @@ public partial class Home
     private bool IsLoading { get; set; }
     private string? ErrorText { get; set; }
     private bool IsAdminUser { get; set; }
+    private bool IsBidManager { get; set; }
     private string SelectedStatusFilter { get; set; } = string.Empty;
+    private bool CanBrowseBids => IsAdminUser || IsBidManager;
 
     private PagedBidListResponse Bids { get; set; } = new();
 
@@ -64,7 +66,7 @@ public partial class Home
     protected override async Task OnInitializedAsync()
     {
         await LoadAuthorisationAsync();
-        if (!IsAdminUser)
+        if (!CanBrowseBids)
         {
             Bids = new PagedBidListResponse();
             return;
@@ -79,10 +81,12 @@ public partial class Home
         {
             var auth = await Http.GetFromJsonAsync<CurrentUserAuthorisationResponse>("api/users/me-authorisation");
             IsAdminUser = auth?.IsAdmin ?? false;
+            IsBidManager = auth?.IsBidManager ?? false;
         }
         catch
         {
             IsAdminUser = false;
+            IsBidManager = false;
         }
     }
 

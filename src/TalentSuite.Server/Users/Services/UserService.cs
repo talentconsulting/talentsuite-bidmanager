@@ -337,7 +337,12 @@ public class UserService : IUserService
     }
 
     private static string ToKeycloakRealmRole(TalentSuite.Shared.Users.UserRole role)
-        => role == TalentSuite.Shared.Users.UserRole.Admin ? "admin" : "user";
+        => role switch
+        {
+            TalentSuite.Shared.Users.UserRole.Admin => "admin",
+            TalentSuite.Shared.Users.UserRole.BidManager => "bidManager",
+            _ => "user"
+        };
 
     private static string SafeTokenPrefix(string? token)
     {

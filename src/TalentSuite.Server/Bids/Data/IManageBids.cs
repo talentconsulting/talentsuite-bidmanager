@@ -11,6 +11,8 @@ public interface IManageBids
 
     Task<SearchDataModel> SearchBids(int page, int pageSize, CancellationToken ct = default);
 
+    Task<SearchDataModel> SearchBidsForUser(string userId, int page, int pageSize, CancellationToken ct = default);
+
     Task SaveDocumentIngestionJob(DocumentIngestionJobDataModel job, CancellationToken ct = default);
 
     Task<DocumentIngestionJobDataModel?> GetDocumentIngestionJob(string jobId, CancellationToken ct = default);

@@ -27,7 +27,7 @@ public sealed class BidUserController : ControllerBase
     }
     
     [HttpPost]
-    [Authorize(Policy = "RequireAdminRole")]
+    [Authorize(Policy = "RequireBidManagementRole")]
     public async Task<IActionResult> AddBidUser(string bidId, [FromBody] UserAssignmentRequest request)
     {
         if (!ModelState.IsValid)
@@ -39,7 +39,7 @@ public sealed class BidUserController : ControllerBase
     }
     
     [HttpDelete()]
-    [Authorize(Policy = "RequireAdminRole")]
+    [Authorize(Policy = "RequireBidManagementRole")]
     public async Task<IActionResult> RemoveBidUser(string bidId, [FromBody] UserAssignmentRequest request)
     {
         if (!ModelState.IsValid)

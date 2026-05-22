@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using System.Text.Json;
+using TalentSuite.Server.Security;
 using TalentSuite.Server.Bids.Services;
 using TalentSuite.Shared;
 using TalentSuite.Shared.Bids.Ai;
@@ -9,22 +10,25 @@ using TalentSuite.Shared.Bids.Ai;
 namespace TalentSuite.Server.Bids.Controllers;
 
 [ApiController]
-[Authorize(Policy = "RequireAdminRole")]
+[Authorize]
 [Route("api/ai/questions")]
 public class ChatQuestionController : ControllerBase   
 {
     private readonly IBidService _bidService;
     private readonly IAzureOpenAiChatService _azureOpenAiChatService;
     private readonly ILogger<ChatQuestionController> _logger;
+    private readonly ICurrentUserBidAuthorizationService _authorizationService;
 
     public ChatQuestionController(
         IBidService bidService,
         IAzureOpenAiChatService azureOpenAiChatService,
-        ILogger<ChatQuestionController> logger)
+        ILogger<ChatQuestionController> logger,
+        ICurrentUserBidAuthorizationService authorizationService)
     {
         _bidService = bidService;
         _azureOpenAiChatService = azureOpenAiChatService;
         _logger = logger;
+        _authorizationService = authorizationService;
     }
 
     [HttpPost("{questionId}")]
@@ -33,6 +37,9 @@ public class ChatQuestionController : ControllerBase
         var resolvedQuestionId = string.IsNullOrWhiteSpace(chatQuestionRequest.QuestionId)
             ? questionId
             : chatQuestionRequest.QuestionId;
+
+        if (!await _authorizationService.CanManageBidAsync(User, chatQuestionRequest.BidId, HttpContext.RequestAborted))
+            return Forbid();
 
         try
         {
@@ -115,6 +122,9 @@ public class ChatQuestionController : ControllerBase
         if (string.IsNullOrWhiteSpace(bidId))
             return BadRequest("bidId is required.");
 
+        if (!await _authorizationService.CanManageBidAsync(User, bidId, ct))
+            return Forbid();
+
         var userId = ResolveCurrentUserKey();
         if (string.IsNullOrWhiteSpace(userId))
             return Ok(new List<ChatMessageResponse>());
@@ -129,6 +139,12 @@ public class ChatQuestionController : ControllerBase
         var resolvedQuestionId = string.IsNullOrWhiteSpace(chatQuestionRequest.QuestionId)
             ? questionId
             : chatQuestionRequest.QuestionId;
+
+        if (!await _authorizationService.CanManageBidAsync(User, chatQuestionRequest.BidId, ct))
+        {
+            Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
 
         var userId = ResolveCurrentUserKey();
         if (string.IsNullOrWhiteSpace(userId))

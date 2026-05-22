@@ -50,8 +50,9 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
     protected BidManageModel? Bid { get; set; }
     protected bool IsAdminUser { get; set; }
-    protected bool CanManageBidUsers => IsAdminUser;
-    protected bool CanManageQuestionUsers => IsAdminUser;
+    protected bool CanManageAssignedBids { get; set; }
+    protected bool CanManageBidUsers => CanManageAssignedBids;
+    protected bool CanManageQuestionUsers => CanManageAssignedBids;
     protected bool IsApiCallInProgress => IsLoading || IsBusy || IsUsersBusy || IsDraftBusy || IsFilesBusy;
     protected string BusyOverlayMessage
         => IsLoading ? "Loading bid..."
@@ -204,10 +205,12 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         {
             var auth = await ApiClient.GetMyAuthorisationAsync();
             IsAdminUser = auth?.IsAdmin ?? false;
+            CanManageAssignedBids = auth?.CanManageAssignedBids ?? false;
         }
         catch
         {
             IsAdminUser = false;
+            CanManageAssignedBids = false;
         }
     }
 

@@ -21,6 +21,8 @@ public interface IBidService
     Task<BidModel> GetBid(string id, CancellationToken ct = default);
 
     Task<PagedBidListModel> SearchBids(int page, int pageSize, CancellationToken ct = default);
+
+    Task<PagedBidListModel> SearchBidsForUser(string userId, int page, int pageSize, CancellationToken ct = default);
     
     Task<List<BidUserResponse>> GetBidUsers(string bidId, CancellationToken ct = default);
     
@@ -229,6 +231,12 @@ public sealed class BidService : IBidService
         var response = _mapper.ToModel(dataModel);
         
         return response;
+    }
+
+    public async Task<PagedBidListModel> SearchBidsForUser(string userId, int page, int pageSize, CancellationToken ct = default)
+    {
+        var dataModel = await _repository.SearchBidsForUser(userId, page, pageSize, ct);
+        return _mapper.ToModel(dataModel);
     }
 
     public async Task<List<BidUserResponse>> GetBidUsers(string bidId, CancellationToken ct = default)

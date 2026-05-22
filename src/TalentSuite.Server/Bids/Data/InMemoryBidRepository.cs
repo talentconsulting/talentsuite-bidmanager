@@ -125,6 +125,42 @@ public class InMemoryBidRepository : IManageBids
         return await Task.FromResult(model);
     }
 
+    public async Task<SearchDataModel> SearchBidsForUser(string userId, int page, int pageSize, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return new SearchDataModel { CurrentPage = page, PageSize = pageSize, TotalCount = 0 };
+
+        var assignedBidIds = _usersForBids
+            .Where(x => x.Value.Any(existingUserId => string.Equals(existingUserId, userId, StringComparison.OrdinalIgnoreCase)))
+            .Select(x => x.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var bids = _bids.Values
+            .Where(b => assignedBidIds.Contains(b.Id))
+            .ToList();
+
+        var items = bids
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(b => new SearchItemDataModel
+            {
+                Id = b.Id,
+                Company = b.Company ?? string.Empty,
+                Summary = b.Summary ?? string.Empty,
+                QuestionCount = b.Questions?.Count ?? 0,
+                Status = b.Status
+            })
+            .ToList();
+
+        return await Task.FromResult(new SearchDataModel
+        {
+            CurrentPage = page,
+            PageSize = pageSize,
+            Items = items,
+            TotalCount = bids.Count
+        });
+    }
+
     public Task SaveDocumentIngestionJob(DocumentIngestionJobDataModel job, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(job);

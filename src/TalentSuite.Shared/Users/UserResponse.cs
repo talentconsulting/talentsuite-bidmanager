@@ -80,5 +80,7 @@ public class CurrentUserProfileResponse
 public class CurrentUserAuthorisationResponse
 {
     public bool IsAdmin { get; set; }
+    public bool IsBidManager { get; set; }
+    public bool CanManageAssignedBids { get; set; }
     public List<string> Roles { get; set; } = new();
 }

@@ -21,7 +21,30 @@ public class My_authorisation
         var payload = await response.Content.ReadFromJsonAsync<MyAuthorisationResponse>();
         Assert.That(payload, Is.Not.Null);
         Assert.That(payload!.IsAdmin, Is.True);
+        Assert.That(payload.CanManageAssignedBids, Is.True);
         Assert.That(payload.Roles, Does.Contain("admin"));
+    }
+
+    [Test]
+    public async Task GetCurrentAuthorisation_BidManagerRole_ReturnsBidManagementFlags()
+    {
+        using var factory = new AuthenticatedTestWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        SetIdentityHeaders(client, subject: "bid-manager", username: "bid.manager", roles: "bidManager,user");
+
+        var response = await client.GetAsync("/api/users/me-authorisation");
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var payload = await response.Content.ReadFromJsonAsync<MyAuthorisationResponse>();
+        Assert.That(payload, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(payload!.IsAdmin, Is.False);
+            Assert.That(payload.IsBidManager, Is.True);
+            Assert.That(payload.CanManageAssignedBids, Is.True);
+            Assert.That(payload.Roles, Does.Contain("bidManager"));
+        });
     }
 
     [Test]
@@ -83,6 +106,8 @@ public class My_authorisation
     private sealed class MyAuthorisationResponse
     {
         public bool IsAdmin { get; set; }
+        public bool IsBidManager { get; set; }
+        public bool CanManageAssignedBids { get; set; }
         public List<string> Roles { get; set; } = new();
     }
 }
