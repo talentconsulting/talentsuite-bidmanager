@@ -48,9 +48,17 @@ This is an Aspire-orchestrated .NET 10 multi-service application for managing te
 
 Code is organised by feature (Bids, Users, Health, Messaging, Security). Each feature folder contains Controllers, Services, and Data sub-folders. Data access uses Dapper against SQL Server in production; an `InMemoryBidRepository` is available for tests. Object mapping is done via Riok.Mapperly (source-generated, no reflection).
 
+**Bids API endpoints** (all require `RequireBidAccess` policy):
+- `PUT /api/bids/{bidId}` — update bid overview fields (`UpdateBidOverviewRequest`)
+- `PUT /api/bids/{bidId}/questions/{questionId}` — update a single question (`UpdateQuestionRequest`)
+
+`AzureOpenAiChatService` uses `ManagedIdentityCredential` with a user-assigned client ID for Azure OpenAI access.
+
 ### Frontend internals (`src/TalentSuite.FrontEnd`)
 
 Blazor WASM SPA. Key page groups under `Pages/Bids/`: bid list (`Home.razor`), detail/question management (`Manage.razor`), document upload (`Ingest.razor`), ingestion job history (`IngestionJobs.razor`), and parsed content review (`IngestSummary.razor`). API calls go through typed `HttpClient` services registered in `Program.cs`.
+
+`BidManageApiClient` (under `Pages/Bids/Management/`) is the typed HTTP client for the bid management page; it exposes `UpdateBidOverviewAsync` and `UpdateQuestionAsync`. `OverviewPanel.razor` renders an inline edit form for bid overview fields.
 
 ### Testing approach
 
