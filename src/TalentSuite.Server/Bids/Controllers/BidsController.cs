@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using TalentSuite.Server.Bids.Mappers;
+using TalentSuite.Server.Security;
 using TalentSuite.Server.Bids.Services;
 using TalentSuite.Server.Bids.Services.Models;
 using TalentSuite.Shared.Bids;
@@ -20,17 +21,20 @@ public sealed class BidsController : ControllerBase
     private readonly BidMapper _mapper;
     private readonly IAzureServiceBusClient _azureServiceBusClient;
     private readonly string _bidSubmittedEntityName;
+    private readonly ICurrentUserBidAuthorizationService _authorizationService;
 
     public BidsController(
         IBidService bidService,
         BidMapper mapper,
         IAzureServiceBusClient azureServiceBusClient,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ICurrentUserBidAuthorizationService authorizationService)
     {
         _bidService = bidService;
         _mapper = mapper;
         _azureServiceBusClient = azureServiceBusClient;
         _bidSubmittedEntityName = configuration["AzureServiceBus:BidSubmittedEntityName"] ?? "bid-submitted";
+        _authorizationService = authorizationService;
     }
     
     [HttpPost]
@@ -62,10 +66,27 @@ public sealed class BidsController : ControllerBase
     }
     
     [HttpGet]
-    [Authorize(Policy = "RequireAdminRole")]
+    [Authorize]
     public async Task<ActionResult<PagedBidListResponse>> Get(int page, int pageSize, CancellationToken ct)
     {
-        var model = await _bidService.SearchBids(page, pageSize, ct);
+        PagedBidListModel model;
+
+        if (_authorizationService.IsAdmin(User))
+        {
+            model = await _bidService.SearchBids(page, pageSize, ct);
+        }
+        else if (_authorizationService.IsBidManager(User))
+        {
+            var userId = await _authorizationService.ResolveCurrentUserIdAsync(User, ct);
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized();
+
+            model = await _bidService.SearchBidsForUser(userId, page, pageSize, ct);
+        }
+        else
+        {
+            return Forbid();
+        }
 
         var response = _mapper.ToResponse(model);
         

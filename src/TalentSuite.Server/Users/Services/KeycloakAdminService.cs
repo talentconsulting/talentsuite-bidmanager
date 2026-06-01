@@ -265,6 +265,7 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
             var existingRoles = await GetUserRealmRolesAsync(http, tokenResponse.AccessToken, candidateId, ct);
             var managedRoles = existingRoles
                 .Where(r => string.Equals(r.Name, "admin", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(r.Name, "bidManager", StringComparison.OrdinalIgnoreCase)
                          || string.Equals(r.Name, "user", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 

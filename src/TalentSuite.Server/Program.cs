@@ -104,10 +104,15 @@ else
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("admin", "Admin"));
+    options.AddPolicy("RequireBidManagerOrAdminRole", policy => policy.RequireRole("admin", "Admin", "bidManager", "BidManager"));
+    options.AddPolicy("RequireBidManagementRole", policy =>
+        policy.RequireRole("admin", "Admin", "bidManager", "BidManager")
+            .AddRequirements(new BidAccessRequirement()));
     options.AddPolicy("RequireBidAccess", policy =>
         policy.RequireAuthenticatedUser().AddRequirements(new BidAccessRequirement()));
 });
 builder.Services.AddScoped<IAuthorizationHandler, BidAccessAuthorizationHandler>();
+builder.Services.AddScoped<ICurrentUserBidAuthorizationService, CurrentUserBidAuthorizationService>();
 
 var apiBaseAddress = Environment.GetEnvironmentVariable("TALENTFRONTEND_HTTPS")
                                                          ?? builder.Configuration["TALENTFRONTEND_HTTPS"]

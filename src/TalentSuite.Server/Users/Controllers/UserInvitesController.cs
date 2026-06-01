@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TalentSuite.Server.Users.Mappers;
+using TalentSuite.Server.Security;
 using TalentSuite.Server.Users.Services;
 using TalentSuite.Server.Users.Services.Models;
 using TalentSuite.Shared.Users;
@@ -16,15 +17,18 @@ public class UserInvitesController : ControllerBase
     private readonly UserMapper _mapper;
     private readonly IUserService _userService;
     private readonly ILogger<UserInvitesController> _logger;
+    private readonly ICurrentUserBidAuthorizationService _authorizationService;
 
     public UserInvitesController(
         UserMapper mapper,
         IUserService userService,
-        ILogger<UserInvitesController> logger)
+        ILogger<UserInvitesController> logger,
+        ICurrentUserBidAuthorizationService authorizationService)
     {
         _mapper = mapper;
         _userService = userService;
         _logger = logger;
+        _authorizationService = authorizationService;
     }
 
     [HttpGet("me")]
@@ -103,12 +107,14 @@ public class UserInvitesController : ControllerBase
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var isAdmin = roles.Any(r =>
-            string.Equals(r, "admin", StringComparison.OrdinalIgnoreCase));
+        var isAdmin = _authorizationService.IsAdmin(User);
+        var isBidManager = _authorizationService.IsBidManager(User);
 
         return Ok(new
         {
             isAdmin,
+            isBidManager,
+            canManageAssignedBids = isAdmin || isBidManager,
             roles
         });
     }

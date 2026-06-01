@@ -22,6 +22,10 @@
         "description": "Admin user"
       },
       {
+        "name": "bidManager",
+        "description": "Bid manager user"
+      },
+      {
         "name": "user",
         "description": "Standard user"
       }

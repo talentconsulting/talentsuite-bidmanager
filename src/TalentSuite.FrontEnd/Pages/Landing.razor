@@ -1,0 +1,130 @@
+@page "/"
+@layout AnonymousLayout
+@using Microsoft.AspNetCore.Authorization
+@using TalentSuite.FrontEnd.Shared
+@attribute [AllowAnonymous]
+
+<div class="landing-shell">
+    <header class="landing-header">
+        <a class="landing-brand" href="/">TalentSuite Bid Manager</a>
+
+        <nav class="landing-nav" aria-label="Primary">
+            <a href="#overview">Overview</a>
+            <a href="#pricing">Pricing</a>
+            <a href="#about">About Us</a>
+            <a class="landing-login" href="/authentication/login?returnUrl=%2Fapp">Login</a>
+        </nav>
+    </header>
+
+    <section class="landing-hero" id="overview">
+        <div class="landing-hero-copy">
+            <span class="landing-eyebrow">Bid Management Platform</span>
+            <h1>Coordinate bids, contributors, and final submissions in one workspace.</h1>
+            <p>
+                TalentSuite Bid Manager gives bid teams a structured way to ingest documents, assign ownership,
+                manage reviews, track comments, and prepare final responses without losing context across the process.
+            </p>
+            <div class="landing-actions">
+                <a class="btn btn-primary btn-lg" href="/authentication/login?returnUrl=%2Fapp">Login</a>
+                <a class="btn btn-outline-primary btn-lg" href="#pricing">View Pricing</a>
+            </div>
+            <div class="landing-metrics" aria-label="Platform highlights">
+                <div>
+                    <strong>Centralised</strong>
+                    <span>Question ownership, files, drafts, red review, and final answers.</span>
+                </div>
+                <div>
+                    <strong>Role-based</strong>
+                    <span>Admins, users, and bid managers with bid-scoped control.</span>
+                </div>
+                <div>
+                    <strong>AI-assisted</strong>
+                    <span>Document ingestion and library-backed drafting workflows.</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="landing-hero-visual">
+            <img src="images/bid-management-architecture.png"
+                 alt="Architecture view of the bid management platform and supporting services." />
+        </div>
+    </section>
+
+    <section class="landing-band" id="features">
+        <div class="landing-section-head">
+            <span class="landing-kicker">What the tool covers</span>
+            <h2>Built for structured bid delivery, not generic file sharing.</h2>
+        </div>
+        <div class="landing-feature-grid">
+            <article>
+                <h3>Bid intake and structure</h3>
+                <p>Upload source bid documents, parse questions, and organise the response pack before drafting starts.</p>
+            </article>
+            <article>
+                <h3>Assignment and accountability</h3>
+                <p>Assign bid managers and question owners so responsibility is clear at both bid and question level.</p>
+            </article>
+            <article>
+                <h3>Review workflow</h3>
+                <p>Move content through draft, red review, and final answer stages with comments and completion tracking.</p>
+            </article>
+            <article>
+                <h3>Submission readiness</h3>
+                <p>Monitor completion status across questions and bring together the final response set for submission.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="landing-band landing-band-contrast" id="pricing">
+        <div class="landing-section-head">
+            <span class="landing-kicker">Pricing</span>
+            <h2>Simple plans for delivery teams.</h2>
+        </div>
+        <div class="landing-pricing-grid">
+            <article class="landing-price-card">
+                <h3>Team</h3>
+                <div class="landing-price">£49<span>/user/mo</span></div>
+                <p>For delivery teams running active bids with shared drafting and review.</p>
+                <ul>
+                    <li>Bid and question assignments</li>
+                    <li>Draft, review, and final answer workflow</li>
+                    <li>Comment mentions and personal task tracking</li>
+                </ul>
+            </article>
+            <article class="landing-price-card landing-price-card-featured">
+                <h3>Business</h3>
+                <div class="landing-price">£79<span>/user/mo</span></div>
+                <p>For organisations standardising bid operations across multiple contributors and managers.</p>
+                <ul>
+                    <li>Everything in Team</li>
+                    <li>Bid manager controls for assigned bids</li>
+                    <li>AI-assisted drafting and document ingestion</li>
+                </ul>
+            </article>
+            <article class="landing-price-card">
+                <h3>Enterprise</h3>
+                <div class="landing-price">Custom</div>
+                <p>For larger bid functions needing environment, integration, and governance support.</p>
+                <ul>
+                    <li>Private environment options</li>
+                    <li>Operational support and rollout planning</li>
+                    <li>Custom integration scope</li>
+                </ul>
+            </article>
+        </div>
+    </section>
+
+    <section class="landing-band" id="about">
+        <div class="landing-about">
+            <div>
+                <span class="landing-kicker">About Us</span>
+                <h2>Built for teams that need a tighter bid process.</h2>
+            </div>
+            <p>
+                TalentSuite Bid Manager is designed for organisations that need a controlled way to run bid work:
+                capture the source material, coordinate authors and reviewers, and keep final submissions moving without
+                relying on ad hoc email chains and disconnected documents.
+            </p>
+        </div>
+    </section>
+</div>

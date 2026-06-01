@@ -21,7 +21,7 @@
         <div class="border-bottom pb-2 d-flex justify-content-between align-items-center gap-3">
             <ul class="nav nav-pills gap-2">
                 <li class="nav-item">
-                    <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
+                    <NavLink class="nav-link" href="/app" Match="NavLinkMatch.All">Workspace</NavLink>
                 </li>
                 @if (AuthenticationEnabled)
                 {
@@ -218,7 +218,7 @@
     private void UpdateAreaFromLocation()
     {
         var relativePath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).Trim('/');
-        IsRootHome = string.IsNullOrWhiteSpace(relativePath);
+        IsRootHome = string.Equals(relativePath, "app", StringComparison.OrdinalIgnoreCase);
         IsUsersArea = relativePath.StartsWith("users", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -246,7 +246,7 @@
         return "/" + relativePath;
     }
 
-    private string LoginUrl => $"/authentication/login?returnUrl={Uri.EscapeDataString(GetCurrentRelativePath())}";
+    private string LoginUrl => $"/authentication/login?returnUrl={Uri.EscapeDataString("/app")}";
     private string LogoutUrl
     {
         get

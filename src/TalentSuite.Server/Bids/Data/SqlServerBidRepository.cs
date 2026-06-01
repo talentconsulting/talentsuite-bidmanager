@@ -134,6 +134,48 @@ public sealed class SqlServerBidRepository : IManageBids
         };
     }
 
+    public async Task<SearchDataModel> SearchBidsForUser(string userId, int page, int pageSize, CancellationToken ct = default)
+    {
+        await EnsureSchemaAsync(ct);
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        var payloads = (await connection.QueryAsync<string>(
+            new CommandDefinition(
+                """
+                SELECT b.Payload
+                FROM dbo.Bids b
+                INNER JOIN dbo.BidUsers bu ON bu.BidId = b.Id
+                WHERE bu.UserId = @UserId
+                ORDER BY b.CreatedAtUtc DESC
+                """,
+                new { UserId = userId },
+                cancellationToken: ct))).ToList();
+
+        var bids = payloads.Select(Deserialize<BidDataModel>).ToList();
+        var items = bids
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(b => new SearchItemDataModel
+            {
+                Id = b.Id,
+                Company = b.Company ?? string.Empty,
+                Summary = b.Summary ?? string.Empty,
+                QuestionCount = b.Questions?.Count ?? 0,
+                Status = b.Status
+            })
+            .ToList();
+
+        return new SearchDataModel
+        {
+            CurrentPage = page,
+            PageSize = pageSize,
+            Items = items,
+            TotalCount = bids.Count
+        };
+    }
+
     public async Task SaveDocumentIngestionJob(DocumentIngestionJobDataModel job, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(job);

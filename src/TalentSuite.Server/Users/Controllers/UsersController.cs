@@ -22,6 +22,7 @@ public class UsersController: ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = "RequireBidManagerOrAdminRole")]
     public async Task<ActionResult<List<UserResponse>>> GetUsers(CancellationToken ct)
     {
         var users = await _userService.GetUsers(ct);
