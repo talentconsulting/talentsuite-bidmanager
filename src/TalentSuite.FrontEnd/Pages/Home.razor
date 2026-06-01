@@ -1,4 +1,4 @@
-@page "/"
+@page "/app"
 @using Microsoft.AspNetCore.Authorization
 @using System.Net
 @using TalentSuite.Shared.Tasks
@@ -6,7 +6,7 @@
 @inject HttpClient Http
 
 <div class="container py-4">
-    <h1 class="mb-4">Dashboard</h1>
+    <h1 class="mb-4">Workspace</h1>
 
     <div class="row g-4">
         <div class="col-12">
@@ -114,10 +114,10 @@
                                                     }
                                                     else
                                                     {
-                                                    <span class="text-muted me-1">#@item.QuestionNumber</span>
+                                                        <span class="text-muted me-1">#@item.QuestionNumber</span>
                                                     }
                                                 }
-                                                
+
                                                 @item.QuestionTitle
                                             </td>
                                             <td>@item.Role</td>

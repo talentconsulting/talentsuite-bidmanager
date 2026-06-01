@@ -288,6 +288,190 @@ hr {
   border-top: 1px solid var(--tc-border);
 }
 
+.landing-shell {
+  min-height: 100vh;
+  padding: 1.5rem 1.5rem 3rem;
+}
+
+.landing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin: 0 auto 1.5rem;
+  padding: 0.75rem 0;
+  max-width: 1180px;
+}
+
+.landing-brand {
+  color: var(--tc-navy);
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.landing-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.landing-nav a {
+  color: #28406f;
+  text-decoration: none;
+}
+
+.landing-login {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 1px solid var(--tc-border);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.landing-hero,
+.landing-band {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.landing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 2rem;
+  align-items: center;
+  padding: 2rem 0 3rem;
+}
+
+.landing-eyebrow,
+.landing-kicker {
+  display: inline-block;
+  margin-bottom: 0.85rem;
+  color: var(--tc-pink);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.landing-hero-copy h1 {
+  margin-bottom: 1rem;
+  font-size: clamp(2.4rem, 5vw, 4.2rem);
+  line-height: 1.03;
+}
+
+.landing-hero-copy p,
+.landing-about p,
+.landing-feature-grid p,
+.landing-price-card p,
+.landing-metrics span {
+  color: #334b79;
+}
+
+.landing-actions {
+  display: flex;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin: 1.5rem 0 1.75rem;
+}
+
+.landing-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.landing-metrics div,
+.landing-feature-grid article,
+.landing-price-card {
+  padding: 1.1rem 1.15rem;
+  border: 1px solid var(--tc-border);
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 10px 24px rgba(0, 17, 68, 0.05);
+}
+
+.landing-metrics strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--tc-navy);
+}
+
+.landing-hero-visual img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--tc-border);
+  border-radius: 0.5rem;
+  background: #00102d;
+  box-shadow: 0 18px 36px rgba(0, 17, 68, 0.14);
+}
+
+.landing-band {
+  padding: 1.5rem 0 2.5rem;
+}
+
+.landing-band-contrast {
+  padding: 2rem;
+  border: 1px solid var(--tc-border);
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.landing-section-head {
+  max-width: 760px;
+  margin-bottom: 1.5rem;
+}
+
+.landing-feature-grid,
+.landing-pricing-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.landing-feature-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.landing-pricing-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.landing-price-card-featured {
+  border-color: var(--tc-pink);
+}
+
+.landing-price {
+  margin: 0.75rem 0;
+  color: var(--tc-navy);
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.landing-price span {
+  margin-left: 0.25rem;
+  color: #4c5f8a;
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.landing-price-card ul {
+  margin: 0;
+  padding-left: 1rem;
+  color: #334b79;
+}
+
+.landing-about {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
 @media (max-width: 768px) {
   .ts-shell {
     padding: 0.75rem;
@@ -295,5 +479,36 @@ hr {
 
   .ts-layout {
     gap: 0.75rem;
+  }
+
+  .landing-shell {
+    padding: 1rem 1rem 2rem;
+  }
+
+  .landing-header,
+  .landing-hero,
+  .landing-about {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-header,
+  .landing-nav,
+  .landing-actions {
+    align-items: stretch;
+  }
+
+  .landing-header,
+  .landing-nav {
+    flex-direction: column;
+  }
+
+  .landing-metrics,
+  .landing-feature-grid,
+  .landing-pricing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-band-contrast {
+    padding: 1.25rem;
   }
 }
