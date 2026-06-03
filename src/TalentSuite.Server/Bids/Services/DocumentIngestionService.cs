@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json;
+using System.ClientModel;
+using System.ClientModel.Primitives;
 using Azure;
 using Azure.AI.DocumentIntelligence;
 using Azure.AI.OpenAI;
@@ -28,15 +30,17 @@ public interface IDocumentIngestionservice
 
 public sealed class DocumentIngestionService : IDocumentIngestionservice
 {
-    private const int DocumentChunkChars = 60_000;
+    private const int DocumentChunkChars = 15_000;
     private static readonly TimeSpan DefaultThrottleRetryDelay = TimeSpan.FromSeconds(2);
     private readonly DocumentIntelligenceClient _diClient;
     private readonly AzureOpenAIClient _aoaiClient;
     private readonly string _chatDeployment;
     private readonly TimeSpan _throttleRetryDelay;
+    private readonly ILogger<DocumentIngestionService> _logger;
     
-    public DocumentIngestionService(IConfiguration config)
+    public DocumentIngestionService(IConfiguration config, ILogger<DocumentIngestionService> logger)
     {
+        _logger = logger;
         // ---- Document Intelligence ----
         var diEndpoint = config["DocumentIntelligence:Endpoint"]
             ?? throw new InvalidOperationException("Missing config: DocumentIntelligence:Endpoint");
@@ -462,7 +466,7 @@ DOCUMENT TEXT:
     private async Task<T> ExecuteWithThrottleRetryAsync<T>(
         string operationName,
         Func<CancellationToken, Task<T>> action,
-        Func<int, TimeSpan, RequestFailedException, CancellationToken, Task>? onRetryAsync,
+        Func<int, TimeSpan, string, CancellationToken, Task>? onRetryAsync,
         CancellationToken ct)
     {
         var attempt = 0;
@@ -478,9 +482,21 @@ DOCUMENT TEXT:
             catch (RequestFailedException ex) when (IsThrottleException(ex))
             {
                 var delay = GetRetryDelay(ex, attempt);
+                LogThrottle(operationName, ex, attempt + 1, delay);
 
                 if (onRetryAsync is not null)
-                    await onRetryAsync(attempt + 1, delay, ex, ct);
+                    await onRetryAsync(attempt + 1, delay, ex.Message, ct);
+
+                await Task.Delay(delay, ct);
+                attempt++;
+            }
+            catch (ClientResultException ex) when (IsThrottleException(ex))
+            {
+                var delay = GetRetryDelay(attempt);
+                LogThrottle(operationName, ex, attempt + 1, delay);
+
+                if (onRetryAsync is not null)
+                    await onRetryAsync(attempt + 1, delay, ex.Message, ct);
 
                 await Task.Delay(delay, ct);
                 attempt++;
@@ -489,6 +505,11 @@ DOCUMENT TEXT:
     }
 
     private TimeSpan GetRetryDelay(RequestFailedException ex, int attempt)
+    {
+        return GetRetryDelay(attempt);
+    }
+
+    private TimeSpan GetRetryDelay(int attempt)
     {
         var multiplier = Math.Pow(2, attempt);
         var delay = TimeSpan.FromMilliseconds(_throttleRetryDelay.TotalMilliseconds * multiplier);
@@ -504,10 +525,114 @@ DOCUMENT TEXT:
                || ex.Message.Contains("quota", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsThrottleException(ClientResultException ex)
+    {
+        return ex.Status == 429
+               || ex.Message.Contains("too_many_requests", StringComparison.OrdinalIgnoreCase)
+               || ex.Message.Contains("rate limit", StringComparison.OrdinalIgnoreCase)
+               || ex.Message.Contains("retry after", StringComparison.OrdinalIgnoreCase)
+               || ex.Message.Contains("quota", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static TimeSpan GetConfiguredDelay(string? raw, TimeSpan fallback)
     {
         return TimeSpan.TryParse(raw, out var parsed) && parsed > TimeSpan.Zero
             ? parsed
             : fallback;
+    }
+
+    private void LogThrottle(string operationName, RequestFailedException ex, int attempt, TimeSpan delay)
+    {
+        var response = ex.GetRawResponse();
+        LogThrottleCore(
+            operationName,
+            attempt,
+            delay,
+            ex.Status,
+            ex.ErrorCode,
+            ex.Message,
+            response is null ? null : TryGetHeader(response.Headers, "x-ratelimit-limit-requests"),
+            response is null ? null : TryGetHeader(response.Headers, "x-ratelimit-limit-tokens"),
+            response is null ? null : TryGetHeader(response.Headers, "x-ratelimit-remaining-requests"),
+            response is null ? null : TryGetHeader(response.Headers, "x-ratelimit-remaining-tokens"),
+            response is null ? null : TryGetHeader(response.Headers, "x-ratelimit-reset-requests"),
+            response is null ? null : TryGetHeader(response.Headers, "x-ratelimit-reset-tokens"),
+            response is null ? null : TryGetHeader(response.Headers, "retry-after-ms"),
+            response is null ? null : TryGetHeader(response.Headers, "x-ms-region"),
+            response is null ? null : TryGetHeader(response.Headers, "x-request-id"));
+    }
+
+    private void LogThrottle(string operationName, ClientResultException ex, int attempt, TimeSpan delay)
+    {
+        var response = ex.GetRawResponse();
+        LogThrottleCore(
+            operationName,
+            attempt,
+            delay,
+            ex.Status,
+            null,
+            ex.Message,
+            response is null ? null : TryGetHeader(response.Headers, "x-ratelimit-limit-requests"),
+            response is null ? null : TryGetHeader(response.Headers, "x-ratelimit-limit-tokens"),
+            response is null ? null : TryGetHeader(response.Headers, "x-ratelimit-remaining-requests"),
+            response is null ? null : TryGetHeader(response.Headers, "x-ratelimit-remaining-tokens"),
+            response is null ? null : TryGetHeader(response.Headers, "x-ratelimit-reset-requests"),
+            response is null ? null : TryGetHeader(response.Headers, "x-ratelimit-reset-tokens"),
+            response is null ? null : TryGetHeader(response.Headers, "retry-after-ms"),
+            response is null ? null : TryGetHeader(response.Headers, "x-ms-region"),
+            response is null ? null : TryGetHeader(response.Headers, "x-request-id"));
+    }
+
+    private void LogThrottleCore(
+        string operationName,
+        int attempt,
+        TimeSpan delay,
+        int status,
+        string? errorCode,
+        string message,
+        string? limitRequests,
+        string? limitTokens,
+        string? remainingRequests,
+        string? remainingTokens,
+        string? resetRequests,
+        string? resetTokens,
+        string? retryAfterMs,
+        string? region,
+        string? requestId)
+    {
+        _logger.LogWarning(
+            "Azure AI throttled during {OperationName}. Deployment={Deployment}, Attempt={Attempt}, DelayMs={DelayMs}, Status={Status}, ErrorCode={ErrorCode}, RequestId={RequestId}, Region={Region}, LimitRequests={LimitRequests}, RemainingRequests={RemainingRequests}, ResetRequests={ResetRequests}, LimitTokens={LimitTokens}, RemainingTokens={RemainingTokens}, ResetTokens={ResetTokens}, RetryAfterMs={RetryAfterMs}, Message={Message}",
+            operationName,
+            _chatDeployment,
+            attempt,
+            (int)delay.TotalMilliseconds,
+            status,
+            errorCode,
+            requestId,
+            region,
+            limitRequests,
+            remainingRequests,
+            resetRequests,
+            limitTokens,
+            remainingTokens,
+            resetTokens,
+            retryAfterMs,
+            message);
+    }
+
+    private static string? TryGetHeader(Azure.Core.ResponseHeaders headers, string name)
+    {
+        if (headers.TryGetValue(name, out var value))
+            return value;
+
+        return null;
+    }
+
+    private static string? TryGetHeader(PipelineResponseHeaders headers, string name)
+    {
+        if (headers.TryGetValue(name, out var value))
+            return value;
+
+        return null;
     }
 }
