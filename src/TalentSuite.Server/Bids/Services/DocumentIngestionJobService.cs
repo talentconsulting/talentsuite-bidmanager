@@ -25,16 +25,26 @@ public interface IDocumentIngestionJobService
 public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
 {
     private static readonly TimeSpan StreamPollInterval = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan DefaultJobTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan DefaultAbandonedJobThreshold = TimeSpan.FromMinutes(10);
     private readonly ConcurrentDictionary<string, IngestionJobState> _jobs = new(StringComparer.OrdinalIgnoreCase);
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DocumentIngestionJobService> _logger;
+    private readonly TimeSpan _jobTimeout;
+    private readonly TimeSpan _abandonedJobThreshold;
 
     public DocumentIngestionJobService(
         IServiceScopeFactory scopeFactory,
+        IConfiguration configuration,
         ILogger<DocumentIngestionJobService> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _jobTimeout = GetConfiguredDuration(configuration, "DocumentIngestion:JobTimeout", DefaultJobTimeout);
+        _abandonedJobThreshold = GetConfiguredDuration(configuration, "DocumentIngestion:AbandonedJobThreshold", DefaultAbandonedJobThreshold);
+
+        if (_abandonedJobThreshold < _jobTimeout)
+            _abandonedJobThreshold = _jobTimeout;
     }
 
     public string StartJob(
@@ -93,6 +103,7 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
         var jobs = repository.GetDocumentIngestionJobsForUser(ownerUserKey, cancellationToken)
             .GetAwaiter()
             .GetResult()
+            .Select(job => TryMarkStoredJobAsAbandonedAsync(job, repository, cancellationToken).GetAwaiter().GetResult())
             .Select(ToResponse)
             .Where(job => !liveJobs.ContainsKey(job.JobId))
             .Concat(liveJobs.Values)
@@ -125,6 +136,10 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
         if (!string.Equals(job.OwnerUserKey, ownerUserKey, StringComparison.OrdinalIgnoreCase))
             return Task.FromResult<DocumentIngestionJobStatusResponse?>(null);
 
+        job = TryMarkStoredJobAsAbandonedAsync(job, repository, cancellationToken)
+            .GetAwaiter()
+            .GetResult();
+
         return Task.FromResult<DocumentIngestionJobStatusResponse?>(ToResponse(job));
     }
 
@@ -140,6 +155,7 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
             if (storedJob is null)
                 throw new KeyNotFoundException($"Ingestion job '{jobId}' was not found.");
 
+            storedJob = await TryMarkStoredJobAsAbandonedAsync(storedJob, repository, cancellationToken);
             yield return ToTerminalEvent(storedJob);
             yield break;
         }
@@ -192,6 +208,8 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
             var ingestionService = scope.ServiceProvider.GetRequiredService<IDocumentIngestionservice>();
             var mapper = scope.ServiceProvider.GetRequiredService<BidMapper>();
             using var stream = new MemoryStream(fileBytes, writable: false);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(_jobTimeout);
 
             var progress = new Progress<DocumentIngestionProgressUpdate>(update =>
             {
@@ -207,7 +225,7 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
                 fileName,
                 stage,
                 progress,
-                cancellationToken);
+                timeoutCts.Token);
 
             var response = parsed is null ? null : mapper.ToResponse(parsed);
             Publish(jobState, new DocumentIngestionJobEventResponse
@@ -221,11 +239,15 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
         }
         catch (Exception ex)
         {
+            var message = ex is OperationCanceledException && cancellationToken.IsCancellationRequested is false
+                ? $"Document ingestion exceeded the {_jobTimeout.TotalMinutes:0} minute time limit. Please retry with a smaller document or contact support if the issue persists."
+                : ex.Message;
+
             _logger.LogError(ex, "Document ingestion job {JobId} failed.", jobId);
             Publish(jobState, new DocumentIngestionJobEventResponse
             {
                 Status = "failed",
-                Message = ex.Message,
+                Message = message,
                 IsError = true
             });
             await PersistJobStateAsync(jobState, cancellationToken);
@@ -350,6 +372,34 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
         {
             _logger.LogWarning(ex, "Failed to persist document ingestion job {JobId}.", jobState.JobId);
         }
+    }
+
+    private async Task<DocumentIngestionJobDataModel> TryMarkStoredJobAsAbandonedAsync(
+        DocumentIngestionJobDataModel job,
+        IManageBids repository,
+        CancellationToken cancellationToken)
+    {
+        if (job.IsComplete || job.IsError)
+            return job;
+
+        if (DateTimeOffset.UtcNow - job.UpdatedAtUtc < _abandonedJobThreshold)
+            return job;
+
+        job.Status = "failed";
+        job.IsError = true;
+        job.Message = "Document ingestion did not finish. The background worker may have restarted or the request timed out. Please retry the upload.";
+        job.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        job.CompletedAtUtc = job.UpdatedAtUtc;
+        await repository.SaveDocumentIngestionJob(job, cancellationToken);
+        return job;
+    }
+
+    private static TimeSpan GetConfiguredDuration(IConfiguration configuration, string key, TimeSpan fallback)
+    {
+        var value = configuration[key];
+        return TimeSpan.TryParse(value, out var parsed) && parsed > TimeSpan.Zero
+            ? parsed
+            : fallback;
     }
 
     private sealed class IngestionJobState

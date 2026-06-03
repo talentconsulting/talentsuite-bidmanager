@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using TalentSuite.FrontEnd.Shared
 @attribute [AllowAnonymous]
+@inject NavigationManager Navigation
 
 <div class="landing-shell">
     <header class="landing-header">
@@ -12,7 +13,7 @@
             <a href="#overview">Overview</a>
             <a href="#pricing">Pricing</a>
             <a href="#about">About Us</a>
-            <a class="landing-login" href="/authentication/login?returnUrl=%2Fapp">Login</a>
+            <a class="landing-login" href="/login">Login</a>
         </nav>
     </header>
 
@@ -25,7 +26,7 @@
                 manage reviews, track comments, and prepare final responses without losing context across the process.
             </p>
             <div class="landing-actions">
-                <a class="btn btn-primary btn-lg" href="/authentication/login?returnUrl=%2Fapp">Login</a>
+                <a class="btn btn-primary btn-lg" href="/login">Login</a>
                 <a class="btn btn-outline-primary btn-lg" href="#pricing">View Pricing</a>
             </div>
             <div class="landing-metrics" aria-label="Platform highlights">

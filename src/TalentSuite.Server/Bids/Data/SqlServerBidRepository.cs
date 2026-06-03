@@ -186,27 +186,48 @@ public sealed class SqlServerBidRepository : IManageBids
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            IF EXISTS (SELECT 1 FROM dbo.DocumentIngestionJobs WHERE JobId = @JobId)
+            UPDATE dbo.DocumentIngestionJobs
+            SET OwnerUserKey = @OwnerUserKey,
+                FileName = @FileName,
+                Stage = @Stage,
+                Status = @Status,
+                Message = @Message,
+                IsComplete = @IsComplete,
+                IsError = @IsError,
+                UpdatedAtUtc = @UpdatedAtUtc,
+                CompletedAtUtc = @CompletedAtUtc,
+                ResultPayload = @ResultPayload
+            WHERE JobId = @JobId;
+
+            IF @@ROWCOUNT = 0
             BEGIN
-                UPDATE dbo.DocumentIngestionJobs
-                SET OwnerUserKey = @OwnerUserKey,
-                    FileName = @FileName,
-                    Stage = @Stage,
-                    Status = @Status,
-                    Message = @Message,
-                    IsComplete = @IsComplete,
-                    IsError = @IsError,
-                    UpdatedAtUtc = @UpdatedAtUtc,
-                    CompletedAtUtc = @CompletedAtUtc,
-                    ResultPayload = @ResultPayload
-                WHERE JobId = @JobId;
-            END
-            ELSE
-            BEGIN
-                INSERT INTO dbo.DocumentIngestionJobs
-                    (JobId, OwnerUserKey, FileName, Stage, Status, Message, IsComplete, IsError, CreatedAtUtc, UpdatedAtUtc, CompletedAtUtc, ResultPayload)
-                VALUES
-                    (@JobId, @OwnerUserKey, @FileName, @Stage, @Status, @Message, @IsComplete, @IsError, @CreatedAtUtc, @UpdatedAtUtc, @CompletedAtUtc, @ResultPayload);
+                BEGIN TRY
+                    INSERT INTO dbo.DocumentIngestionJobs
+                        (JobId, OwnerUserKey, FileName, Stage, Status, Message, IsComplete, IsError, CreatedAtUtc, UpdatedAtUtc, CompletedAtUtc, ResultPayload)
+                    VALUES
+                        (@JobId, @OwnerUserKey, @FileName, @Stage, @Status, @Message, @IsComplete, @IsError, @CreatedAtUtc, @UpdatedAtUtc, @CompletedAtUtc, @ResultPayload);
+                END TRY
+                BEGIN CATCH
+                    IF ERROR_NUMBER() IN (2601, 2627)
+                    BEGIN
+                        UPDATE dbo.DocumentIngestionJobs
+                        SET OwnerUserKey = @OwnerUserKey,
+                            FileName = @FileName,
+                            Stage = @Stage,
+                            Status = @Status,
+                            Message = @Message,
+                            IsComplete = @IsComplete,
+                            IsError = @IsError,
+                            UpdatedAtUtc = @UpdatedAtUtc,
+                            CompletedAtUtc = @CompletedAtUtc,
+                            ResultPayload = @ResultPayload
+                        WHERE JobId = @JobId;
+                    END
+                    ELSE
+                    BEGIN
+                        THROW;
+                    END
+                END CATCH
             END;
             """,
             new

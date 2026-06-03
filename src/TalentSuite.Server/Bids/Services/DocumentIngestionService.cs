@@ -29,9 +29,11 @@ public interface IDocumentIngestionservice
 public sealed class DocumentIngestionService : IDocumentIngestionservice
 {
     private const int DocumentChunkChars = 60_000;
+    private static readonly TimeSpan DefaultThrottleRetryDelay = TimeSpan.FromSeconds(2);
     private readonly DocumentIntelligenceClient _diClient;
     private readonly AzureOpenAIClient _aoaiClient;
     private readonly string _chatDeployment;
+    private readonly TimeSpan _throttleRetryDelay;
     
     public DocumentIngestionService(IConfiguration config)
     {
@@ -55,6 +57,7 @@ public sealed class DocumentIngestionService : IDocumentIngestionservice
             ?? throw new InvalidOperationException("Missing config: AzureOpenAI:ChatDeployment");
 
         _aoaiClient = new AzureOpenAIClient(new Uri(aoaiEndpoint), new AzureKeyCredential(aoaiKey));
+        _throttleRetryDelay = GetConfiguredDelay(config["DocumentIngestion:ThrottleRetryDelay"], DefaultThrottleRetryDelay);
     }
 
     public async Task<ParsedDocumentModel?> ExtractDocumentAsync(Stream documentStream,
@@ -112,8 +115,11 @@ public sealed class DocumentIngestionService : IDocumentIngestionservice
         await document.CopyToAsync(ms, ct);
         var binary = new BinaryData(ms.ToArray());
 
-        Operation<AnalyzeResult> op =
-            await _diClient.AnalyzeDocumentAsync(WaitUntil.Completed, "prebuilt-read", binary, cancellationToken: ct);
+        Operation<AnalyzeResult> op = await ExecuteWithThrottleRetryAsync(
+            operationName: "document text extraction",
+            action: token => _diClient.AnalyzeDocumentAsync(WaitUntil.Completed, "prebuilt-read", binary, cancellationToken: token),
+            onRetryAsync: null,
+            ct);
 
         var result = op.Value;
         var sb = new StringBuilder();
@@ -158,6 +164,7 @@ public sealed class DocumentIngestionService : IDocumentIngestionservice
         string fileName,
         BidStage stage,
         CancellationToken ct,
+        IProgress<DocumentIngestionProgressUpdate>? progress = null,
         int? chunkIndex = null,
         int? chunkCount = null)
     {
@@ -225,7 +232,24 @@ DOCUMENT TEXT:
         };
 
         // You can optionally set MaxTokens, Temperature etc via ChatCompletionOptions if desired.
-        var response = await chatClient.CompleteChatAsync(messages, cancellationToken: ct);
+        var response = await ExecuteWithThrottleRetryAsync(
+            operationName: "question extraction",
+            action: token => chatClient.CompleteChatAsync(messages, cancellationToken: token),
+            onRetryAsync: (attempt, delay, _, _) =>
+            {
+                var location = chunkIndex.HasValue && chunkCount.HasValue
+                    ? $" for chunk {chunkIndex.Value + 1} of {chunkCount.Value}"
+                    : string.Empty;
+
+                progress?.Report(new DocumentIngestionProgressUpdate
+                {
+                    Status = "waiting_for_capacity",
+                    Message = $"AI service is busy{location}. Retrying in {Math.Ceiling(delay.TotalSeconds):0} seconds."
+                });
+
+                return Task.CompletedTask;
+            },
+            ct);
 
         var sb = new StringBuilder();
         foreach (var part in response.Value.Content)
@@ -347,6 +371,7 @@ DOCUMENT TEXT:
                 fileName,
                 stage,
                 ct,
+                progress,
                 chunkIndex: i,
                 chunkCount: chunks.Count);
 
@@ -432,5 +457,57 @@ DOCUMENT TEXT:
         }
 
         return parsed;
+    }
+
+    private async Task<T> ExecuteWithThrottleRetryAsync<T>(
+        string operationName,
+        Func<CancellationToken, Task<T>> action,
+        Func<int, TimeSpan, RequestFailedException, CancellationToken, Task>? onRetryAsync,
+        CancellationToken ct)
+    {
+        var attempt = 0;
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            try
+            {
+                return await action(ct);
+            }
+            catch (RequestFailedException ex) when (IsThrottleException(ex))
+            {
+                var delay = GetRetryDelay(ex, attempt);
+
+                if (onRetryAsync is not null)
+                    await onRetryAsync(attempt + 1, delay, ex, ct);
+
+                await Task.Delay(delay, ct);
+                attempt++;
+            }
+        }
+    }
+
+    private TimeSpan GetRetryDelay(RequestFailedException ex, int attempt)
+    {
+        var multiplier = Math.Pow(2, attempt);
+        var delay = TimeSpan.FromMilliseconds(_throttleRetryDelay.TotalMilliseconds * multiplier);
+        return delay > TimeSpan.FromSeconds(30) ? TimeSpan.FromSeconds(30) : delay;
+    }
+
+    private static bool IsThrottleException(RequestFailedException ex)
+    {
+        return ex.Status == 429
+               || ex.Message.Contains("too_many_requests", StringComparison.OrdinalIgnoreCase)
+               || ex.Message.Contains("rate limit", StringComparison.OrdinalIgnoreCase)
+               || ex.Message.Contains("retry after", StringComparison.OrdinalIgnoreCase)
+               || ex.Message.Contains("quota", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static TimeSpan GetConfiguredDelay(string? raw, TimeSpan fallback)
+    {
+        return TimeSpan.TryParse(raw, out var parsed) && parsed > TimeSpan.Zero
+            ? parsed
+            : fallback;
     }
 }

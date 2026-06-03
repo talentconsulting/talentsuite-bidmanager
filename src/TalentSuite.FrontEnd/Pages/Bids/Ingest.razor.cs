@@ -105,14 +105,14 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
             if (!res.IsSuccessStatusCode)
             {
                 var body = await res.Content.ReadAsStringAsync();
-                ErrorText = $"HTTP {(int)res.StatusCode} {res.ReasonPhrase}\n\n{body}";
+                await FailAsync($"HTTP {(int)res.StatusCode} {res.ReasonPhrase}\n\n{body}");
                 return;
             }
 
             var job = await res.Content.ReadFromJsonAsync<DocumentIngestionJobCreatedResponse>(SerialiserOptions.JsonOptions);
             if (job is null || string.IsNullOrWhiteSpace(job.JobId))
             {
-                ErrorText = "Server did not return a document ingestion job id.";
+                await FailAsync("Server did not return a document ingestion job id.");
                 return;
             }
 
@@ -129,8 +129,7 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            ErrorText = ex.ToString();
-            IsBusy = false;
+            await FailAsync(ex.ToString());
         }
     }
 
@@ -172,8 +171,7 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
 
                     if (job.IsError)
                     {
-                        ErrorText = job.Message;
-                        IsBusy = false;
+                        await FailAsync(job.Message);
                         return;
                     }
 
@@ -182,8 +180,7 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
                         _hasTerminalEvent = true;
                         if (job.Result is null)
                         {
-                            ErrorText = "Document ingestion completed without a parsed result.";
-                            IsBusy = false;
+                            await FailAsync("Document ingestion completed without a parsed result.");
                             return;
                         }
 
@@ -202,9 +199,7 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            ErrorText = ex.Message;
-            IsBusy = false;
-            await InvokeAsync(StateHasChanged);
+            await FailAsync(ex.Message);
         }
     }
 
@@ -228,5 +223,16 @@ public partial class Ingest : ComponentBase, IAsyncDisposable
 
         if (ProgressMessages.Count > 6)
             ProgressMessages.RemoveAt(0);
+    }
+
+    private async Task FailAsync(string? message)
+    {
+        _hasTerminalEvent = true;
+        _activeJobId = null;
+        ErrorText = message;
+        BusyMessage = "Processing stopped.";
+        IsBusy = false;
+        await CancelPollingAsync();
+        await InvokeAsync(StateHasChanged);
     }
 }
