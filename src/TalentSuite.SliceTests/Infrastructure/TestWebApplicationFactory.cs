@@ -11,7 +11,7 @@ using TalentSuite.Server.Users.Services;
 
 namespace TalentSuite.SliceTests.Infrastructure;
 
-public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
+public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string? _originalAuthEnabled = Environment.GetEnvironmentVariable("AUTHENTICATION_ENABLED");
     private readonly string? _originalUseInMemory = Environment.GetEnvironmentVariable("USE_IN_MEMORY_DATA");

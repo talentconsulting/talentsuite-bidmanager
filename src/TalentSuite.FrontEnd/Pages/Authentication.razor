@@ -1,10 +1,45 @@
 @page "/authentication/{action}"
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @attribute [AllowAnonymous]
+@inject NavigationManager Navigation
 
-<RemoteAuthenticatorView Action="@Action" />
+<RemoteAuthenticatorView Action="@Action"
+                         AuthenticationState="@AuthenticationState"
+                         OnLogInSucceeded="HandleLogInSucceeded"
+                         OnLogOutSucceeded="HandleLogOutSucceeded" />
 
 @code {
     [Parameter]
     public string Action { get; set; } = string.Empty;
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private RemoteAuthenticationState? AuthenticationState
+    {
+        get
+        {
+            if (!string.Equals(Action, "login", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var target = string.IsNullOrWhiteSpace(ReturnUrl) ? "/app" : ReturnUrl;
+            return new RemoteAuthenticationState
+            {
+                ReturnUrl = target
+            };
+        }
+    }
+
+    private void HandleLogInSucceeded(RemoteAuthenticationState state)
+    {
+        if (state is null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(state.ReturnUrl) || string.Equals(state.ReturnUrl, "/", StringComparison.Ordinal))
+            state.ReturnUrl = "/app";
+    }
+
+    private void HandleLogOutSucceeded(RemoteAuthenticationState state)
+    {
+        Navigation.NavigateTo("/");
+    }
 }
