@@ -48,6 +48,9 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     protected string? ActiveQuestionId { get; set; }
     protected InnerTab ActiveInnerTab { get; set; } = InnerTab.Users;
 
+    protected bool IsEditingQuestion { get; set; }
+    protected UpdateQuestionRequest? QuestionEditModel { get; set; }
+
     protected BidManageModel? Bid { get; set; }
     protected bool IsAdminUser { get; set; }
     protected bool CanManageAssignedBids { get; set; }
@@ -850,15 +853,96 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
     // ---- Actions (wire to API later) ----
 
-    protected async Task SaveOverview()
+    protected async Task ReloadBidInPlaceAsync()
+    {
+        try
+        {
+            var updatedBid = await ApiClient.GetBidAsync(BidId);
+            if (updatedBid is not null && Bid is not null)
+            {
+                Bid.Company = updatedBid.Company;
+                Bid.UniqueReference = updatedBid.UniqueReference;
+                Bid.Summary = updatedBid.Summary;
+                Bid.KeyInformation = updatedBid.KeyInformation;
+                Bid.Budget = updatedBid.Budget;
+                Bid.DeadlineForSubmission = updatedBid.DeadlineForSubmission;
+                Bid.DeadlineForQualifying = updatedBid.DeadlineForQualifying;
+                Bid.LengthOfContract = updatedBid.LengthOfContract;
+                Bid.Stage = updatedBid.Stage;
+                Bid.Status = updatedBid.Status;
+                
+                if (updatedBid.Questions is not null)
+                {
+                    foreach (var updatedQ in updatedBid.Questions)
+                    {
+                        var existingQ = Bid.Questions.FirstOrDefault(q => q.Id == updatedQ.Id);
+                        if (existingQ is not null)
+                        {
+                            existingQ.Category = updatedQ.Category;
+                            existingQ.Number = updatedQ.Number;
+                            existingQ.Title = updatedQ.Title;
+                            existingQ.Description = updatedQ.Description;
+                            existingQ.Length = updatedQ.Length;
+                            existingQ.Weighting = updatedQ.Weighting;
+                            existingQ.Required = updatedQ.Required;
+                            existingQ.NiceToHave = updatedQ.NiceToHave;
+                        }
+                        else
+                        {
+                            Bid.Questions.Add(updatedQ);
+                        }
+                    }
+                    var updatedIds = new HashSet<string>(updatedBid.Questions.Select(q => q.Id));
+                    Bid.Questions.RemoveAll(q => !updatedIds.Contains(q.Id));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _ = BannerState.ShowAsync("Could not refresh bid data: " + ex.Message);
+        }
+    }
+
+    protected void StartEditingQuestion()
+    {
+        if (ActiveQuestion is null) return;
+        
+        QuestionEditModel = new UpdateQuestionRequest
+        {
+            Category = ActiveQuestion.Category ?? string.Empty,
+            Number = ActiveQuestion.Number ?? string.Empty,
+            Title = ActiveQuestion.Title ?? string.Empty,
+            Description = ActiveQuestion.Description ?? string.Empty,
+            Length = ActiveQuestion.Length ?? string.Empty,
+            Weighting = ActiveQuestion.Weighting,
+            Required = ActiveQuestion.Required,
+            NiceToHave = ActiveQuestion.NiceToHave
+        };
+        IsEditingQuestion = true;
+        QuestionErrorText = null;
+    }
+
+    protected void CancelEditingQuestion()
+    {
+        IsEditingQuestion = false;
+        QuestionEditModel = null;
+        QuestionErrorText = null;
+    }
+
+    protected async Task SaveOverview(UpdateBidOverviewRequest request)
     {
         if (Bid is null) return;
 
         await SetBusyAsync();
         try
         {
-            // TODO: call API to save overview
-            await Task.Delay(150);
+            await ApiClient.UpdateBidOverviewAsync(BidId, request);
+            await ReloadBidInPlaceAsync();
+            _ = BannerState.ShowAsync("Bid overview updated successfully.", "alert-success");
+        }
+        catch (Exception ex)
+        {
+            _ = BannerState.ShowAsync("Failed to update bid overview: " + ex.Message);
         }
         finally
         {
@@ -870,12 +954,43 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     {
         if (Bid is null) return;
         if (ActiveQuestion is null) return;
+        if (QuestionEditModel is null) return;
 
+        if (string.IsNullOrWhiteSpace(QuestionEditModel.Number))
+        {
+            QuestionErrorText = "Question number is required.";
+            return;
+        }
+        if (QuestionEditModel.Weighting < 0 || QuestionEditModel.Weighting > 100)
+        {
+            QuestionErrorText = "Weighting must be an integer between 0 and 100.";
+            return;
+        }
+
+        QuestionErrorText = null;
         await SetBusyAsync();
         try
         {
-            // TODO: call API to save question edits
-            await Task.Delay(150);
+            await ApiClient.UpdateQuestionAsync(BidId, ActiveQuestion.Id, QuestionEditModel);
+            
+            var oldCategory = NormaliseCategory(ActiveQuestion.Category);
+            var newCategory = NormaliseCategory(QuestionEditModel.Category);
+            
+            await ReloadBidInPlaceAsync();
+            
+            if (!string.Equals(oldCategory, newCategory, StringComparison.OrdinalIgnoreCase))
+            {
+                ActiveCategory = newCategory;
+            }
+            
+            IsEditingQuestion = false;
+            QuestionEditModel = null;
+            _ = BannerState.ShowAsync("Question updated successfully.", "alert-success");
+        }
+        catch (Exception ex)
+        {
+            QuestionErrorText = ex.Message;
+            _ = BannerState.ShowAsync("Failed to update question: " + ex.Message);
         }
         finally
         {
@@ -898,7 +1013,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
             var submittedQuestion = ChatQuestionText ?? string.Empty;
             var payload = new ChatQuestionRequest
             {
-                BidId = Bid.Id,
+                BidId = BidId,
                 QuestionId = q.Id,
                 FreeTextQuestion = submittedQuestion,
                 ThreadId = q.ChatThreadId
@@ -1323,6 +1438,8 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
                 throw new InvalidOperationException($"Failed to add draft response: {(int)response.StatusCode} {response.ReasonPhrase}");
 
             var resp = await response.Content.ReadFromJsonAsync<CreateAssetResponse>();
+            if (resp is null || string.IsNullOrWhiteSpace(resp.Id))
+                throw new InvalidOperationException("Failed to add draft response: invalid or empty response received from API.");
                 
             ActiveQuestion.DraftResponses.Add(new DraftResponse
             {

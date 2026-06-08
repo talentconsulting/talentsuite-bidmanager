@@ -34,62 +34,156 @@
 
 <div class="card shadow-sm">
     <div class="card-body">
-        <h4 class="mb-3">Overview</h4>
-
-        @if (Bid.BidLibraryPush is not null)
+        @if (isEditing)
         {
-            <div class="alert alert-success mb-3">
-                This bid was pushed to the bid library on @Bid.BidLibraryPush.PushedAtUtc.ToLocalTime().ToString("g").
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="mb-0 text-primary fw-bold">Edit Overview</h4>
+                <div class="badge bg-secondary p-2">Editing</div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(validationError))
+            {
+                <div class="alert alert-danger py-2 px-3 shadow-sm border-0 d-flex align-items-center gap-2" style="border-radius: 0.65rem;">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <span>@validationError</span>
+                </div>
+            }
+
+            <EditForm Model="editRequest" OnValidSubmit="SaveAsync">
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <div class="form-group mb-2">
+                            <label class="form-label fw-semibold text-muted small mb-1">Company <span class="text-danger">*</span></label>
+                            <InputText class="form-control" @bind-Value="editRequest.Company" placeholder="Enter company name..." />
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <div class="form-group mb-2">
+                            <label class="form-label fw-semibold text-muted small mb-1">Unique Reference</label>
+                            <InputText class="form-control" @bind-Value="editRequest.UniqueReference" placeholder="Enter reference..." />
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <div class="form-group mb-2">
+                            <label class="form-label fw-semibold text-muted small mb-1">Budget</label>
+                            <InputText class="form-control" @bind-Value="editRequest.Budget" placeholder="Enter budget (e.g. £50,000)..." />
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <div class="form-group mb-2">
+                            <label class="form-label fw-semibold text-muted small mb-1">Length of Contract</label>
+                            <InputText class="form-control" @bind-Value="editRequest.LengthOfContract" placeholder="Enter length (e.g. 12 months)..." />
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <div class="form-group mb-2">
+                            <label class="form-label fw-semibold text-muted small mb-1">Deadline for Submission</label>
+                            <InputText class="form-control" @bind-Value="editRequest.DeadlineForSubmission" placeholder="Enter submission deadline..." />
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <div class="form-group mb-2">
+                            <label class="form-label fw-semibold text-muted small mb-1">Deadline for Qualifying</label>
+                            <InputText class="form-control" @bind-Value="editRequest.DeadlineForQualifying" placeholder="Enter qualifying deadline..." />
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-group mb-2">
+                            <label class="form-label fw-semibold text-muted small mb-1">Summary</label>
+                            <InputTextArea class="form-control" @bind-Value="editRequest.Summary" rows="3" placeholder="Enter summary..." />
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-group mb-2">
+                            <label class="form-label fw-semibold text-muted small mb-1">Key Information</label>
+                            <InputTextArea class="form-control" @bind-Value="editRequest.KeyInformation" rows="3" placeholder="Enter key information..." />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 d-flex gap-2 justify-content-end">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CancelEditing">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary d-flex align-items-center gap-2 text-white">
+                        Save Overview
+                    </button>
+                </div>
+            </EditForm>
+        }
+        else
+        {
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="mb-0">Overview</h4>
+                <button class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1" @onclick="StartEditing">
+                    <i class="bi bi-pencil-fill"></i> Edit Overview
+                </button>
+            </div>
+
+            @if (Bid.BidLibraryPush is not null)
+            {
+                <div class="alert alert-success mb-3">
+                    This bid was pushed to the bid library on @Bid.BidLibraryPush.PushedAtUtc.ToLocalTime().ToString("g").
+                </div>
+            }
+
+            <div class="d-flex flex-column gap-3">
+                <div class="p-3 border rounded bg-light">
+                    <div class="text-muted small">Company</div>
+                    <div class="fw-semibold">@FormatOrDash(Bid.Company)</div>
+                </div>
+
+                <div class="p-3 border rounded bg-light">
+                    <div class="text-muted small">Stage</div>
+                    <div class="fw-semibold">@GetStageLabel(Bid.Stage)</div>
+                </div>
+
+                <div class="p-3 border rounded bg-light">
+                    <div class="text-muted small">Unique reference</div>
+                    <div>@FormatOrDash(Bid.UniqueReference)</div>
+                </div>
+
+                <div class="p-3 border rounded bg-light">
+                    <div class="text-muted small">Summary</div>
+                    <div style="white-space: pre-wrap;">@FormatOrDash(Bid.Summary)</div>
+                </div>
+
+                <div class="p-3 border rounded bg-light">
+                    <div class="text-muted small">Key information</div>
+                    <div style="white-space: pre-wrap;">@FormatOrDash(Bid.KeyInformation)</div>
+                </div>
+
+                <div class="p-3 border rounded bg-light">
+                    <div class="text-muted small">Budget</div>
+                    <div>@FormatOrDash(Bid.Budget)</div>
+                </div>
+
+                <div class="p-3 border rounded bg-light">
+                    <div class="text-muted small">Deadline for submission</div>
+                    <div>@FormatOrDash(Bid.DeadlineForSubmission)</div>
+                </div>
+
+                <div class="p-3 border rounded bg-light">
+                    <div class="text-muted small">Deadline for qualifying</div>
+                    <div>@FormatOrDash(Bid.DeadlineForQualifying)</div>
+                </div>
+
+                <div class="p-3 border rounded bg-light">
+                    <div class="text-muted small">Length of contract</div>
+                    <div>@FormatOrDash(Bid.LengthOfContract)</div>
+                </div>
+            </div>
+
+            <div class="mt-3 d-flex gap-2">
+                <button class="btn btn-outline-secondary" @onclick="OnGoToQuestions">
+                    Go to questions →
+                </button>
             </div>
         }
-
-        <div class="d-flex flex-column gap-3">
-            <div class="p-3 border rounded bg-light">
-                <div class="text-muted small">Stage</div>
-                <div class="fw-semibold">@GetStageLabel(Bid.Stage)</div>
-            </div>
-
-            <div class="p-3 border rounded bg-light">
-                <div class="text-muted small">Unique reference</div>
-                <div>@FormatOrDash(Bid.UniqueReference)</div>
-            </div>
-
-            <div class="p-3 border rounded bg-light">
-                <div class="text-muted small">Summary</div>
-                <div style="white-space: pre-wrap;">@FormatOrDash(Bid.Summary)</div>
-            </div>
-
-            <div class="p-3 border rounded bg-light">
-                <div class="text-muted small">Key information</div>
-                <div style="white-space: pre-wrap;">@FormatOrDash(Bid.KeyInformation)</div>
-            </div>
-
-            <div class="p-3 border rounded bg-light">
-                <div class="text-muted small">Budget</div>
-                <div>@FormatOrDash(Bid.Budget)</div>
-            </div>
-
-            <div class="p-3 border rounded bg-light">
-                <div class="text-muted small">Deadline for submission</div>
-                <div>@FormatOrDash(Bid.DeadlineForSubmission)</div>
-            </div>
-
-            <div class="p-3 border rounded bg-light">
-                <div class="text-muted small">Deadline for qualifying</div>
-                <div>@FormatOrDash(Bid.DeadlineForQualifying)</div>
-            </div>
-
-            <div class="p-3 border rounded bg-light">
-                <div class="text-muted small">Length of contract</div>
-                <div>@FormatOrDash(Bid.LengthOfContract)</div>
-            </div>
-        </div>
-
-        <div class="mt-3 d-flex gap-2">
-            <button class="btn btn-outline-secondary" @onclick="OnGoToQuestions">
-                Go to questions →
-            </button>
-        </div>
     </div>
 </div>
 
@@ -98,6 +192,11 @@
     [Parameter] public int QuestionsWithoutFinalAnswerCount { get; set; }
     [Parameter] public int QuestionsWithoutUsersCount { get; set; }
     [Parameter] public EventCallback OnGoToQuestions { get; set; }
+    [Parameter] public EventCallback<UpdateBidOverviewRequest> OnSaveOverview { get; set; }
+
+    private bool isEditing = false;
+    private UpdateBidOverviewRequest editRequest = new();
+    private string? validationError;
 
     private int TotalQuestionsCount => Bid?.Questions?.Count ?? 0;
     private int FinalAnswersCompletedCount => Math.Max(0, TotalQuestionsCount - QuestionsWithoutFinalAnswerCount);
@@ -105,6 +204,42 @@
         => TotalQuestionsCount == 0
             ? 0
             : (int)Math.Round((double)FinalAnswersCompletedCount * 100 / TotalQuestionsCount);
+
+    private void StartEditing()
+    {
+        validationError = null;
+        editRequest = new UpdateBidOverviewRequest
+        {
+            Company = Bid.Company ?? string.Empty,
+            UniqueReference = Bid.UniqueReference,
+            Summary = Bid.Summary,
+            KeyInformation = Bid.KeyInformation,
+            Budget = Bid.Budget,
+            DeadlineForQualifying = Bid.DeadlineForQualifying,
+            DeadlineForSubmission = Bid.DeadlineForSubmission,
+            LengthOfContract = Bid.LengthOfContract
+        };
+        isEditing = true;
+    }
+
+    private void CancelEditing()
+    {
+        isEditing = false;
+        validationError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(editRequest.Company))
+        {
+            validationError = "Company name cannot be empty.";
+            return;
+        }
+
+        validationError = null;
+        await OnSaveOverview.InvokeAsync(editRequest);
+        isEditing = false;
+    }
 
     private static string GetStageLabel(BidStage stage)
         => stage switch

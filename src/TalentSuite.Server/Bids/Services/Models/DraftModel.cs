@@ -11,7 +11,7 @@ public class DraftModel
     {
     }
 
-    public string Id { get; set; }
+    public string Id { get; set; } = string.Empty;
     public string Response { get; set; } = string.Empty;
     public List<DraftCommentModel> Comments { get; set; } = new();
 }

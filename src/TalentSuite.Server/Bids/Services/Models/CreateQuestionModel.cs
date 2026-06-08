@@ -4,7 +4,7 @@ public class CreateQuestionModel
 {
     public string? Id { get; set; }
     public int QuestionOrderIndex { get; set; }
-    public string Number { get; set; }
+    public string Number { get; set; } = string.Empty;
     public string Title { get; set; } = "";
     public string Category { get; set; } = "";
     public string Description { get; set; } = "";

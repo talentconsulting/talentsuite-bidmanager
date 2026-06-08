@@ -160,4 +160,6 @@ public interface IManageBids
         string commentId,
         bool isComplete,
         CancellationToken ct = default);
+
+    Task UpdateBid(BidDataModel bid, CancellationToken ct = default);
 }

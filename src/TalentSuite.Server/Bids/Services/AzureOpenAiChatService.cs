@@ -72,7 +72,7 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
             })
             : string.IsNullOrWhiteSpace(clientId)
                 ? new ManagedIdentityCredential()
-                : new ManagedIdentityCredential(clientId);
+                : new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(clientId));
 
         _client = new PersistentAgentsClient(projectEndpoint, credential);
     }

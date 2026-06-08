@@ -4,7 +4,7 @@ namespace TalentSuite.FrontEnd;
 
 public class ClientResponseModel
 {
-    public ParsedDocumentResponse Response { get; set; }
+    public ParsedDocumentResponse Response { get; set; } = new();
 
     public ClientResponseModel()
     {

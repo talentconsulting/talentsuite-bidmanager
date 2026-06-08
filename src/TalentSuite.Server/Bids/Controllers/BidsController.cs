@@ -213,4 +213,35 @@ public sealed class BidsController : ControllerBase
             },
             ct);
     }
+
+    [HttpPut("{bidId}")]
+    [Authorize(Policy = "RequireBidAccess")]
+    public async Task<IActionResult> UpdateOverview(
+        string bidId,
+        [FromBody] UpdateBidOverviewRequest request,
+        CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        await _bidService.UpdateBidOverview(bidId, request, ct);
+
+        return Ok();
+    }
+
+    [HttpPut("{bidId}/questions/{questionId}")]
+    [Authorize(Policy = "RequireBidAccess")]
+    public async Task<IActionResult> UpdateQuestion(
+        string bidId,
+        string questionId,
+        [FromBody] UpdateQuestionRequest request,
+        CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        await _bidService.UpdateQuestion(bidId, questionId, request, ct);
+
+        return Ok();
+    }
 }

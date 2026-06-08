@@ -393,6 +393,15 @@ public class InMemoryBidRepository : IManageBids
         return Task.CompletedTask;
     }
 
+    public Task UpdateBid(BidDataModel bid, CancellationToken ct = default)
+    {
+        if (bid is null || string.IsNullOrWhiteSpace(bid.Id))
+            return Task.CompletedTask;
+
+        _bids[bid.Id] = bid;
+        return Task.CompletedTask;
+    }
+
     public Task<BidLibraryPushDataModel> PushBidToLibrary(
         string bidId,
         string performedByUserId,

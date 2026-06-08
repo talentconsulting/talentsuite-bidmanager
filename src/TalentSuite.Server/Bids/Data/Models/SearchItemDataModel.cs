@@ -4,9 +4,9 @@ namespace TalentSuite.Server.Bids.Data.Models;
 
 public class SearchItemDataModel
 {
-    public string Id { get; set; }
-    public string Company { get; set; }
-    public string Summary { get; set; }
+    public string Id { get; set; } = string.Empty;
+    public string Company { get; set; } = string.Empty;
+    public string Summary { get; set; } = string.Empty;
     public int QuestionCount { get; set; }
     public BidStatus Status { get; set; } = BidStatus.Underway;
 }

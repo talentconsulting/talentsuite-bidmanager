@@ -11,5 +11,5 @@ public class ParsedDocumentModel
     public string? DeadlineForSubmission { get; set; }
     public string? LengthOfContract { get; set; }
     
-    public List<ParsedQuestionModel> Questions { get; set; }
+    public List<ParsedQuestionModel> Questions { get; set; } = new();
 }

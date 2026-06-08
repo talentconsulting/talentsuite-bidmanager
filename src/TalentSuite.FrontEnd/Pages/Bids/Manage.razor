@@ -112,7 +112,8 @@
                     <OverviewPanel Bid="Bid"
                                    QuestionsWithoutFinalAnswerCount="QuestionsWithoutFinalAnswerCount"
                                    QuestionsWithoutUsersCount="QuestionsWithoutUsersCount"
-                                   OnGoToQuestions="@(() => SetLeftNavAsync(LeftNavSection.Questions))" />
+                                   OnGoToQuestions="@(() => SetLeftNavAsync(LeftNavSection.Questions))"
+                                   OnSaveOverview="SaveOverview" />
                 }
                 else if (LeftNav == LeftNavSection.AllQuestions)
                 {

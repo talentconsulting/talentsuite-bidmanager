@@ -139,6 +139,9 @@ public interface IBidService
 
     Task<List<MentionTaskResponse>> GetMentionTasksForUser(string userId, CancellationToken ct = default);
     Task<List<AssignedQuestionTaskResponse>> GetAssignedQuestionsForUser(string userId, CancellationToken ct = default);
+
+    Task UpdateBidOverview(string bidId, UpdateBidOverviewRequest request, CancellationToken ct = default);
+    Task UpdateQuestion(string bidId, string questionId, UpdateQuestionRequest request, CancellationToken ct = default);
 }
 
 public sealed class BidService : IBidService
@@ -869,5 +872,55 @@ public sealed class BidService : IBidService
         };
 
         await _serviceBusClient.PublishAsync(_commentSavedWithMentionsEntityName, payload, ct);
+    }
+
+    public async Task UpdateBidOverview(string bidId, UpdateBidOverviewRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(bidId))
+            throw new ArgumentException("Bid ID cannot be null or empty.", nameof(bidId));
+        ArgumentNullException.ThrowIfNull(request);
+
+        var bid = await _repository.GetBid(bidId, ct);
+        if (bid is null)
+            throw new InvalidOperationException("Bid not found.");
+
+        bid.Company = request.Company;
+        bid.UniqueReference = request.UniqueReference;
+        bid.Summary = request.Summary;
+        bid.KeyInformation = request.KeyInformation;
+        bid.Budget = request.Budget;
+        bid.DeadlineForSubmission = request.DeadlineForSubmission;
+        bid.DeadlineForQualifying = request.DeadlineForQualifying;
+        bid.LengthOfContract = request.LengthOfContract;
+
+        await _repository.UpdateBid(bid, ct);
+    }
+
+    public async Task UpdateQuestion(string bidId, string questionId, UpdateQuestionRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(bidId))
+            throw new ArgumentException("Bid ID cannot be null or empty.", nameof(bidId));
+        if (string.IsNullOrWhiteSpace(questionId))
+            throw new ArgumentException("Question ID cannot be null or empty.", nameof(questionId));
+        ArgumentNullException.ThrowIfNull(request);
+
+        var bid = await _repository.GetBid(bidId, ct);
+        if (bid is null)
+            throw new InvalidOperationException("Bid not found.");
+
+        var question = bid.Questions?.FirstOrDefault(q => q.Id == questionId);
+        if (question is null)
+            throw new InvalidOperationException("Question not found.");
+
+        question.Category = request.Category;
+        question.Number = request.Number;
+        question.Title = request.Title;
+        question.Description = request.Description;
+        question.Length = request.Length;
+        question.Weighting = request.Weighting;
+        question.Required = request.Required;
+        question.NiceToHave = request.NiceToHave;
+
+        await _repository.UpdateBid(bid, ct);
     }
 }
