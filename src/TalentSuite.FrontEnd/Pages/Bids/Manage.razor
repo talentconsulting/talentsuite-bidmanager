@@ -36,6 +36,11 @@
                             @onclick="() => SetLeftNavAsync(LeftNavSection.Overview)">
                         Overview
                     </button>
+                    <button type="button"
+                            class="list-group-item list-group-item-action @(LeftNav == LeftNavSection.Responsibilities ? "active" : "")"
+                            @onclick="() => SetLeftNavAsync(LeftNavSection.Responsibilities)">
+                        Responsibilities
+                    </button>
 
                     @if (CanManageBidUsers)
                     {
@@ -116,6 +121,12 @@
                                    QuestionsWithoutUsersCount="QuestionsWithoutUsersCount"
                                    OnGoToQuestions="@(() => SetLeftNavAsync(LeftNavSection.Questions))"
                                    OnSave="SaveOverview" />
+                }
+                else if (LeftNav == LeftNavSection.Responsibilities)
+                {
+                    <ResponsibilitiesPanel Bid="Bid"
+                                           UserNamesById="AssignedUserNamesById"
+                                           IsLoading="IsResponsibilitiesBusy" />
                 }
                 else if (LeftNav == LeftNavSection.AllQuestions)
                 {
