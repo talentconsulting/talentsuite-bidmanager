@@ -35,6 +35,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     protected bool IsUsersBusy { get; set; }
     protected bool IsDraftBusy { get; set; }
     protected bool IsFilesBusy { get; set; }
+    protected bool IsResponsibilitiesBusy { get; set; }
     protected string? DraftErrorText { get; set; }
     protected string? FilesErrorText { get; set; }
     protected bool ShowNewDraft { get; set; }
@@ -59,6 +60,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         => IsLoading ? "Loading bid..."
             : IsUsersBusy ? "Updating users..."
             : IsFilesBusy ? "Working with files..."
+            : IsResponsibilitiesBusy ? "Loading responsibilities..."
             : IsDraftBusy ? "Updating draft..."
             : "Working...";
 
@@ -571,6 +573,10 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
                 if (groups.Count > 0)
                     ActiveCategory = groups[0].Key;
             }
+        }
+        else if (section == LeftNavSection.Responsibilities)
+        {
+            await EnsureResponsibilitiesDataLoadedAsync();
         }
     }
 
@@ -1086,29 +1092,32 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     }
 
     protected async Task LoadRedReviewAsync(bool force = false)
+        => await LoadRedReviewAsync(ActiveQuestion, force);
+
+    protected async Task LoadRedReviewAsync(BidQuestionModel? question, bool force = false)
     {
-        if (ActiveQuestion is null)
+        if (question is null)
             return;
 
-        if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(ActiveQuestion.Id))
+        if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(question.Id))
             return;
 
-        if (ActiveQuestion.IsRedReviewLoaded && !force)
+        if (question.IsRedReviewLoaded && !force)
             return;
 
         await SetBusyAsync();
         try
         {
-            var url = $"api/bids/{Uri.EscapeDataString(BidId)}/questions/{Uri.EscapeDataString(ActiveQuestion.Id)}/red-review";
+            var url = $"api/bids/{Uri.EscapeDataString(BidId)}/questions/{Uri.EscapeDataString(question.Id)}/red-review";
             var response = await Http.GetAsync(url);
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                ActiveQuestion.RedReviewAnswer ??= string.Empty;
-                ActiveQuestion.RedReviewState = RedReviewState.Pending;
-                ActiveQuestion.RedReviewReviewers.Clear();
-                ActiveQuestion.RedReviewComments.Clear();
-                EnsureRedReviewReviewerStateEntries(ActiveQuestion);
-                ActiveQuestion.IsRedReviewLoaded = true;
+                question.RedReviewAnswer ??= string.Empty;
+                question.RedReviewState = RedReviewState.Pending;
+                question.RedReviewReviewers.Clear();
+                question.RedReviewComments.Clear();
+                EnsureRedReviewReviewerStateEntries(question);
+                question.IsRedReviewLoaded = true;
                 return;
             }
 
@@ -1120,9 +1129,9 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
             if (review is null)
                 throw new InvalidOperationException("Red review response was empty.");
 
-            ActiveQuestion.RedReviewAnswer = review.ResultText;
-            ActiveQuestion.RedReviewState = review.State;
-            ActiveQuestion.RedReviewReviewers = review.Reviewers
+            question.RedReviewAnswer = review.ResultText;
+            question.RedReviewState = review.State;
+            question.RedReviewReviewers = review.Reviewers
                 .Where(reviewer => !string.IsNullOrWhiteSpace(reviewer.UserId))
                 .Select(reviewer => new RedReviewReviewerResponse
                 {
@@ -1132,10 +1141,10 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
                 .GroupBy(reviewer => reviewer.UserId, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group.First())
                 .ToList();
-            ActiveQuestion.RedReviewComments = review.Comments ?? new List<DraftCommentResponse>();
+            question.RedReviewComments = review.Comments ?? new List<DraftCommentResponse>();
 
-            EnsureRedReviewReviewerStateEntries(ActiveQuestion);
-            ActiveQuestion.IsRedReviewLoaded = true;
+            EnsureRedReviewReviewerStateEntries(question);
+            question.IsRedReviewLoaded = true;
         }
         catch (Exception ex)
         {
@@ -1267,10 +1276,15 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
     protected async Task LoadQuestionDraftResponsesAsync()
     {
-        if (ActiveQuestion is null)
+        await LoadQuestionDraftResponsesAsync(ActiveQuestion);
+    }
+
+    protected async Task LoadQuestionDraftResponsesAsync(BidQuestionModel? question)
+    {
+        if (question is null)
             return;
 
-        if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(ActiveQuestion.Id))
+        if (string.IsNullOrWhiteSpace(BidId) || string.IsNullOrWhiteSpace(question.Id))
             return;
 
         await SetDraftBusyAsync();
@@ -1278,10 +1292,10 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
         try
         {
-            var url = $"api/bids/{Uri.EscapeDataString(BidId)}/questions/{Uri.EscapeDataString(ActiveQuestion.Id)}/drafts";
+            var url = $"api/bids/{Uri.EscapeDataString(BidId)}/questions/{Uri.EscapeDataString(question.Id)}/drafts";
             var responses = await Http.GetFromJsonAsync<List<DraftResponse>>(url) ?? new List<DraftResponse>();
 
-            ActiveQuestion.DraftResponses = responses;
+            question.DraftResponses = responses;
             DraftCommentTextsByDraftId.Clear();
         }
         catch (Exception ex)
@@ -1292,6 +1306,28 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         finally
         {
             IsDraftBusy = false;
+        }
+    }
+
+    protected async Task EnsureResponsibilitiesDataLoadedAsync()
+    {
+        if (Bid?.Questions is null || string.IsNullOrWhiteSpace(BidId))
+            return;
+
+        IsResponsibilitiesBusy = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            foreach (var question in Bid.Questions)
+            {
+                await LoadQuestionDraftResponsesAsync(question);
+                await LoadRedReviewAsync(question);
+            }
+        }
+        finally
+        {
+            IsResponsibilitiesBusy = false;
         }
     }
 
@@ -2392,7 +2428,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     
     // ---- Types (replace with your real DTOs) ----
 
-    protected enum LeftNavSection { Overview, AllQuestions, Questions, Files, Users }
+    protected enum LeftNavSection { Overview, Responsibilities, AllQuestions, Questions, Files, Users }
     protected enum InnerTab { Users, Draft, Chat, RedReview, FinalAnswer }
 
     protected static string FormatFileSize(long sizeBytes)

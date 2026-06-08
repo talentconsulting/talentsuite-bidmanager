@@ -1,0 +1,177 @@
+@namespace TalentSuite.FrontEnd.Pages.Bids.Management
+@using TalentSuite.FrontEnd.Pages.Bids.Management.Models
+@using TalentSuite.Shared.Bids
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h4 class="mb-0">Responsibilities</h4>
+            @if (IsLoading)
+            {
+                <span class="small text-muted">Loading tasks...</span>
+            }
+        </div>
+
+        @if (ResponsibilityEntries.Count == 0)
+        {
+            <div class="text-muted">No question responsibilities assigned yet.</div>
+        }
+        else
+        {
+            <div class="d-flex flex-column gap-3">
+                @foreach (var entry in ResponsibilityEntries)
+                {
+                    <div class="border rounded p-3 bg-light">
+                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                            <div class="fw-semibold">@entry.UserName</div>
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (var role in entry.Roles)
+                                {
+                                    <span class="badge bg-secondary">@role</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="small text-muted">
+                            @entry.QuestionSummary
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <h4 class="mb-3">Outstanding Tasks</h4>
+
+        @if (OutstandingTasks.Count == 0)
+        {
+            <div class="text-muted">No outstanding tasks on this bid.</div>
+        }
+        else
+        {
+            <div class="d-flex flex-column gap-3">
+                @foreach (var task in OutstandingTasks)
+                {
+                    <div class="border rounded p-3 bg-light">
+                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                            <div class="fw-semibold">@task.Title</div>
+                            <span class="badge bg-warning text-dark">@task.TaskType</span>
+                        </div>
+                        <div class="small text-muted mt-1">@task.QuestionTitle</div>
+                        @if (!string.IsNullOrWhiteSpace(task.Detail))
+                        {
+                            <div class="mt-2" style="white-space: pre-wrap;">@task.Detail</div>
+                        }
+                        <div class="small text-muted mt-2">
+                            Users: @string.Join(", ", task.UserNames)
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public BidManageModel Bid { get; set; } = default!;
+    [Parameter] public IReadOnlyDictionary<string, string> UserNamesById { get; set; } = new Dictionary<string, string>();
+    [Parameter] public bool IsLoading { get; set; }
+
+    private List<ResponsibilityEntry> ResponsibilityEntries =>
+        (Bid?.Questions ?? [])
+        .Where(question => !string.IsNullOrWhiteSpace(question.Id))
+        .SelectMany(question => question.QuestionAssignments.Select(assignment => new { question, assignment }))
+        .Where(x => !string.IsNullOrWhiteSpace(x.assignment.UserId))
+        .GroupBy(x => x.assignment.UserId, StringComparer.OrdinalIgnoreCase)
+        .Select(group => new ResponsibilityEntry(
+            ResolveUserName(group.Key),
+            group.Select(x => x.assignment.Role.ToString()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList(),
+            string.Join(", ", group.Select(x => x.question.Title).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x))))
+        .OrderBy(x => x.UserName, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    private List<OutstandingTaskEntry> OutstandingTasks
+    {
+        get
+        {
+            var tasks = new List<OutstandingTaskEntry>();
+
+            foreach (var question in Bid?.Questions ?? [])
+            {
+                foreach (var draft in question.DraftResponses)
+                {
+                    foreach (var comment in draft.Comments.Where(x => !x.IsComplete))
+                    {
+                        tasks.Add(new OutstandingTaskEntry(
+                            "Draft comment",
+                            question.Title,
+                            "Draft comment",
+                            comment.Comment,
+                            [ResolveTaskUserName(comment.UserId, comment.AuthorName)]));
+                    }
+                }
+
+                foreach (var comment in question.RedReviewComments.Where(x => !x.IsComplete))
+                {
+                    tasks.Add(new OutstandingTaskEntry(
+                        "Red review comment",
+                        question.Title,
+                        "Comment",
+                        comment.Comment,
+                        [ResolveTaskUserName(comment.UserId, comment.AuthorName)]));
+                }
+
+                foreach (var reviewer in question.RedReviewReviewers.Where(x => x.State != RedReviewState.Complete))
+                {
+                    tasks.Add(new OutstandingTaskEntry(
+                        "Red review",
+                        question.Title,
+                        $"Reviewer: {reviewer.State}",
+                        question.RedReviewAnswer,
+                        [ResolveUserName(reviewer.UserId)]));
+                }
+
+                foreach (var comment in question.FinalAnswerComments.Where(x => !x.IsComplete))
+                {
+                    tasks.Add(new OutstandingTaskEntry(
+                        "Final answer comment",
+                        question.Title,
+                        "Comment",
+                        comment.Comment,
+                        [ResolveTaskUserName(comment.UserId, comment.AuthorName)]));
+                }
+            }
+
+            return tasks;
+        }
+    }
+
+    private string ResolveUserName(string? userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return "Unknown user";
+
+        return UserNamesById.TryGetValue(userId, out var name) && !string.IsNullOrWhiteSpace(name)
+            ? name
+            : userId;
+    }
+
+    private string ResolveTaskUserName(string? userId, string? authorName)
+    {
+        if (!string.IsNullOrWhiteSpace(authorName))
+            return authorName;
+
+        return ResolveUserName(userId);
+    }
+
+    private sealed record ResponsibilityEntry(string UserName, List<string> Roles, string QuestionSummary);
+
+    private sealed record OutstandingTaskEntry(
+        string Title,
+        string QuestionTitle,
+        string TaskType,
+        string? Detail,
+        List<string> UserNames);
+}
