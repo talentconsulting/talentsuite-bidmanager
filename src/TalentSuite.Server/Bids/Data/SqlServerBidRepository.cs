@@ -558,7 +558,7 @@ public sealed class SqlServerBidRepository : IManageBids
 
         var rows = await connection.QueryAsync<ChatMessageDataModel>(new CommandDefinition(
             """
-            SELECT Id, BidId, QuestionId, UserId, Role, Content, CreatedAtUtc
+            SELECT Id, BidId, QuestionId, UserId, Role, Content, CreatedAtUtc, SourceMetadataJson, UsedSourcesOutsideBidLibrary
             FROM dbo.ChatMessages
             WHERE BidId = @BidId
               AND QuestionId = @QuestionId
@@ -578,6 +578,8 @@ public sealed class SqlServerBidRepository : IManageBids
         string role,
         string content,
         DateTimeOffset createdAtUtc,
+        string? sourceMetadataJson = null,
+        bool usedSourcesOutsideBidLibrary = false,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(bidId)
@@ -594,8 +596,8 @@ public sealed class SqlServerBidRepository : IManageBids
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO dbo.ChatMessages (Id, BidId, QuestionId, UserId, Role, Content, CreatedAtUtc)
-            VALUES (@Id, @BidId, @QuestionId, @UserId, @Role, @Content, @CreatedAtUtc);
+            INSERT INTO dbo.ChatMessages (Id, BidId, QuestionId, UserId, Role, Content, CreatedAtUtc, SourceMetadataJson, UsedSourcesOutsideBidLibrary)
+            VALUES (@Id, @BidId, @QuestionId, @UserId, @Role, @Content, @CreatedAtUtc, @SourceMetadataJson, @UsedSourcesOutsideBidLibrary);
             """,
             new
             {
@@ -605,7 +607,9 @@ public sealed class SqlServerBidRepository : IManageBids
                 UserId = userId,
                 Role = role,
                 Content = content,
-                CreatedAtUtc = createdAtUtc
+                CreatedAtUtc = createdAtUtc,
+                SourceMetadataJson = sourceMetadataJson ?? "[]",
+                UsedSourcesOutsideBidLibrary = usedSourcesOutsideBidLibrary
             },
             cancellationToken: ct));
     }
@@ -1717,11 +1721,29 @@ public sealed class SqlServerBidRepository : IManageBids
                         UserId NVARCHAR(200) NOT NULL,
                         Role NVARCHAR(20) NOT NULL,
                         Content NVARCHAR(MAX) NOT NULL,
-                        CreatedAtUtc DATETIMEOFFSET(7) NOT NULL
+                        CreatedAtUtc DATETIMEOFFSET(7) NOT NULL,
+                        SourceMetadataJson NVARCHAR(MAX) NOT NULL CONSTRAINT DF_ChatMessages_SourceMetadataJson DEFAULT(N'[]'),
+                        UsedSourcesOutsideBidLibrary BIT NOT NULL CONSTRAINT DF_ChatMessages_UsedSourcesOutsideBidLibrary DEFAULT(0)
                     );
 
                     CREATE INDEX IX_ChatMessages_BidQuestionUser_CreatedAtUtc
                         ON dbo.ChatMessages (BidId, QuestionId, UserId, CreatedAtUtc, Id);
+                END;
+                ELSE
+                BEGIN
+                    IF COL_LENGTH(N'dbo.ChatMessages', N'SourceMetadataJson') IS NULL
+                    BEGIN
+                        ALTER TABLE dbo.ChatMessages
+                            ADD SourceMetadataJson NVARCHAR(MAX) NOT NULL
+                                CONSTRAINT DF_ChatMessages_SourceMetadataJson DEFAULT(N'[]');
+                    END;
+
+                    IF COL_LENGTH(N'dbo.ChatMessages', N'UsedSourcesOutsideBidLibrary') IS NULL
+                    BEGIN
+                        ALTER TABLE dbo.ChatMessages
+                            ADD UsedSourcesOutsideBidLibrary BIT NOT NULL
+                                CONSTRAINT DF_ChatMessages_UsedSourcesOutsideBidLibrary DEFAULT(0);
+                    END;
                 END;
 
                 IF OBJECT_ID(N'dbo.DocumentIngestionJobs', N'U') IS NULL

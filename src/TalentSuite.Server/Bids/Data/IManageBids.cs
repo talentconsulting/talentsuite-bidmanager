@@ -51,6 +51,8 @@ public interface IManageBids
         string role,
         string content,
         DateTimeOffset createdAtUtc,
+        string? sourceMetadataJson = null,
+        bool usedSourcesOutsideBidLibrary = false,
         CancellationToken ct = default);
 
     Task SetBidStatus(string bidId, BidStatus status, CancellationToken ct = default);

@@ -6,4 +6,6 @@ public class ChatStreamUpdate
     public string? Content { get; set; }
     public string? ThreadId { get; set; }
     public string? Error { get; set; }
+    public List<ChatSourceReferenceResponse> Sources { get; set; } = new();
+    public bool UsedSourcesOutsideBidLibrary { get; set; }
 }

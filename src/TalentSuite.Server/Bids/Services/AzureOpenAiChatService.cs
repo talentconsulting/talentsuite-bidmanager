@@ -5,6 +5,7 @@ using Azure.AI.Agents.Persistent;
 using Azure.Core;
 using Azure.Identity;
 using TalentSuite.Shared.Bids.Ai;
+using System.Collections.Concurrent;
 
 namespace TalentSuite.Server.Bids.Services;
 
@@ -27,6 +28,8 @@ public sealed class ChatAnswerResult
 {
     public string Response { get; set; } = string.Empty;
     public string ThreadId { get; set; } = string.Empty;
+    public List<ChatSourceReferenceResponse> Sources { get; set; } = new();
+    public bool UsedSourcesOutsideBidLibrary { get; set; }
 }
 
 public sealed class ChatServiceUserException(string message, int statusCode = StatusCodes.Status429TooManyRequests)
@@ -44,6 +47,7 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
     private readonly PersistentAgentsClient _client;
     private readonly string _agentId;
     private readonly bool _isDevelopment;
+    private readonly ConcurrentDictionary<string, string> _fileNameCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan ActiveRunPollInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan ActiveRunWaitBudget = TimeSpan.FromSeconds(10);
 
@@ -124,7 +128,7 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
         }
 
         // 5) Get messages and return the last agent text response
-        string? lastAgentText = null;
+        PersistentThreadMessage? lastAgentMessage = null;
 
         await foreach (PersistentThreadMessage msg in _client.Messages.GetMessagesAsync(
                            threadId: effectiveThreadId,
@@ -134,22 +138,24 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
             if (msg.Role != MessageRole.Agent)
                 continue;
 
-            var sb = new StringBuilder();
-            foreach (MessageContent item in msg.ContentItems)
-            {
-                if (item is MessageTextContent text)
-                    sb.Append(text.Text);
-            }
-
-            var combined = sb.ToString();
-            if (!string.IsNullOrWhiteSpace(combined))
-                lastAgentText = combined;
+            if (!string.IsNullOrWhiteSpace(ExtractMessageText(msg)))
+                lastAgentMessage = msg;
         }
+
+        var responseText = lastAgentMessage is null
+            ? "(No agent text response returned.)"
+            : ExtractMessageText(lastAgentMessage);
+        var fileNameMap = await BuildRunFileNameMapAsync(effectiveThreadId, run.Id, ct);
+        var provenance = lastAgentMessage is null
+            ? ChatMessageProvenance.Empty
+            : ExtractProvenance(lastAgentMessage, fileNameMap);
 
         return new ChatAnswerResult
         {
-            Response = lastAgentText ?? "(No agent text response returned.)",
-            ThreadId = effectiveThreadId
+            Response = responseText,
+            ThreadId = effectiveThreadId,
+            Sources = provenance.Sources,
+            UsedSourcesOutsideBidLibrary = provenance.UsedSourcesOutsideBidLibrary
         };
     }
 
@@ -227,10 +233,20 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
 
                 if (streamingUpdate.UpdateKind == StreamingUpdateReason.RunCompleted)
                 {
+                    var completedMessage = await GetLastAgentMessageAsync(effectiveThreadId, ct);
+                    var fileNameMap = streamRun is null
+                        ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        : await BuildRunFileNameMapAsync(effectiveThreadId, streamRun.Id, ct);
+                    var provenance = completedMessage is null
+                        ? ChatMessageProvenance.Empty
+                        : ExtractProvenance(completedMessage, fileNameMap);
+
                     yield return new ChatStreamUpdate
                     {
                         Type = "completed",
-                        ThreadId = effectiveThreadId
+                        ThreadId = effectiveThreadId,
+                        Sources = provenance.Sources,
+                        UsedSourcesOutsideBidLibrary = provenance.UsedSourcesOutsideBidLibrary
                     };
                     yield break;
                 }
@@ -362,5 +378,145 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
                || ex.Message.Contains("rate limit", StringComparison.OrdinalIgnoreCase)
                || ex.Message.Contains("quota", StringComparison.OrdinalIgnoreCase)
                || ex.Message.Contains("retry after", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ExtractMessageText(PersistentThreadMessage message)
+    {
+        var sb = new StringBuilder();
+        foreach (var item in message.ContentItems)
+        {
+            if (item is MessageTextContent text)
+                sb.Append(text.Text);
+        }
+
+        return sb.ToString();
+    }
+
+    private async Task<PersistentThreadMessage?> GetLastAgentMessageAsync(string threadId, CancellationToken ct)
+    {
+        await foreach (var msg in _client.Messages.GetMessagesAsync(
+                           threadId: threadId,
+                           order: ListSortOrder.Descending,
+                           cancellationToken: ct))
+        {
+            if (msg.Role == MessageRole.Agent && !string.IsNullOrWhiteSpace(ExtractMessageText(msg)))
+                return msg;
+        }
+
+        return null;
+    }
+
+    private ChatMessageProvenance ExtractProvenance(
+        PersistentThreadMessage message,
+        IReadOnlyDictionary<string, string> fileNameMap)
+    {
+        var sources = new List<ChatSourceReferenceResponse>();
+        var usedSourcesOutsideBidLibrary = false;
+
+        foreach (var item in message.ContentItems)
+        {
+            if (item is not MessageTextContent textContent)
+                continue;
+
+            foreach (var annotation in textContent.Annotations)
+            {
+                switch (annotation)
+                {
+                    case MessageTextFileCitationAnnotation fileCitation:
+                    {
+                        var fileName = ResolveFileName(fileCitation.FileId, fileNameMap);
+                        var isFromBidLibrary = !string.IsNullOrWhiteSpace(fileName);
+                        usedSourcesOutsideBidLibrary |= !isFromBidLibrary;
+                        sources.Add(new ChatSourceReferenceResponse
+                        {
+                            Kind = "file",
+                            FileId = fileCitation.FileId,
+                            FileName = fileName ?? fileCitation.FileId,
+                            Quote = fileCitation.Quote,
+                            IsFromBidLibrary = isFromBidLibrary
+                        });
+                        break;
+                    }
+                    case MessageTextFilePathAnnotation filePath:
+                    {
+                        var fileName = ResolveFileName(filePath.FileId, fileNameMap);
+                        var isFromBidLibrary = !string.IsNullOrWhiteSpace(fileName);
+                        usedSourcesOutsideBidLibrary |= !isFromBidLibrary;
+                        sources.Add(new ChatSourceReferenceResponse
+                        {
+                            Kind = "file",
+                            FileId = filePath.FileId,
+                            FileName = fileName ?? filePath.FileId,
+                            IsFromBidLibrary = isFromBidLibrary
+                        });
+                        break;
+                    }
+                    case MessageTextUriCitationAnnotation uriCitation:
+                        usedSourcesOutsideBidLibrary = true;
+                        sources.Add(new ChatSourceReferenceResponse
+                        {
+                            Kind = "uri",
+                            Uri = uriCitation.UriCitation.Uri,
+                            Title = uriCitation.UriCitation.Title,
+                            IsFromBidLibrary = false
+                        });
+                        break;
+                }
+            }
+        }
+
+        return new ChatMessageProvenance(
+            sources
+                .GroupBy(source => $"{source.Kind}|{source.FileId}|{source.FileName}|{source.Uri}|{source.Title}|{source.Quote}", StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToList(),
+            usedSourcesOutsideBidLibrary);
+    }
+
+    private string? ResolveFileName(string? fileId, IReadOnlyDictionary<string, string> fileNameMap)
+    {
+        if (string.IsNullOrWhiteSpace(fileId))
+            return null;
+
+        if (_fileNameCache.TryGetValue(fileId, out var cachedFileName))
+            return cachedFileName;
+
+        if (!fileNameMap.TryGetValue(fileId, out var fileName) || string.IsNullOrWhiteSpace(fileName))
+            return null;
+
+        _fileNameCache[fileId] = fileName;
+        return fileName;
+    }
+
+    private async Task<Dictionary<string, string>> BuildRunFileNameMapAsync(string threadId, string runId, CancellationToken ct)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        await foreach (var step in _client.Runs.GetRunStepsAsync(threadId, runId, null, null, null, null, null, ct))
+        {
+            if (step.StepDetails is not RunStepToolCallDetails toolCallDetails)
+                continue;
+
+            foreach (var toolCall in toolCallDetails.ToolCalls)
+            {
+                if (toolCall is not RunStepFileSearchToolCall fileSearchToolCall)
+                    continue;
+
+                foreach (var result in fileSearchToolCall.FileSearch.Results)
+                {
+                    if (!string.IsNullOrWhiteSpace(result.FileId) && !string.IsNullOrWhiteSpace(result.FileName))
+                        map[result.FileId] = result.FileName;
+                }
+            }
+        }
+
+        return map;
+    }
+
+    private sealed record ChatMessageProvenance(
+        List<ChatSourceReferenceResponse> Sources,
+        bool UsedSourcesOutsideBidLibrary)
+    {
+        public static ChatMessageProvenance Empty { get; } = new([], false);
     }
 }

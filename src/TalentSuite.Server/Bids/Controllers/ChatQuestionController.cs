@@ -82,7 +82,9 @@ public class ChatQuestionController : ControllerBase
                     userId,
                     "assistant",
                     result.Response,
-                    now.AddMilliseconds(1));
+                    now.AddMilliseconds(1),
+                    result.Sources,
+                    result.UsedSourcesOutsideBidLibrary);
                 await _bidService.SetChatThreadId(
                     chatQuestionRequest.BidId,
                     resolvedQuestionId,
@@ -93,7 +95,9 @@ public class ChatQuestionController : ControllerBase
             return Ok(new ChatQuestionResponse
             {
                 Response = result.Response,
-                ThreadId = result.ThreadId
+                ThreadId = result.ThreadId,
+                Sources = result.Sources,
+                UsedSourcesOutsideBidLibrary = result.UsedSourcesOutsideBidLibrary
             });
         }
         catch (ChatServiceUserException ex)
@@ -161,12 +165,11 @@ public class ChatQuestionController : ControllerBase
         {
             var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, resolvedQuestionId);
             var persistedThreadId = await _bidService.GetChatThreadId(chatQuestionRequest.BidId, resolvedQuestionId, userId, ct);
-            var lengthConstraint = string.IsNullOrWhiteSpace(question.Length)
-                ? ""
-                : $" Keep your response within the following length: {question.Length}.";
             var systemPrompt =
-                $"Please use the bid library we have to return the answer to the question: ${question.Description}.{lengthConstraint}";
+                $"Use the bid library, dont merge different aspects between projects if asking for specific examples. Add citation information of document and location in document. Where we have scoring dont use that if its scores 2 or below. Answer this question: {question.Description}";
             var assistantResponse = new System.Text.StringBuilder();
+            List<ChatSourceReferenceResponse> assistantSources = [];
+            var usedSourcesOutsideBidLibrary = false;
 
             var startedAt = DateTimeOffset.UtcNow;
             await _bidService.AddChatMessage(
@@ -176,7 +179,7 @@ public class ChatQuestionController : ControllerBase
                 "user",
                 chatQuestionRequest.FreeTextQuestion,
                 startedAt,
-                ct);
+                ct: ct);
 
             string? threadId = null;
             await foreach (var update in _azureOpenAiChatService.StreamAsync(
@@ -190,6 +193,12 @@ public class ChatQuestionController : ControllerBase
 
                 if (string.Equals(update.Type, "delta", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(update.Content))
                     assistantResponse.Append(update.Content);
+
+                if (string.Equals(update.Type, "completed", StringComparison.OrdinalIgnoreCase))
+                {
+                    assistantSources = update.Sources ?? [];
+                    usedSourcesOutsideBidLibrary = update.UsedSourcesOutsideBidLibrary;
+                }
 
                 await WriteStreamUpdateAsync(update, ct);
             }
@@ -213,6 +222,8 @@ public class ChatQuestionController : ControllerBase
                     "assistant",
                     assistantResponse.ToString(),
                     DateTimeOffset.UtcNow,
+                    assistantSources,
+                    usedSourcesOutsideBidLibrary,
                     ct);
             }
         }

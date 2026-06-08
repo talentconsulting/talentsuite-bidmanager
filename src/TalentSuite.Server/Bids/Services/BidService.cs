@@ -7,8 +7,10 @@ using TalentSuite.Shared.Messaging;
 using TalentSuite.Shared.Messaging.Events;
 using TalentSuite.Shared.Tasks;
 using TalentSuite.Server.Users.Data;
+using TalentSuite.Shared;
 using TalentSuite.Shared.Bids.Ai;
 using TalentSuite.Shared.Users;
+using System.Text.Json;
 
 namespace TalentSuite.Server.Bids.Services;
 
@@ -56,6 +58,8 @@ public interface IBidService
         string role,
         string content,
         DateTimeOffset createdAtUtc,
+        List<ChatSourceReferenceResponse>? sources = null,
+        bool usedSourcesOutsideBidLibrary = false,
         CancellationToken ct = default);
 
     Task SetBidStatus(string bidId, BidStatus status, CancellationToken ct = default);
@@ -335,7 +339,9 @@ public sealed class BidService : IBidService
                 Id = message.Id,
                 Role = message.Role,
                 Content = message.Content,
-                CreatedAtUtc = message.CreatedAtUtc
+                CreatedAtUtc = message.CreatedAtUtc,
+                Sources = DeserializeChatSources(message.SourceMetadataJson),
+                UsedSourcesOutsideBidLibrary = message.UsedSourcesOutsideBidLibrary
             })
             .ToList();
     }
@@ -347,8 +353,27 @@ public sealed class BidService : IBidService
         string role,
         string content,
         DateTimeOffset createdAtUtc,
+        List<ChatSourceReferenceResponse>? sources = null,
+        bool usedSourcesOutsideBidLibrary = false,
         CancellationToken ct = default)
-        => _repository.AddChatMessage(bidId, questionId, userId, role, content, createdAtUtc, ct);
+        => _repository.AddChatMessage(
+            bidId,
+            questionId,
+            userId,
+            role,
+            content,
+            createdAtUtc,
+            JsonSerializer.Serialize(sources ?? [], SerialiserOptions.JsonOptions),
+            usedSourcesOutsideBidLibrary,
+            ct);
+
+    private static List<ChatSourceReferenceResponse> DeserializeChatSources(string? sourceMetadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(sourceMetadataJson))
+            return [];
+
+        return JsonSerializer.Deserialize<List<ChatSourceReferenceResponse>>(sourceMetadataJson, SerialiserOptions.JsonOptions) ?? [];
+    }
 
     public async Task SetBidStatus(string bidId, BidStatus status, CancellationToken ct = default)
     {

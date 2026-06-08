@@ -28,13 +28,13 @@ window.bidManage.scrollToElementById = function (elementId) {
   return true;
 };
 
-window.bidManage.scrollContainerToBottom = function (elementId) {
+window.bidManage.scrollContainerToTop = function (elementId) {
   const element = document.getElementById(elementId);
   if (!element) {
     return false;
   }
 
-  element.scrollTop = element.scrollHeight;
+  element.scrollTop = 0;
   return true;
 };
 
