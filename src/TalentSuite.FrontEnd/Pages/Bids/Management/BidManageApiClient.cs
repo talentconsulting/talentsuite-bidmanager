@@ -96,6 +96,18 @@ public sealed class BidManageApiClient(HttpClient http)
                 $"Failed to update bid status: {(int)response.StatusCode} {response.ReasonPhrase}");
     }
 
+    public async Task UpdateBidOverviewAsync(string bidId, UpdateBidOverviewRequest request, CancellationToken ct = default)
+    {
+        var response = await http.PatchAsJsonAsync(
+            $"api/bids/{Uri.EscapeDataString(bidId)}/overview",
+            request,
+            ct);
+
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException(
+                $"Failed to update bid overview: {(int)response.StatusCode} {response.ReasonPhrase}");
+    }
+
     public async Task<BidLibraryPushResponse> PushBidToLibraryAsync(string bidId, CancellationToken ct = default)
     {
         var response = await http.PostAsync($"api/bids/{Uri.EscapeDataString(bidId)}/library-push", null, ct);

@@ -51,6 +51,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     protected BidManageModel? Bid { get; set; }
     protected bool IsAdminUser { get; set; }
     protected bool CanManageAssignedBids { get; set; }
+    protected bool CanEditOverview => IsAdminUser || CanManageAssignedBids;
     protected bool CanManageBidUsers => CanManageAssignedBids;
     protected bool CanManageQuestionUsers => CanManageAssignedBids;
     protected bool IsApiCallInProgress => IsLoading || IsBusy || IsUsersBusy || IsDraftBusy || IsFilesBusy;
@@ -853,12 +854,27 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     protected async Task SaveOverview()
     {
         if (Bid is null) return;
+        if (!CanEditOverview) return;
 
         await SetBusyAsync();
         try
         {
-            // TODO: call API to save overview
-            await Task.Delay(150);
+            await ApiClient.UpdateBidOverviewAsync(BidId, new UpdateBidOverviewRequest
+            {
+                UniqueReference = Bid.UniqueReference,
+                Summary = Bid.Summary,
+                KeyInformation = Bid.KeyInformation,
+                Budget = Bid.Budget,
+                DeadlineForQualifying = Bid.DeadlineForQualifying,
+                DeadlineForSubmission = Bid.DeadlineForSubmission,
+                LengthOfContract = Bid.LengthOfContract
+            });
+            _ = BannerState.ShowAsync("Bid overview saved.", "alert-success");
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+            _ = BannerState.ShowAsync("Could not save bid overview.");
         }
         finally
         {

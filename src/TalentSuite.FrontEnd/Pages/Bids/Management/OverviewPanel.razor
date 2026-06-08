@@ -34,7 +34,17 @@
 
 <div class="card shadow-sm">
     <div class="card-body">
-        <h4 class="mb-3">Overview</h4>
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h4 class="mb-0">Overview</h4>
+            @if (CanEdit)
+            {
+                <button class="btn btn-primary btn-sm"
+                        @onclick="OnSave"
+                        disabled="@IsBusy">
+                    @(IsBusy ? "Saving..." : "Save")
+                </button>
+            }
+        </div>
 
         @if (Bid.BidLibraryPush is not null)
         {
@@ -51,37 +61,102 @@
 
             <div class="p-3 border rounded bg-light">
                 <div class="text-muted small">Unique reference</div>
-                <div>@FormatOrDash(Bid.UniqueReference)</div>
+                @if (CanEdit)
+                {
+                    <input class="form-control"
+                           @bind="Bid.UniqueReference"
+                           disabled="@IsBusy" />
+                }
+                else
+                {
+                    <div>@FormatOrDash(Bid.UniqueReference)</div>
+                }
             </div>
 
             <div class="p-3 border rounded bg-light">
                 <div class="text-muted small">Summary</div>
-                <div style="white-space: pre-wrap;">@FormatOrDash(Bid.Summary)</div>
+                @if (CanEdit)
+                {
+                    <textarea class="form-control"
+                              rows="5"
+                              @bind="Bid.Summary"
+                              disabled="@IsBusy"></textarea>
+                }
+                else
+                {
+                    <div style="white-space: pre-wrap;">@FormatOrDash(Bid.Summary)</div>
+                }
             </div>
 
             <div class="p-3 border rounded bg-light">
                 <div class="text-muted small">Key information</div>
-                <div style="white-space: pre-wrap;">@FormatOrDash(Bid.KeyInformation)</div>
+                @if (CanEdit)
+                {
+                    <textarea class="form-control"
+                              rows="5"
+                              @bind="Bid.KeyInformation"
+                              disabled="@IsBusy"></textarea>
+                }
+                else
+                {
+                    <div style="white-space: pre-wrap;">@FormatOrDash(Bid.KeyInformation)</div>
+                }
             </div>
 
             <div class="p-3 border rounded bg-light">
                 <div class="text-muted small">Budget</div>
-                <div>@FormatOrDash(Bid.Budget)</div>
+                @if (CanEdit)
+                {
+                    <input class="form-control"
+                           @bind="Bid.Budget"
+                           disabled="@IsBusy" />
+                }
+                else
+                {
+                    <div>@FormatOrDash(Bid.Budget)</div>
+                }
             </div>
 
             <div class="p-3 border rounded bg-light">
                 <div class="text-muted small">Deadline for submission</div>
-                <div>@FormatOrDash(Bid.DeadlineForSubmission)</div>
+                @if (CanEdit)
+                {
+                    <input class="form-control"
+                           @bind="Bid.DeadlineForSubmission"
+                           disabled="@IsBusy" />
+                }
+                else
+                {
+                    <div>@FormatOrDash(Bid.DeadlineForSubmission)</div>
+                }
             </div>
 
             <div class="p-3 border rounded bg-light">
                 <div class="text-muted small">Deadline for qualifying</div>
-                <div>@FormatOrDash(Bid.DeadlineForQualifying)</div>
+                @if (CanEdit)
+                {
+                    <input class="form-control"
+                           @bind="Bid.DeadlineForQualifying"
+                           disabled="@IsBusy" />
+                }
+                else
+                {
+                    <div>@FormatOrDash(Bid.DeadlineForQualifying)</div>
+                }
             </div>
 
             <div class="p-3 border rounded bg-light">
                 <div class="text-muted small">Length of contract</div>
-                <div>@FormatOrDash(Bid.LengthOfContract)</div>
+                @if (CanEdit)
+                {
+                    <input class="form-control"
+                           @bind="Bid.LengthOfContract"
+                           disabled="@IsBusy" />
+                }
+                else
+                {
+                    <div>@FormatOrDash(Bid.LengthOfContract)</div>
+                }
             </div>
         </div>
 
@@ -95,9 +170,12 @@
 
 @code {
     [Parameter] public BidManageModel Bid { get; set; } = default!;
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool IsBusy { get; set; }
     [Parameter] public int QuestionsWithoutFinalAnswerCount { get; set; }
     [Parameter] public int QuestionsWithoutUsersCount { get; set; }
     [Parameter] public EventCallback OnGoToQuestions { get; set; }
+    [Parameter] public EventCallback OnSave { get; set; }
 
     private int TotalQuestionsCount => Bid?.Questions?.Count ?? 0;
     private int FinalAnswersCompletedCount => Math.Max(0, TotalQuestionsCount - QuestionsWithoutFinalAnswerCount);

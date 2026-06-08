@@ -110,9 +110,12 @@
                 @if (LeftNav == LeftNavSection.Overview)
                 {
                     <OverviewPanel Bid="Bid"
+                                   CanEdit="CanEditOverview"
+                                   IsBusy="IsBusy"
                                    QuestionsWithoutFinalAnswerCount="QuestionsWithoutFinalAnswerCount"
                                    QuestionsWithoutUsersCount="QuestionsWithoutUsersCount"
-                                   OnGoToQuestions="@(() => SetLeftNavAsync(LeftNavSection.Questions))" />
+                                   OnGoToQuestions="@(() => SetLeftNavAsync(LeftNavSection.Questions))"
+                                   OnSave="SaveOverview" />
                 }
                 else if (LeftNav == LeftNavSection.AllQuestions)
                 {

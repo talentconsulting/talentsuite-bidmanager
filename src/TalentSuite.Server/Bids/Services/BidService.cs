@@ -22,6 +22,17 @@ public interface IBidService
 
     Task<BidModel> GetBid(string id, CancellationToken ct = default);
 
+    Task UpdateBidOverview(
+        string bidId,
+        string? uniqueReference,
+        string? summary,
+        string? keyInformation,
+        string? budget,
+        string? deadlineForQualifying,
+        string? deadlineForSubmission,
+        string? lengthOfContract,
+        CancellationToken ct = default);
+
     Task<PagedBidListModel> SearchBids(int page, int pageSize, CancellationToken ct = default);
 
     Task<PagedBidListModel> SearchBidsForUser(string userId, int page, int pageSize, CancellationToken ct = default);
@@ -227,6 +238,27 @@ public sealed class BidService : IBidService
 
         return _mapper.ToModel(model);
     }
+
+    public Task UpdateBidOverview(
+        string bidId,
+        string? uniqueReference,
+        string? summary,
+        string? keyInformation,
+        string? budget,
+        string? deadlineForQualifying,
+        string? deadlineForSubmission,
+        string? lengthOfContract,
+        CancellationToken ct = default)
+        => _repository.UpdateBidOverview(
+            bidId,
+            uniqueReference,
+            summary,
+            keyInformation,
+            budget,
+            deadlineForQualifying,
+            deadlineForSubmission,
+            lengthOfContract,
+            ct);
 
     public async Task<PagedBidListModel> SearchBids(int page, int pageSize, CancellationToken ct = default)
     {
