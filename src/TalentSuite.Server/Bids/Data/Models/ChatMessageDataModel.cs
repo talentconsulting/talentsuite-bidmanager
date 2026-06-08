@@ -9,4 +9,6 @@ public class ChatMessageDataModel
     public string Role { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public DateTimeOffset CreatedAtUtc { get; set; }
+    public string SourceMetadataJson { get; set; } = "[]";
+    public bool UsedSourcesOutsideBidLibrary { get; set; }
 }

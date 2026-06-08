@@ -344,6 +344,8 @@ public class InMemoryBidRepository : IManageBids
         string role,
         string content,
         DateTimeOffset createdAtUtc,
+        string? sourceMetadataJson = null,
+        bool usedSourcesOutsideBidLibrary = false,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(bidId)
@@ -368,7 +370,9 @@ public class InMemoryBidRepository : IManageBids
             UserId = userId,
             Role = role,
             Content = content,
-            CreatedAtUtc = createdAtUtc
+            CreatedAtUtc = createdAtUtc,
+            SourceMetadataJson = sourceMetadataJson ?? "[]",
+            UsedSourcesOutsideBidLibrary = usedSourcesOutsideBidLibrary
         });
 
         return Task.CompletedTask;

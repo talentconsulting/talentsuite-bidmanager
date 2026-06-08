@@ -6,4 +6,6 @@ public class ChatMessageResponse
     public string Role { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public DateTimeOffset CreatedAtUtc { get; set; }
+    public List<ChatSourceReferenceResponse> Sources { get; set; } = new();
+    public bool UsedSourcesOutsideBidLibrary { get; set; }
 }

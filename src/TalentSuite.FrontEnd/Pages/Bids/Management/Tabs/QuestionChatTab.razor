@@ -51,6 +51,55 @@
                         </div>
                         @if (isAssistant)
                         {
+                            <div class="border rounded bg-light px-3 py-2 mb-3">
+                                <div class="small text-uppercase text-muted fw-bold mb-2">Sources</div>
+                                @if (message.Sources.Count > 0)
+                                {
+                                    <ul class="mb-0 ps-3 small">
+                                        @foreach (var source in message.Sources)
+                                        {
+                                            <li class="mb-1">
+                                                @if (!string.IsNullOrWhiteSpace(source.FileName))
+                                                {
+                                                    <span>@source.FileName</span>
+                                                }
+                                                else if (!string.IsNullOrWhiteSpace(source.Title))
+                                                {
+                                                    <span>@source.Title</span>
+                                                }
+                                                else if (!string.IsNullOrWhiteSpace(source.Uri))
+                                                {
+                                                    <span>@source.Uri</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>Unknown source</span>
+                                                }
+
+                                                @if (!string.IsNullOrWhiteSpace(source.Quote))
+                                                {
+                                                    <div class="text-muted mt-1">
+                                                        <span class="fw-semibold">Cited text:</span>
+                                                        <div>"@source.Quote"</div>
+                                                    </div>
+                                                }
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+                                else
+                                {
+                                    <div class="small text-muted">No source metadata returned for this answer.</div>
+                                }
+
+                                @if (message.UsedSourcesOutsideBidLibrary)
+                                {
+                                    <div class="text-warning-emphasis small mt-2">
+                                        This answer used sources outside the bid library.
+                                    </div>
+                                }
+                            </div>
+
                             <div class="d-flex justify-content-end gap-3 mt-1">
                                 <small class="text-muted">@ResponseWordCount(message.Content) words</small>
                                 <small class="text-muted">@ResponseCharCountWithSpaces(message.Content) chars (inc. spaces)</small>

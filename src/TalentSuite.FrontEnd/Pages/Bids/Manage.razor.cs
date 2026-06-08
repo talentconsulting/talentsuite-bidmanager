@@ -890,6 +890,8 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
         await SetChatBusyAsync();
         QuestionErrorText = null;
+        ChatMessageResponse? userMessage = null;
+        ChatMessageResponse? assistantMessage = null;
 
         try
         {
@@ -904,14 +906,14 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
             q.IsChatHistoryLoaded = true;
             q.IsChatStreaming = true;
 
-            var userMessage = new ChatMessageResponse
+            userMessage = new ChatMessageResponse
             {
                 Id = Guid.NewGuid().ToString(),
                 Role = "user",
                 Content = submittedQuestion,
                 CreatedAtUtc = DateTimeOffset.UtcNow
             };
-            var assistantMessage = new ChatMessageResponse
+            assistantMessage = new ChatMessageResponse
             {
                 Id = Guid.NewGuid().ToString(),
                 Role = "assistant",
@@ -919,9 +921,9 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
                 CreatedAtUtc = DateTimeOffset.UtcNow.AddMilliseconds(1)
             };
 
-            q.ChatMessages.Add(userMessage);
-            q.ChatMessages.Add(assistantMessage);
-            await ScrollChatToBottomAsync(q.Id);
+            q.ChatMessages.Insert(0, assistantMessage);
+            q.ChatMessages.Insert(1, userMessage);
+            await ScrollChatToTopAsync(q.Id);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, $"api/ai/questions/{Uri.EscapeDataString(q.Id)}/stream")
             {
@@ -966,7 +968,15 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
                     assistantMessage.Content += update.Content;
                     q.ChatResponse = assistantMessage.Content;
                     await InvokeAsync(StateHasChanged);
-                    await ScrollChatToBottomAsync(q.Id);
+                    await ScrollChatToTopAsync(q.Id);
+                    continue;
+                }
+
+                if (string.Equals(update.Type, "completed", StringComparison.OrdinalIgnoreCase))
+                {
+                    assistantMessage.Sources = update.Sources ?? [];
+                    assistantMessage.UsedSourcesOutsideBidLibrary = update.UsedSourcesOutsideBidLibrary;
+                    await InvokeAsync(StateHasChanged);
                     continue;
                 }
 
@@ -982,12 +992,10 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
             QuestionErrorText = ex.Message;
             if (q.ChatMessages.Count > 0)
             {
-                var lastAssistant = q.ChatMessages.LastOrDefault(message => string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase));
-                var lastUser = q.ChatMessages.LastOrDefault(message => string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
-                if (lastAssistant is not null && string.IsNullOrWhiteSpace(lastAssistant.Content))
-                    q.ChatMessages.Remove(lastAssistant);
-                if (lastUser is not null && string.Equals(lastUser.Content, ChatQuestionText, StringComparison.Ordinal))
-                    q.ChatMessages.Remove(lastUser);
+                if (assistantMessage is not null && string.IsNullOrWhiteSpace(assistantMessage.Content))
+                    q.ChatMessages.Remove(assistantMessage);
+                if (userMessage is not null)
+                    q.ChatMessages.Remove(userMessage);
             }
             _ = BannerState.ShowAsync("Could not submit question.");
         }
@@ -1170,12 +1178,17 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         try
         {
             var messages = await ApiClient.GetChatMessagesAsync(BidId, targetQuestion.Id) ?? new List<ChatMessageResponse>();
-            targetQuestion.ChatMessages = messages;
+            targetQuestion.ChatMessages = messages
+                .OrderByDescending(message => message.CreatedAtUtc)
+                .ThenByDescending(message => message.Id, StringComparer.OrdinalIgnoreCase)
+                .ToList();
             targetQuestion.ChatResponse = messages
-                .LastOrDefault(message => string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(message => message.CreatedAtUtc)
+                .ThenByDescending(message => message.Id, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(message => string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
                 ?.Content ?? string.Empty;
             targetQuestion.IsChatHistoryLoaded = true;
-            await ScrollChatToBottomAsync(targetQuestion.Id);
+            await ScrollChatToTopAsync(targetQuestion.Id);
         }
         catch (Exception ex)
         {
@@ -2311,12 +2324,12 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     protected static string GetChatScrollContainerId(string? questionId)
         => $"chat-scroll-{questionId}";
 
-    private async Task ScrollChatToBottomAsync(string? questionId)
+    private async Task ScrollChatToTopAsync(string? questionId)
     {
         if (string.IsNullOrWhiteSpace(questionId))
             return;
 
-        await JS.InvokeVoidAsync("bidManage.scrollContainerToBottom", GetChatScrollContainerId(questionId));
+        await JS.InvokeVoidAsync("bidManage.scrollContainerToTop", GetChatScrollContainerId(questionId));
     }
 
     private void MarkDirty(string source)

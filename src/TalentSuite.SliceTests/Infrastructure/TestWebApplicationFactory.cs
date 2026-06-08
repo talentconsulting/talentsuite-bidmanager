@@ -150,7 +150,17 @@ public sealed class InMemoryAzureOpenAiChatService : IAzureOpenAiChatService
         return Task.FromResult(new ChatAnswerResult
         {
             Response = $"[stubbed-chat] {prompt}",
-            ThreadId = resolvedThreadId
+            ThreadId = resolvedThreadId,
+            Sources =
+            [
+                new ChatSourceReferenceResponse
+                {
+                    Kind = "file",
+                    FileId = "file-stub",
+                    FileName = "stub-bid-library.md",
+                    IsFromBidLibrary = true
+                }
+            ]
         });
     }
 
@@ -187,7 +197,17 @@ public sealed class InMemoryAzureOpenAiChatService : IAzureOpenAiChatService
         yield return new ChatStreamUpdate
         {
             Type = "completed",
-            ThreadId = resolvedThreadId
+            ThreadId = resolvedThreadId,
+            Sources =
+            [
+                new ChatSourceReferenceResponse
+                {
+                    Kind = "file",
+                    FileId = "file-stub",
+                    FileName = "stub-bid-library.md",
+                    IsFromBidLibrary = true
+                }
+            ]
         };
     }
 }
