@@ -92,6 +92,31 @@ public class InMemoryBidRepository : IManageBids
         return await Task.FromResult(_bids.FirstOrDefault(x => x.Key == id).Value);
     }
 
+    public Task UpdateBidOverview(
+        string bidId,
+        string? uniqueReference,
+        string? summary,
+        string? keyInformation,
+        string? budget,
+        string? deadlineForQualifying,
+        string? deadlineForSubmission,
+        string? lengthOfContract,
+        CancellationToken ct = default)
+    {
+        if (!_bids.TryGetValue(bidId, out var bid))
+            throw new KeyNotFoundException($"Bid '{bidId}' was not found.");
+
+        bid.UniqueReference = uniqueReference;
+        bid.Summary = summary;
+        bid.KeyInformation = keyInformation;
+        bid.Budget = budget;
+        bid.DeadlineForQualifying = deadlineForQualifying;
+        bid.DeadlineForSubmission = deadlineForSubmission;
+        bid.LengthOfContract = lengthOfContract;
+
+        return Task.CompletedTask;
+    }
+
     public async Task<SearchDataModel> SearchBids(int page, int pageSize, CancellationToken ct = default)
     {
         var bids = _bids.Values

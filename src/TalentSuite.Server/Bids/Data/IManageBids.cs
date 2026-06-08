@@ -9,6 +9,17 @@ public interface IManageBids
 
     Task<BidDataModel> GetBid(string id, CancellationToken ct = default);
 
+    Task UpdateBidOverview(
+        string bidId,
+        string? uniqueReference,
+        string? summary,
+        string? keyInformation,
+        string? budget,
+        string? deadlineForQualifying,
+        string? deadlineForSubmission,
+        string? lengthOfContract,
+        CancellationToken ct = default);
+
     Task<SearchDataModel> SearchBids(int page, int pageSize, CancellationToken ct = default);
 
     Task<SearchDataModel> SearchBidsForUser(string userId, int page, int pageSize, CancellationToken ct = default);

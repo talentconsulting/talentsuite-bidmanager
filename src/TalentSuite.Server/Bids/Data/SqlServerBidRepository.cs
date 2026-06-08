@@ -99,6 +99,48 @@ public sealed class SqlServerBidRepository : IManageBids
         return payload is null ? null! : Deserialize<BidDataModel>(payload);
     }
 
+    public async Task UpdateBidOverview(
+        string bidId,
+        string? uniqueReference,
+        string? summary,
+        string? keyInformation,
+        string? budget,
+        string? deadlineForQualifying,
+        string? deadlineForSubmission,
+        string? lengthOfContract,
+        CancellationToken ct = default)
+    {
+        await EnsureSchemaAsync(ct);
+
+        var bid = await GetBid(bidId, ct);
+        if (bid is null)
+            throw new KeyNotFoundException($"Bid '{bidId}' was not found.");
+
+        bid.UniqueReference = uniqueReference;
+        bid.Summary = summary;
+        bid.KeyInformation = keyInformation;
+        bid.Budget = budget;
+        bid.DeadlineForQualifying = deadlineForQualifying;
+        bid.DeadlineForSubmission = deadlineForSubmission;
+        bid.LengthOfContract = lengthOfContract;
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE dbo.Bids
+            SET Payload = @Payload
+            WHERE Id = @Id;
+            """,
+            new
+            {
+                Id = bidId,
+                Payload = Serialize(bid)
+            },
+            cancellationToken: ct));
+    }
+
     public async Task<SearchDataModel> SearchBids(int page, int pageSize, CancellationToken ct = default)
     {
         await EnsureSchemaAsync(ct);

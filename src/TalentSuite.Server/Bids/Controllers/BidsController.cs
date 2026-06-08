@@ -108,6 +108,30 @@ public sealed class BidsController : ControllerBase
         return Ok();
     }
 
+    [HttpPatch("{bidId}/overview")]
+    [Authorize(Policy = "RequireBidAccess")]
+    public async Task<IActionResult> UpdateOverview(
+        string bidId,
+        [FromBody] UpdateBidOverviewRequest request,
+        CancellationToken ct)
+    {
+        if (!await _authorizationService.CanManageBidAsync(User, bidId, ct))
+            return Forbid();
+
+        await _bidService.UpdateBidOverview(
+            bidId,
+            request.UniqueReference,
+            request.Summary,
+            request.KeyInformation,
+            request.Budget,
+            request.DeadlineForQualifying,
+            request.DeadlineForSubmission,
+            request.LengthOfContract,
+            ct);
+
+        return Ok();
+    }
+
     [HttpGet("{bidId}/files")]
     [Authorize(Policy = "RequireBidAccess")]
     public async Task<ActionResult<List<BidFileResponse>>> GetFiles(string bidId, CancellationToken ct)
