@@ -242,13 +242,7 @@ var functions = builder.AddProject<TalentSuite_Functions>("talentfunctions")
     .WithEnvironment("GoogleDriveSync__Enabled", googleDriveSyncEnabled)
     .WithEnvironment("GoogleDriveSync__SourceContainerName", googleDriveSyncSourceContainerName)
     .WithEnvironment("GoogleDriveSync__DriveFolderId", googleDriveSyncDriveFolderId)
-    .WaitFor(messaging)
-    .WaitFor(server);
-
-if (local)
-{
-    functions.WithEnvironment("InviteEmail__FrontendBaseUrl", "https://localhost:5173");
-    functions.WithEnvironment(context =>
+    .WithEnvironment(context =>
     {
         if (context.EnvironmentVariables.TryGetValue("ConnectionStrings__messaging", out var value)
             && value is not null)
@@ -261,11 +255,16 @@ if (local)
         {
             context.EnvironmentVariables["AzureWebJobsStorage"] = storageValue;
         }
-    });
+    })
+    .WaitFor(messaging)
+    .WaitFor(server);
+
+if (local)
+{
+    functions.WithEnvironment("InviteEmail__FrontendBaseUrl", "https://localhost:5173");
 }
 
-if (!string.IsNullOrWhiteSpace(builder.Configuration["Parameters:GoogleDriveSyncServiceAccountJsonBase64"]))
-    functions.WithEnvironment("GoogleDriveSync__ServiceAccountJsonBase64", googleDriveSyncServiceAccountJsonBase64);
+functions.WithEnvironment("GoogleDriveSync__ServiceAccountJsonBase64", googleDriveSyncServiceAccountJsonBase64);
 
 //if (!useLocalInfrastructure)
 //{
