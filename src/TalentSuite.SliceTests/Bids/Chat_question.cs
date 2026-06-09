@@ -34,6 +34,9 @@ public class Chat_question
         Assert.That(firstPayload, Is.Not.Null);
         Assert.That(firstPayload!.Response, Is.EqualTo("[stubbed-chat] How should we answer this?"));
         Assert.That(string.IsNullOrWhiteSpace(firstPayload.ThreadId), Is.False);
+        Assert.That(firstPayload.Sources, Has.Count.EqualTo(1));
+        Assert.That(firstPayload.Sources[0].FileName, Is.EqualTo("stub-bid-library.md"));
+        Assert.That(firstPayload.UsedSourcesOutsideBidLibrary, Is.False);
 
         var secondResponse = await client.PostAsJsonAsync(
             "/api/ai/questions/anything",
@@ -50,6 +53,20 @@ public class Chat_question
         Assert.That(secondPayload, Is.Not.Null);
         Assert.That(secondPayload!.Response, Is.EqualTo("[stubbed-chat] And what evidence supports that?"));
         Assert.That(secondPayload.ThreadId, Is.EqualTo(firstPayload.ThreadId));
+
+        var messagesResponse = await client.GetAsync(
+            $"/api/ai/questions/{Uri.EscapeDataString(questionId)}/messages?bidId={Uri.EscapeDataString(bidId)}");
+        Assert.That(messagesResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var messages = await messagesResponse.Content.ReadFromJsonAsync<List<ChatMessageResponse>>();
+        Assert.That(messages, Is.Not.Null);
+
+        var assistantMessage = messages!
+            .LastOrDefault(message => string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase));
+        Assert.That(assistantMessage, Is.Not.Null);
+        Assert.That(assistantMessage!.Sources, Has.Count.EqualTo(1));
+        Assert.That(assistantMessage.Sources[0].FileName, Is.EqualTo("stub-bid-library.md"));
+        Assert.That(assistantMessage.UsedSourcesOutsideBidLibrary, Is.False);
     }
 
     private static void SetIdentityHeaders(HttpClient client, string subject, string username, string roles)
