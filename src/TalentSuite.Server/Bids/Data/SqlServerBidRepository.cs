@@ -148,15 +148,22 @@ public sealed class SqlServerBidRepository : IManageBids
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
 
-        var payloads = (await connection.QueryAsync<string>(
+        using var multi = await connection.QueryMultipleAsync(
             new CommandDefinition(
-                "SELECT Payload FROM dbo.Bids ORDER BY CreatedAtUtc DESC",
-                cancellationToken: ct))).ToList();
+                """
+                SELECT COUNT(*) FROM dbo.Bids;
+                SELECT Payload FROM dbo.Bids
+                ORDER BY CreatedAtUtc DESC
+                OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
+                """,
+                new { Offset = (page - 1) * pageSize, PageSize = pageSize },
+                cancellationToken: ct));
 
-        var bids = payloads.Select(Deserialize<BidDataModel>).ToList();
-        var items = bids
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+        var totalCount = await multi.ReadFirstAsync<int>();
+        var payloads = await multi.ReadAsync<string>();
+
+        var items = payloads
+            .Select(Deserialize<BidDataModel>)
             .Select(b => new SearchItemDataModel
             {
                 Id = b.Id,
@@ -172,7 +179,7 @@ public sealed class SqlServerBidRepository : IManageBids
             CurrentPage = page,
             PageSize = pageSize,
             Items = items,
-            TotalCount = bids.Count
+            TotalCount = totalCount
         };
     }
 
