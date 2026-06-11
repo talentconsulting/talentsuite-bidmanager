@@ -779,7 +779,7 @@ public sealed class SqlServerBidRepository : IManageBids
         await connection.OpenAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
 
-        await UpsertQuestionUserAsync(connection, (SqlTransaction)tx, questionId, userId, role, ct);
+        await UpsertQuestionUserAsync(connection, (SqlTransaction)tx, bidId, questionId, userId, role, ct);
 
         if (role == QuestionUserRole.Owner)
         {
@@ -1106,9 +1106,9 @@ public sealed class SqlServerBidRepository : IManageBids
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
 
-        var assignments = (await connection.QueryAsync<(string QuestionId, int Role)>(new CommandDefinition(
+        var assignments = (await connection.QueryAsync<(string QuestionId, int Role, string BidId)>(new CommandDefinition(
             """
-            SELECT QuestionId, Role
+            SELECT QuestionId, Role, BidId
             FROM dbo.QuestionAssignments
             WHERE UserId = @UserId;
             """,
@@ -1122,8 +1122,18 @@ public sealed class SqlServerBidRepository : IManageBids
             .GroupBy(x => x.QuestionId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(x => x.Key, x => x.First().Role, StringComparer.OrdinalIgnoreCase);
 
+        var bidIds = assignments
+            .Select(x => x.BidId)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (bidIds.Count == 0)
+            return new List<AssignedQuestionDataModel>();
+
         var payloads = (await connection.QueryAsync<string>(new CommandDefinition(
-            "SELECT Payload FROM dbo.Bids",
+            "SELECT Payload FROM dbo.Bids WHERE Id IN @BidIds",
+            new { BidIds = bidIds },
             cancellationToken: ct))).ToList();
 
         var results = new List<AssignedQuestionDataModel>();
@@ -1608,6 +1618,7 @@ public sealed class SqlServerBidRepository : IManageBids
     private async Task UpsertQuestionUserAsync(
         SqlConnection connection,
         SqlTransaction tx,
+        string bidId,
         string questionId,
         string userId,
         QuestionUserRole role,
@@ -1620,16 +1631,16 @@ public sealed class SqlServerBidRepository : IManageBids
             )
             BEGIN
                 UPDATE dbo.QuestionAssignments
-                SET Role = @Role
+                SET Role = @Role, BidId = @BidId
                 WHERE QuestionId = @QuestionId AND UserId = @UserId;
             END
             ELSE
             BEGIN
-                INSERT INTO dbo.QuestionAssignments (QuestionId, UserId, Role)
-                VALUES (@QuestionId, @UserId, @Role);
+                INSERT INTO dbo.QuestionAssignments (QuestionId, UserId, Role, BidId)
+                VALUES (@QuestionId, @UserId, @Role, @BidId);
             END;
             """,
-            new { QuestionId = questionId, UserId = userId, Role = (int)role },
+            new { QuestionId = questionId, UserId = userId, Role = (int)role, BidId = bidId },
             transaction: tx,
             cancellationToken: ct));
     }
@@ -1694,8 +1705,21 @@ public sealed class SqlServerBidRepository : IManageBids
                         QuestionId NVARCHAR(100) NOT NULL,
                         UserId NVARCHAR(100) NOT NULL,
                         Role INT NOT NULL,
+                        BidId NVARCHAR(100) NOT NULL
+                            CONSTRAINT DF_QuestionAssignments_BidId DEFAULT '',
                         CONSTRAINT PK_QuestionAssignments PRIMARY KEY (QuestionId, UserId)
                     );
+                END;
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM sys.columns
+                    WHERE object_id = OBJECT_ID(N'dbo.QuestionAssignments')
+                      AND name = N'BidId'
+                )
+                BEGIN
+                    ALTER TABLE dbo.QuestionAssignments
+                        ADD BidId NVARCHAR(100) NOT NULL
+                            CONSTRAINT DF_QuestionAssignments_BidId DEFAULT '';
                 END;
 
                 IF OBJECT_ID(N'dbo.QuestionDrafts', N'U') IS NULL
@@ -1818,6 +1842,25 @@ public sealed class SqlServerBidRepository : IManageBids
                 END;
                 """,
                 cancellationToken: ct));
+
+            // Backfill BidId on existing QuestionAssignments rows that predate the column addition.
+            // OPENJSON is used so SQL Server parses Bids.Payload at runtime rather than compile-time.
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE qa
+                SET    qa.BidId = b.Id
+                FROM   dbo.QuestionAssignments AS qa
+                CROSS JOIN dbo.Bids AS b
+                WHERE  qa.BidId = ''
+                  AND  EXISTS (
+                           SELECT 1
+                           FROM   OPENJSON(b.Payload, '$.Questions')
+                               WITH (Id NVARCHAR(100) '$.Id') AS q
+                           WHERE  q.Id = qa.QuestionId
+                       );
+                """,
+                cancellationToken: ct));
+
             _schemaInitialized = true;
         }
         finally
