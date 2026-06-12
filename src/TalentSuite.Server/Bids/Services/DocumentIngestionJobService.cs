@@ -11,7 +11,7 @@ namespace TalentSuite.Server.Bids.Services;
 
 public interface IDocumentIngestionJobService
 {
-    string StartJob(
+    Task<string> StartJob(
         string ownerUserKey,
         byte[] fileBytes,
         string fileName,
@@ -47,7 +47,7 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
             _abandonedJobThreshold = _jobTimeout;
     }
 
-    public string StartJob(
+    public async Task<string> StartJob(
         string ownerUserKey,
         byte[] fileBytes,
         string fileName,
@@ -78,7 +78,7 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
         if (!_jobs.TryAdd(jobId, jobState))
             throw new InvalidOperationException("Could not create a new ingestion job.");
 
-        PersistJobStateAsync(jobState, cancellationToken).GetAwaiter().GetResult();
+        await PersistJobStateAsync(jobState, cancellationToken);
 
         // The background job must outlive the request that created it.
         _ = Task.Run(

@@ -61,7 +61,7 @@ public sealed class BidDocumentController : ControllerBase
         if (string.IsNullOrWhiteSpace(userKey))
             return Unauthorized();
 
-        var jobId = _jobService.StartJob(userKey, memory.ToArray(), file.FileName, stage, ct);
+        var jobId = await _jobService.StartJob(userKey, memory.ToArray(), file.FileName, stage, ct);
 
         return Accepted(new DocumentIngestionJobCreatedResponse
         {
