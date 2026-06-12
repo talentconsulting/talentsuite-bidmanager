@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using TalentSuite.Shared.Bids;
 using TalentSuite.Shared.Users;
@@ -128,6 +129,66 @@ public class Update_bid_overview
             });
 
         Assert.That(updateResponse.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+    }
+
+    [Test]
+    public async Task UpdateOverview_Admin_CanClearOverviewFields()
+    {
+        using var factory = new AuthenticatedTestWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        SetIdentityHeaders(client, subject: "admin-seed", username: "admin-seed", roles: "admin,user");
+        var bidId = await CreateBidAsync(client);
+
+        var setValuesResponse = await client.PatchAsJsonAsync(
+            $"/api/bids/{Uri.EscapeDataString(bidId)}/overview",
+            new UpdateBidOverviewRequest
+            {
+                UniqueReference = "REF-100",
+                Summary = "Summary before clear",
+                KeyInformation = "Key info before clear",
+                Budget = "£111,000",
+                DeadlineForQualifying = "2026-02-01",
+                DeadlineForSubmission = "2026-02-15",
+                LengthOfContract = "12 months"
+            });
+        Assert.That(setValuesResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        using var clearPayload = new StringContent(
+            """
+            {
+              "uniqueReference": null,
+              "summary": null,
+              "keyInformation": null,
+              "budget": null,
+              "deadlineForQualifying": null,
+              "deadlineForSubmission": null,
+              "lengthOfContract": null
+            }
+            """,
+            Encoding.UTF8,
+            "application/json");
+
+        var clearResponse = await client.PatchAsync(
+            $"/api/bids/{Uri.EscapeDataString(bidId)}/overview",
+            clearPayload);
+        Assert.That(clearResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var bidResponse = await client.GetAsync($"/api/bids/{Uri.EscapeDataString(bidId)}");
+        Assert.That(bidResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var bid = await bidResponse.Content.ReadFromJsonAsync<BidResponse>();
+        Assert.That(bid, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(bid!.UniqueReference, Is.Null);
+            Assert.That(bid.Summary, Is.Null);
+            Assert.That(bid.KeyInformation, Is.Null);
+            Assert.That(bid.Budget, Is.Null);
+            Assert.That(bid.DeadlineForQualifying, Is.Null);
+            Assert.That(bid.DeadlineForSubmission, Is.Null);
+            Assert.That(bid.LengthOfContract, Is.Null);
+        });
     }
 
     private static void SetIdentityHeaders(HttpClient client, string subject, string username, string roles)
