@@ -278,17 +278,11 @@ public sealed class BidService : IBidService
     public async Task<List<BidUserResponse>> GetBidUsers(string bidId, CancellationToken ct = default)
     {
         var userIds = await _repository.GetBidUsers(bidId, ct);
-        var result = new List<BidUserResponse>(userIds.Count);
-        foreach (var userId in userIds)
-        {
-            var user = await _users.GetUser(userId, ct);
-            result.Add(new BidUserResponse
-            {
-                Id = userId,
-                Name = user?.Name ?? userId
-            });
-        }
-        return result;
+        var allUsers = await _users.GetUsers(ct);
+        var userMap = allUsers.ToDictionary(u => u.Id, u => u.Name);
+        return userIds
+            .Select(id => new BidUserResponse { Id = id, Name = userMap.GetValueOrDefault(id) ?? id })
+            .ToList();
     }
 
     public async Task AddBidUser(string bidId, string userId, CancellationToken ct = default)

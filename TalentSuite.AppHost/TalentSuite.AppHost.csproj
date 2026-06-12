@@ -27,6 +27,7 @@
     <PackageReference Include="Aspire.Hosting.Keycloak" Version="13.4.3-preview.1.26305.13" />
     <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.4.3" />
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.SqlServer.Extensions" Version="13.4.0" />
+    <PackageReference Include="MessagePack" Version="3.1.7" />
   </ItemGroup>
 
 </Project>
