@@ -1320,6 +1320,48 @@ public sealed class SqlServerBidRepository : IManageBids
         };
     }
 
+    public async Task<List<FinalAnswerDataModel>> GetAllFinalAnswers(IEnumerable<string> questionIds, CancellationToken ct = default)
+    {
+        var ids = questionIds.Where(id => !string.IsNullOrWhiteSpace(id)).ToList();
+        if (ids.Count == 0)
+            return new List<FinalAnswerDataModel>();
+
+        await EnsureSchemaAsync(ct);
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        var payloads = await connection.QueryAsync<string>(
+            new CommandDefinition(
+                "SELECT Payload FROM dbo.FinalAnswers WHERE QuestionId IN @QuestionIds",
+                new { QuestionIds = ids },
+                cancellationToken: ct));
+
+        return payloads
+            .Select(payload =>
+            {
+                var answer = Deserialize<FinalAnswerDataModel>(payload);
+                return new FinalAnswerDataModel
+                {
+                    QuestionId = answer.QuestionId,
+                    AnswerText = answer.AnswerText,
+                    ReadyForSubmission = answer.ReadyForSubmission,
+                    Comments = answer.Comments
+                        .Select(c => new DraftCommentDataModel(c.Id)
+                        {
+                            Comment = c.Comment,
+                            IsComplete = c.IsComplete,
+                            UserId = c.UserId,
+                            AuthorName = c.AuthorName,
+                            CreatedAtUtc = c.CreatedAtUtc,
+                            StartIndex = c.StartIndex,
+                            EndIndex = c.EndIndex,
+                            SelectedText = c.SelectedText
+                        })
+                        .ToList()
+                };
+            })
+            .ToList();
+    }
+
     public async Task SetFinalAnswer(string bidId, string questionId, FinalAnswerDataModel answer, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(questionId))

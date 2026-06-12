@@ -909,6 +909,37 @@ public class InMemoryBidRepository : IManageBids
         return Task.FromResult<FinalAnswerDataModel?>(null);
     }
 
+    public Task<List<FinalAnswerDataModel>> GetAllFinalAnswers(IEnumerable<string> questionIds, CancellationToken ct = default)
+    {
+        var result = questionIds
+            .Where(id => !string.IsNullOrWhiteSpace(id) && _finalAnswersForQuestions.ContainsKey(id))
+            .Select(id =>
+            {
+                var answer = _finalAnswersForQuestions[id];
+                return new FinalAnswerDataModel
+                {
+                    QuestionId = answer.QuestionId,
+                    AnswerText = answer.AnswerText,
+                    ReadyForSubmission = answer.ReadyForSubmission,
+                    Comments = answer.Comments
+                        .Select(c => new DraftCommentDataModel(c.Id)
+                        {
+                            Comment = c.Comment,
+                            IsComplete = c.IsComplete,
+                            UserId = c.UserId,
+                            AuthorName = c.AuthorName,
+                            CreatedAtUtc = c.CreatedAtUtc,
+                            StartIndex = c.StartIndex,
+                            EndIndex = c.EndIndex,
+                            SelectedText = c.SelectedText
+                        })
+                        .ToList()
+                };
+            })
+            .ToList();
+        return Task.FromResult(result);
+    }
+
     public Task SetFinalAnswer(string bidId, string questionId, FinalAnswerDataModel answer, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(questionId))

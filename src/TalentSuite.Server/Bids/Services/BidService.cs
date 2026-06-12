@@ -128,6 +128,8 @@ public interface IBidService
 
     Task<FinalAnswerResponse?> GetFinalAnswer(string bidId, string questionId, CancellationToken ct = default);
 
+    Task<Dictionary<string, string>> GetAllFinalAnswerTexts(IEnumerable<string> questionIds, CancellationToken ct = default);
+
     Task SetFinalAnswer(string bidId, string questionId, UpdateFinalAnswerRequest request, CancellationToken ct = default);
 
     Task<DraftCommentResponse> AddRedReviewComment(string bidId, string questionId, AddDraftCommentRequest request, CancellationToken ct = default);
@@ -634,6 +636,12 @@ public sealed class BidService : IBidService
                 })
                 .ToList()
         };
+    }
+
+    public async Task<Dictionary<string, string>> GetAllFinalAnswerTexts(IEnumerable<string> questionIds, CancellationToken ct = default)
+    {
+        var answers = await _repository.GetAllFinalAnswers(questionIds, ct);
+        return answers.ToDictionary(a => a.QuestionId, a => a.AnswerText ?? string.Empty, StringComparer.OrdinalIgnoreCase);
     }
 
     public async Task SetFinalAnswer(string bidId, string questionId, UpdateFinalAnswerRequest request, CancellationToken ct = default)

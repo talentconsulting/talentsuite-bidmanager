@@ -219,13 +219,11 @@ public sealed class BidsController : ControllerBase
     {
         var model = await _bidService.GetBid(bidId, ct);
         var bid = _mapper.ToResponse(model);
-        var finalAnswerTextByQuestionId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var question in bid.Questions.Where(q => !string.IsNullOrWhiteSpace(q.Id)))
-        {
-            var answer = await _bidService.GetFinalAnswer(bidId, question.Id, ct);
-            finalAnswerTextByQuestionId[question.Id] = answer?.AnswerText ?? string.Empty;
-        }
+        var questionIds = bid.Questions
+            .Where(q => !string.IsNullOrWhiteSpace(q.Id))
+            .Select(q => q.Id);
+        var finalAnswerTextByQuestionId = await _bidService.GetAllFinalAnswerTexts(questionIds, ct);
 
         await _azureServiceBusClient.PublishAsync(
             _bidSubmittedEntityName,
