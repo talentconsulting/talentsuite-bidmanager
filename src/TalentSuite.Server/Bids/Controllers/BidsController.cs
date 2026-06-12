@@ -203,6 +203,8 @@ public sealed class BidsController : ControllerBase
                        ?? User.FindFirst(ClaimTypes.Email)?.Value
                        ?? userId;
 
+        var bidModel = await _bidService.GetBid(bidId, ct);
+
         var result = await _bidService.PushBidToLibrary(
             bidId,
             userId,
@@ -210,15 +212,16 @@ public sealed class BidsController : ControllerBase
             DateTime.UtcNow,
             ct);
 
-        await PublishBidLibraryPushEventAsync(bidId, ct);
+        await PublishBidLibraryPushEventAsync(bidId, bidModel, ct);
 
         return Ok(result);
     }
 
-    private async Task PublishBidLibraryPushEventAsync(string bidId, CancellationToken ct)
+    private async Task PublishBidLibraryPushEventAsync(string bidId, BidModel bidModel, CancellationToken ct)
     {
-        var model = await _bidService.GetBid(bidId, ct);
-        var bid = _mapper.ToResponse(model);
+        ArgumentNullException.ThrowIfNull(bidModel);
+
+        var bid = _mapper.ToResponse(bidModel);
 
         var questionIds = bid.Questions
             .Where(q => !string.IsNullOrWhiteSpace(q.Id))
