@@ -95,6 +95,34 @@ public class Authorisation_for_user_role
     }
 
     [Test]
+    public async Task NonAdminUser_NotAssignedToBid_IsForbiddenFromGettingBid()
+    {
+        using var factory = new AuthenticatedTestWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        SetIdentityHeaders(client, subject: "admin-seed", username: "admin-seed", roles: "admin,user");
+        var (bidId, _) = await CreateBidWithOneQuestionAsync(client);
+
+        var createUserResponse = await client.PostAsJsonAsync("/api/users", new CreateUserRequest
+        {
+            Name = "Unassigned User",
+            Email = "unassigned.user@talentconsulting.local",
+            Role = UserRole.User,
+            HasAcceptedRegistration = false
+        });
+        Assert.That(createUserResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+
+        var unassignedUser = await createUserResponse.Content.ReadFromJsonAsync<UserResponse>();
+        Assert.That(unassignedUser, Is.Not.Null);
+
+        SetIdentityHeaders(client, subject: unassignedUser!.Id, username: "unassigned.user", roles: "user");
+
+        var response = await client.GetAsync($"/api/bids/{Uri.EscapeDataString(bidId)}");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+    }
+
+    [Test]
     public async Task AssignedUserRole_BidManager_CanManageAssignedBid_ButCannotPerformGlobalAdminActions()
     {
         using var factory = new AuthenticatedTestWebApplicationFactory();
