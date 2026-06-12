@@ -152,14 +152,12 @@ public sealed class BidsController : ControllerBase
             return BadRequest("No file was provided.");
 
         await using var stream = file.OpenReadStream();
-        using var memory = new MemoryStream();
-        await stream.CopyToAsync(memory, ct);
 
         var uploaded = await _bidService.AddBidFile(
             bidId,
             file.FileName,
             file.ContentType,
-            memory.ToArray(),
+            stream,
             ct);
 
         return Ok(uploaded);

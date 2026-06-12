@@ -49,7 +49,7 @@ public interface IBidService
         string bidId,
         string fileName,
         string contentType,
-        byte[] content,
+        Stream contentStream,
         CancellationToken ct = default);
 
     Task<BidFileContentModel?> GetBidFile(string bidId, string fileId, CancellationToken ct = default);
@@ -318,9 +318,12 @@ public sealed class BidService : IBidService
         string bidId,
         string fileName,
         string contentType,
-        byte[] content,
+        Stream contentStream,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(contentStream);
+
+        var content = await ReadContentAsync(contentStream, ct);
         var added = await _repository.AddBidFile(bidId, fileName, contentType, content, ct);
         return new BidFileResponse
         {
@@ -331,6 +334,34 @@ public sealed class BidService : IBidService
             SizeBytes = added.SizeBytes,
             UploadedAtUtc = added.UploadedAtUtc
         };
+    }
+
+    private static async Task<byte[]> ReadContentAsync(Stream contentStream, CancellationToken ct)
+    {
+        if (contentStream.CanSeek)
+        {
+            var remaining = contentStream.Length - contentStream.Position;
+            if (remaining < 0 || remaining > int.MaxValue)
+                throw new ArgumentException("File content is invalid.", nameof(contentStream));
+
+            var content = GC.AllocateUninitializedArray<byte>((int)remaining);
+            var totalRead = 0;
+
+            while (totalRead < content.Length)
+            {
+                var bytesRead = await contentStream.ReadAsync(content.AsMemory(totalRead), ct);
+                if (bytesRead == 0)
+                    throw new EndOfStreamException("Unexpected end of file content stream.");
+
+                totalRead += bytesRead;
+            }
+
+            return content;
+        }
+
+        using var memory = new MemoryStream();
+        await contentStream.CopyToAsync(memory, ct);
+        return memory.ToArray();
     }
 
     public async Task<BidFileContentModel?> GetBidFile(string bidId, string fileId, CancellationToken ct = default)
