@@ -134,6 +134,8 @@ public interface IManageBids
 
     Task<FinalAnswerDataModel?> GetFinalAnswer(string bidId, string questionId, CancellationToken ct = default);
 
+    Task<List<FinalAnswerDataModel>> GetAllFinalAnswers(IEnumerable<string> questionIds, CancellationToken ct = default);
+
     Task SetFinalAnswer(string bidId, string questionId, FinalAnswerDataModel answer, CancellationToken ct = default);
 
     Task<DraftCommentDataModel> AddRedReviewComment(

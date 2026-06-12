@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using Azure.Storage.Blobs;
-using Azure.Identity;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Drive.v3;
 using Google.Apis.Services;
@@ -252,20 +251,7 @@ public sealed class GoogleDriveSyncService(
                              ?? Environment.GetEnvironmentVariable("BidStorage__blobServiceUri");
         if (!string.IsNullOrWhiteSpace(blobServiceUri))
         {
-            var clientId = configuration["BidStorage:clientId"]
-                           ?? configuration["BidStorage:clientID"]
-                           ?? configuration["BidStorage__clientId"]
-                           ?? configuration["BidStorage__clientID"]
-                           ?? Environment.GetEnvironmentVariable("BidStorage__clientId")
-                           ?? Environment.GetEnvironmentVariable("BidStorage__clientID");
-            var credential = string.IsNullOrWhiteSpace(clientId)
-                ? new DefaultAzureCredential()
-                : new DefaultAzureCredential(new DefaultAzureCredentialOptions
-                {
-                    ManagedIdentityClientId = clientId
-                });
-
-            var blobServiceClient = new BlobServiceClient(new Uri(blobServiceUri), credential);
+            var blobServiceClient = new BlobServiceClient(new Uri(blobServiceUri));
             return blobServiceClient.GetBlobContainerClient(containerName);
         }
 

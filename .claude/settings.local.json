@@ -4,7 +4,10 @@
       "Bash(xargs grep *)",
       "Bash(git fetch *)",
       "Bash(git ls-tree *)",
-      "Bash(dotnet build *)"
+      "Bash(dotnet build *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }

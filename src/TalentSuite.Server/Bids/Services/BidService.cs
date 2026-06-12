@@ -128,6 +128,8 @@ public interface IBidService
 
     Task<FinalAnswerResponse?> GetFinalAnswer(string bidId, string questionId, CancellationToken ct = default);
 
+    Task<Dictionary<string, string>> GetAllFinalAnswerTexts(IEnumerable<string> questionIds, CancellationToken ct = default);
+
     Task SetFinalAnswer(string bidId, string questionId, UpdateFinalAnswerRequest request, CancellationToken ct = default);
 
     Task<DraftCommentResponse> AddRedReviewComment(string bidId, string questionId, AddDraftCommentRequest request, CancellationToken ct = default);
@@ -278,17 +280,11 @@ public sealed class BidService : IBidService
     public async Task<List<BidUserResponse>> GetBidUsers(string bidId, CancellationToken ct = default)
     {
         var userIds = await _repository.GetBidUsers(bidId, ct);
-        var result = new List<BidUserResponse>(userIds.Count);
-        foreach (var userId in userIds)
-        {
-            var user = await _users.GetUser(userId, ct);
-            result.Add(new BidUserResponse
-            {
-                Id = userId,
-                Name = user?.Name ?? userId
-            });
-        }
-        return result;
+        var allUsers = await _users.GetUsers(ct);
+        var userMap = allUsers.ToDictionary(u => u.Id, u => u.Name);
+        return userIds
+            .Select(id => new BidUserResponse { Id = id, Name = userMap.GetValueOrDefault(id) ?? id })
+            .ToList();
     }
 
     public async Task AddBidUser(string bidId, string userId, CancellationToken ct = default)
@@ -640,6 +636,12 @@ public sealed class BidService : IBidService
                 })
                 .ToList()
         };
+    }
+
+    public async Task<Dictionary<string, string>> GetAllFinalAnswerTexts(IEnumerable<string> questionIds, CancellationToken ct = default)
+    {
+        var answers = await _repository.GetAllFinalAnswers(questionIds, ct);
+        return answers.ToDictionary(a => a.QuestionId, a => a.AnswerText ?? string.Empty, StringComparer.OrdinalIgnoreCase);
     }
 
     public async Task SetFinalAnswer(string bidId, string questionId, UpdateFinalAnswerRequest request, CancellationToken ct = default)

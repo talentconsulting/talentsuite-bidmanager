@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Threading;
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.Logging;
@@ -9,15 +10,20 @@ using TalentSuite.Shared.Messaging;
 
 namespace TalentSuite.Server.Messaging;
 
-public sealed class AzureServiceBusClient(
-    IOptions<AzureServiceBusOptions> options,
-    ILogger<AzureServiceBusClient> logger) : IAzureServiceBusClient, IAsyncDisposable
+public sealed class AzureServiceBusClient : IAzureServiceBusClient, IAsyncDisposable
 {
-    private readonly AzureServiceBusOptions _options = options.Value;
-    private readonly ILogger<AzureServiceBusClient> _logger = logger;
+    private readonly AzureServiceBusOptions _options;
+    private readonly ILogger<AzureServiceBusClient> _logger;
     private readonly JsonSerializerOptions _serializerOptions = SerialiserOptions.JsonOptions;
     private readonly ConcurrentDictionary<string, ServiceBusSender> _senders = new(StringComparer.OrdinalIgnoreCase);
-    private ServiceBusClient? _client;
+    private readonly Lazy<ServiceBusClient> _client;
+
+    public AzureServiceBusClient(IOptions<AzureServiceBusOptions> options, ILogger<AzureServiceBusClient> logger)
+    {
+        _options = options.Value;
+        _logger = logger;
+        _client = new Lazy<ServiceBusClient>(() => CreateClient(), LazyThreadSafetyMode.ExecutionAndPublication);
+    }
 
     public Task PublishAsync<T>(string entityName, T payload, CancellationToken ct = default)
         => PublishInternalAsync(entityName, payload, typeof(T), ct);
@@ -62,29 +68,22 @@ public sealed class AzureServiceBusClient(
             await sender.DisposeAsync();
         }
 
-        if (_client is not null)
+        if (_client.IsValueCreated)
         {
-            await _client.DisposeAsync();
+            await _client.Value.DisposeAsync();
         }
     }
 
-    private ServiceBusClient GetOrCreateClient()
-    {
-        if (_client is not null)
-            return _client;
+    private ServiceBusClient GetOrCreateClient() => _client.Value;
 
+    private ServiceBusClient CreateClient()
+    {
         if (!string.IsNullOrWhiteSpace(_options.ConnectionString))
-        {
-            _client = new ServiceBusClient(_options.ConnectionString);
-            return _client;
-        }
+            return new ServiceBusClient(_options.ConnectionString);
 
         var fullyQualifiedNamespace = _options.FullyQualifiedNamespace;
         if (!string.IsNullOrWhiteSpace(fullyQualifiedNamespace))
-        {
-            _client = new ServiceBusClient(fullyQualifiedNamespace, new DefaultAzureCredential());
-            return _client;
-        }
+            return new ServiceBusClient(fullyQualifiedNamespace, new DefaultAzureCredential());
 
         throw new InvalidOperationException(
             $"Azure Service Bus is not configured. Set '{AzureServiceBusOptions.SectionName}:ConnectionString', '{AzureServiceBusOptions.SectionName}:FullyQualifiedNamespace', or the related environment variables.");

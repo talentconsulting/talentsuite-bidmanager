@@ -1,5 +1,4 @@
 using Azure.Storage.Blobs;
-using Azure.Identity;
 using Microsoft.Extensions.Configuration;
 
 namespace TalentSuite.Functions.StoringBids.Storage;
@@ -63,22 +62,7 @@ public sealed class AzureBlobStorageService(IConfiguration configuration) : IAzu
                              ?? configuration["BidStorage__blobServiceUri"]
                              ?? Environment.GetEnvironmentVariable("BidStorage__blobServiceUri");
         if (!string.IsNullOrWhiteSpace(blobServiceUri))
-        {
-            var clientId = configuration["BidStorage:clientId"]
-                           ?? configuration["BidStorage:clientID"]
-                           ?? configuration["BidStorage__clientId"]
-                           ?? configuration["BidStorage__clientID"]
-                           ?? Environment.GetEnvironmentVariable("BidStorage__clientId")
-                           ?? Environment.GetEnvironmentVariable("BidStorage__clientID");
-            var credential = string.IsNullOrWhiteSpace(clientId)
-                ? new DefaultAzureCredential()
-                : new DefaultAzureCredential(new DefaultAzureCredentialOptions
-                {
-                    ManagedIdentityClientId = clientId
-                });
-
-            return new BlobServiceClient(new Uri(blobServiceUri), credential);
-        }
+            return new BlobServiceClient(new Uri(blobServiceUri));
 
         var connectionString = configuration.GetConnectionString(name);
         if (!string.IsNullOrWhiteSpace(connectionString))

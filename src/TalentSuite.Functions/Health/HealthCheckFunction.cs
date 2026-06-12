@@ -1,5 +1,4 @@
 using System.Net;
-using Azure.Identity;
 using Azure.Storage.Blobs;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -103,22 +102,7 @@ public sealed class HealthCheckFunction(
                              ?? configuration["AzureWebJobsStorage__blobServiceUri"]
                              ?? Environment.GetEnvironmentVariable("AzureWebJobsStorage__blobServiceUri");
         if (!string.IsNullOrWhiteSpace(blobServiceUri))
-        {
-            var clientId = configuration["AzureWebJobsStorage:clientId"]
-                           ?? configuration["AzureWebJobsStorage:clientID"]
-                           ?? configuration["AzureWebJobsStorage__clientId"]
-                           ?? configuration["AzureWebJobsStorage__clientID"]
-                           ?? Environment.GetEnvironmentVariable("AzureWebJobsStorage__clientId")
-                           ?? Environment.GetEnvironmentVariable("AzureWebJobsStorage__clientID");
-            var credential = string.IsNullOrWhiteSpace(clientId)
-                ? new DefaultAzureCredential()
-                : new DefaultAzureCredential(new DefaultAzureCredentialOptions
-                {
-                    ManagedIdentityClientId = clientId
-                });
-
-            return new BlobServiceClient(new Uri(blobServiceUri), credential);
-        }
+            return new BlobServiceClient(new Uri(blobServiceUri));
 
         var connectionString = configuration["AzureWebJobsStorage"]
                                ?? Environment.GetEnvironmentVariable("AzureWebJobsStorage");
