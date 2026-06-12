@@ -675,7 +675,7 @@ public sealed class SqlServerBidRepository : IManageBids
     public async Task SetBidStatus(string bidId, BidStatus status, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(bidId))
-            return;
+            throw new ArgumentException("Value cannot be null or whitespace.", nameof(bidId));
 
         await EnsureSchemaAsync(ct);
 
