@@ -88,7 +88,7 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
         return jobId;
     }
 
-    public Task<List<DocumentIngestionJobStatusResponse>> ListJobsAsync(string ownerUserKey, CancellationToken cancellationToken = default)
+    public async Task<List<DocumentIngestionJobStatusResponse>> ListJobsAsync(string ownerUserKey, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerUserKey);
         cancellationToken.ThrowIfCancellationRequested();
@@ -100,17 +100,21 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
 
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IManageBids>();
-        var jobs = repository.GetDocumentIngestionJobsForUser(ownerUserKey, cancellationToken)
-            .GetAwaiter()
-            .GetResult()
-            .Select(job => TryMarkStoredJobAsAbandonedAsync(job, repository, cancellationToken).GetAwaiter().GetResult())
-            .Select(ToResponse)
-            .Where(job => !liveJobs.ContainsKey(job.JobId))
+        var storedJobs = await repository.GetDocumentIngestionJobsForUser(ownerUserKey, cancellationToken);
+
+        var storedResponses = new List<DocumentIngestionJobStatusResponse>(storedJobs.Count);
+        foreach (var job in storedJobs)
+        {
+            var updatedJob = await TryMarkStoredJobAsAbandonedAsync(job, repository, cancellationToken);
+            var response = ToResponse(updatedJob);
+            if (!liveJobs.ContainsKey(response.JobId))
+                storedResponses.Add(response);
+        }
+
+        return storedResponses
             .Concat(liveJobs.Values)
             .OrderByDescending(job => job.CreatedAtUtc)
             .ToList();
-
-        return Task.FromResult(jobs);
     }
 
     public Task<DocumentIngestionJobStatusResponse?> GetJobAsync(string jobId, string ownerUserKey, CancellationToken cancellationToken = default)
