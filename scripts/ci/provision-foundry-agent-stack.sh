@@ -657,7 +657,8 @@ echo "Ensuring Azure AI Document Intelligence custom subdomain $document_intelli
 az cognitiveservices account update \
   --name "$document_intelligence_account_name" \
   --resource-group "$resource_group" \
-  --custom-domain "$document_intelligence_custom_domain" >/dev/null
+  --custom-domain "$document_intelligence_custom_domain" \
+  ${tags_str:+--tags $tags_str} >/dev/null
 
 document_intelligence_endpoint="$(az cognitiveservices account show \
   --name "$document_intelligence_account_name" \
@@ -698,7 +699,8 @@ echo "Ensuring Azure AI Foundry custom subdomain $foundry_account_name"
 az cognitiveservices account update \
   --name "$foundry_account_name" \
   --resource-group "$resource_group" \
-  --custom-domain "$foundry_account_name" >/dev/null
+  --custom-domain "$foundry_account_name" \
+  ${tags_str:+--tags $tags_str} >/dev/null
 
 echo "Ensuring Azure AI Foundry project $foundry_project_name"
 if ! az cognitiveservices account project show \
