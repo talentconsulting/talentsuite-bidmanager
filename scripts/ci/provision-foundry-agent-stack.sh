@@ -164,12 +164,13 @@ resolve_aspire_storage_account() {
 ensure_search_managed_identity() {
   local rg="$1"
   local service_name="$2"
+  local tags="$3"
 
-  az resource update \
-    --resource-group "$rg" \
-    --resource-type "Microsoft.Search/searchServices" \
+  az search service update \
     --name "$service_name" \
-    --set identity.type=SystemAssigned >/dev/null
+    --resource-group "$rg" \
+    --identity-type SystemAssigned \
+    ${tags:+--tags $tags} >/dev/null
 }
 
 search_api() {
@@ -634,6 +635,7 @@ if [ "$auto_index_blob_storage" = "true" ] && [ -z "$search_index_name" ]; then
 fi
 
 az account set --subscription "$subscription"
+subscription_id="$(az account show --query id -o tsv)"
 
 az group create \
   --name "$resource_group" \
@@ -731,6 +733,11 @@ if [ -n "$foundry_model_deployment" ]; then
       --sku-name GlobalStandard \
       --sku-capacity "$foundry_model_capacity" >/dev/null
   fi
+  if [ -n "$tags_str" ]; then
+    az resource tag \
+      --ids "/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.CognitiveServices/accounts/${foundry_account_name}/deployments/${foundry_model_deployment}" \
+      --tags $tags_str >/dev/null
+  fi
 fi
 
 echo "Ensuring chat model deployment $openai_model_deployment on Foundry account $foundry_account_name"
@@ -748,6 +755,11 @@ if ! az cognitiveservices account deployment show \
     --sku-name GlobalStandard \
     --sku-capacity "$openai_model_capacity" >/dev/null
 fi
+if [ -n "$tags_str" ]; then
+  az resource tag \
+    --ids "/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.CognitiveServices/accounts/${foundry_account_name}/deployments/${openai_model_deployment}" \
+    --tags $tags_str >/dev/null
+fi
 
 echo "Ensuring embedding deployment $openai_embedding_deployment on Foundry account $foundry_account_name"
 if ! az cognitiveservices account deployment show \
@@ -763,6 +775,11 @@ if ! az cognitiveservices account deployment show \
     --model-version "$openai_embedding_model_version" \
     --sku-name GlobalStandard \
     --sku-capacity "$openai_embedding_capacity" >/dev/null
+fi
+if [ -n "$tags_str" ]; then
+  az resource tag \
+    --ids "/subscriptions/${subscription_id}/resourceGroups/${resource_group}/providers/Microsoft.CognitiveServices/accounts/${foundry_account_name}/deployments/${openai_embedding_deployment}" \
+    --tags $tags_str >/dev/null
 fi
 
 openai_endpoint="$(az cognitiveservices account show \
@@ -794,7 +811,7 @@ if [ "$auto_index_blob_storage" = "true" ]; then
   require_value "storage account resource id" "$storage_resource_id"
 
   echo "Enabling system-assigned identity on Azure AI Search service $search_service_name"
-  ensure_search_managed_identity "$resource_group" "$search_service_name"
+  ensure_search_managed_identity "$resource_group" "$search_service_name" "$tags_str"
 
   search_principal_id="$(az resource show \
     --resource-group "$resource_group" \
@@ -1237,7 +1254,6 @@ fi
 connection_id=""
 if [ -n "$search_index_name" ]; then
   echo "Ensuring project connection $search_connection_name to Azure AI Search"
-  subscription_id="$(az account show --query id -o tsv)"
   management_token="$(az account get-access-token \
     --resource "https://management.azure.com" \
     --query accessToken -o tsv)"
