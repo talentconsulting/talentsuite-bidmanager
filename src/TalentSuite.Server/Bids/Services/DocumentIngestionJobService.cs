@@ -11,7 +11,7 @@ namespace TalentSuite.Server.Bids.Services;
 
 public interface IDocumentIngestionJobService
 {
-    string StartJob(
+    Task<string> StartJob(
         string ownerUserKey,
         byte[] fileBytes,
         string fileName,
@@ -47,7 +47,7 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
             _abandonedJobThreshold = _jobTimeout;
     }
 
-    public string StartJob(
+    public async Task<string> StartJob(
         string ownerUserKey,
         byte[] fileBytes,
         string fileName,
@@ -78,7 +78,7 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
         if (!_jobs.TryAdd(jobId, jobState))
             throw new InvalidOperationException("Could not create a new ingestion job.");
 
-        PersistJobStateAsync(jobState, cancellationToken).GetAwaiter().GetResult();
+        await PersistJobStateAsync(jobState, cancellationToken);
 
         // The background job must outlive the request that created it.
         _ = Task.Run(
@@ -88,7 +88,7 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
         return jobId;
     }
 
-    public Task<List<DocumentIngestionJobStatusResponse>> ListJobsAsync(string ownerUserKey, CancellationToken cancellationToken = default)
+    public async Task<List<DocumentIngestionJobStatusResponse>> ListJobsAsync(string ownerUserKey, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerUserKey);
         cancellationToken.ThrowIfCancellationRequested();
@@ -100,17 +100,21 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
 
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IManageBids>();
-        var jobs = repository.GetDocumentIngestionJobsForUser(ownerUserKey, cancellationToken)
-            .GetAwaiter()
-            .GetResult()
-            .Select(job => TryMarkStoredJobAsAbandonedAsync(job, repository, cancellationToken).GetAwaiter().GetResult())
-            .Select(ToResponse)
-            .Where(job => !liveJobs.ContainsKey(job.JobId))
+        var storedJobs = await repository.GetDocumentIngestionJobsForUser(ownerUserKey, cancellationToken);
+
+        var storedResponses = new List<DocumentIngestionJobStatusResponse>(storedJobs.Count);
+        foreach (var job in storedJobs)
+        {
+            var updatedJob = await TryMarkStoredJobAsAbandonedAsync(job, repository, cancellationToken);
+            var response = ToResponse(updatedJob);
+            if (!liveJobs.ContainsKey(response.JobId))
+                storedResponses.Add(response);
+        }
+
+        return storedResponses
             .Concat(liveJobs.Values)
             .OrderByDescending(job => job.CreatedAtUtc)
             .ToList();
-
-        return Task.FromResult(jobs);
     }
 
     public Task<DocumentIngestionJobStatusResponse?> GetJobAsync(string jobId, string ownerUserKey, CancellationToken cancellationToken = default)

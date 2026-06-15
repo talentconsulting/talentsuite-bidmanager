@@ -152,14 +152,12 @@ public sealed class BidsController : ControllerBase
             return BadRequest("No file was provided.");
 
         await using var stream = file.OpenReadStream();
-        using var memory = new MemoryStream();
-        await stream.CopyToAsync(memory, ct);
 
         var uploaded = await _bidService.AddBidFile(
             bidId,
             file.FileName,
             file.ContentType,
-            memory.ToArray(),
+            stream,
             ct);
 
         return Ok(uploaded);
@@ -203,6 +201,8 @@ public sealed class BidsController : ControllerBase
                        ?? User.FindFirst(ClaimTypes.Email)?.Value
                        ?? userId;
 
+        var bidModel = await _bidService.GetBid(bidId, ct);
+
         var result = await _bidService.PushBidToLibrary(
             bidId,
             userId,
@@ -210,15 +210,16 @@ public sealed class BidsController : ControllerBase
             DateTime.UtcNow,
             ct);
 
-        await PublishBidLibraryPushEventAsync(bidId, ct);
+        await PublishBidLibraryPushEventAsync(bidId, bidModel, ct);
 
         return Ok(result);
     }
 
-    private async Task PublishBidLibraryPushEventAsync(string bidId, CancellationToken ct)
+    private async Task PublishBidLibraryPushEventAsync(string bidId, BidModel bidModel, CancellationToken ct)
     {
-        var model = await _bidService.GetBid(bidId, ct);
-        var bid = _mapper.ToResponse(model);
+        ArgumentNullException.ThrowIfNull(bidModel);
+
+        var bid = _mapper.ToResponse(bidModel);
 
         var questionIds = bid.Questions
             .Where(q => !string.IsNullOrWhiteSpace(q.Id))
