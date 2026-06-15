@@ -12,8 +12,6 @@ Usage:
     [--document-intelligence-account <name>] \
     [--document-intelligence-sku <sku>] \
     [--document-intelligence-custom-domain <name>] \
-    [--openai-account <name>] \
-    [--openai-sku <sku>] \
     [--openai-model-deployment <deployment-name>] \
     [--openai-model-name <model-name>] \
     [--openai-model-version <version>] \
@@ -49,7 +47,6 @@ Usage:
 Purpose:
   Creates the Azure AI resources this application needs:
   - Azure AI Document Intelligence resource
-  - Azure OpenAI account and model deployment
   - Azure AI Search service
   - Azure AI Foundry resource
   - Azure AI Foundry project
@@ -75,7 +72,7 @@ command -v jq >/dev/null || (echo "jq is required." && exit 1)
 
 search_api_version="2025-09-01"
 search_knowledge_api_version="2025-11-01-preview"
-foundry_assistant_api_version="v1"
+foundry_assistant_api_version="2025-05-01"
 
 require_value() {
   local name="$1"
@@ -390,8 +387,6 @@ location=""
 document_intelligence_account_name=""
 document_intelligence_sku=""
 document_intelligence_custom_domain=""
-openai_account_name=""
-openai_sku=""
 openai_model_deployment=""
 openai_model_name=""
 openai_model_version=""
@@ -448,14 +443,6 @@ while [ $# -gt 0 ]; do
       ;;
     --document-intelligence-custom-domain)
       document_intelligence_custom_domain="${2:-}"
-      shift 2
-      ;;
-    --openai-account)
-      openai_account_name="${2:-}"
-      shift 2
-      ;;
-    --openai-sku)
-      openai_sku="${2:-}"
       shift 2
       ;;
     --openai-model-deployment)
@@ -601,8 +588,6 @@ require_value "--location" "$location"
 document_intelligence_account_name="${document_intelligence_account_name:-docintelligence-talentsuite-dev}"
 document_intelligence_sku="${document_intelligence_sku:-S0}"
 document_intelligence_custom_domain="${document_intelligence_custom_domain:-$document_intelligence_account_name}"
-openai_account_name="${openai_account_name:-$(slugify "${resource_group}-openai" | cut -c1-24)}"
-openai_sku="${openai_sku:-S0}"
 openai_model_deployment="${openai_model_deployment:-gpt-4-1}"
 openai_model_name="${openai_model_name:-gpt-4.1}"
 openai_model_version="${openai_model_version:-2025-04-14}"
@@ -660,64 +645,12 @@ az cognitiveservices account update \
   --resource-group "$resource_group" \
   --custom-domain "$document_intelligence_custom_domain" >/dev/null
 
-echo "Ensuring Azure OpenAI account $openai_account_name"
-if ! az cognitiveservices account show --name "$openai_account_name" --resource-group "$resource_group" >/dev/null 2>&1; then
-  az cognitiveservices account create \
-    --name "$openai_account_name" \
-    --resource-group "$resource_group" \
-    --location "$location" \
-    --kind OpenAI \
-    --sku "$openai_sku" \
-    --custom-domain "$openai_account_name" \
-    --yes >/dev/null
-fi
-
-echo "Ensuring Azure OpenAI deployment $openai_model_deployment"
-if ! az cognitiveservices account deployment show \
-  --name "$openai_account_name" \
-  --resource-group "$resource_group" \
-  --deployment-name "$openai_model_deployment" >/dev/null 2>&1; then
-  az cognitiveservices account deployment create \
-    --name "$openai_account_name" \
-    --resource-group "$resource_group" \
-    --deployment-name "$openai_model_deployment" \
-    --model-format OpenAI \
-    --model-name "$openai_model_name" \
-    --model-version "$openai_model_version" \
-    --sku-name GlobalStandard \
-    --sku-capacity "$openai_model_capacity" >/dev/null
-fi
-
-echo "Ensuring Azure OpenAI embedding deployment $openai_embedding_deployment"
-if ! az cognitiveservices account deployment show \
-  --name "$openai_account_name" \
-  --resource-group "$resource_group" \
-  --deployment-name "$openai_embedding_deployment" >/dev/null 2>&1; then
-  az cognitiveservices account deployment create \
-    --name "$openai_account_name" \
-    --resource-group "$resource_group" \
-    --deployment-name "$openai_embedding_deployment" \
-    --model-format OpenAI \
-    --model-name "$openai_embedding_model_name" \
-    --model-version "$openai_embedding_model_version" \
-    --sku-name GlobalStandard \
-    --sku-capacity "$openai_embedding_capacity" >/dev/null
-fi
-
 document_intelligence_endpoint="$(az cognitiveservices account show \
   --name "$document_intelligence_account_name" \
   --resource-group "$resource_group" \
   --query properties.endpoint -o tsv)"
 document_intelligence_api_key="$(az cognitiveservices account keys list \
   --name "$document_intelligence_account_name" \
-  --resource-group "$resource_group" \
-  --query key1 -o tsv)"
-openai_endpoint="$(az cognitiveservices account show \
-  --name "$openai_account_name" \
-  --resource-group "$resource_group" \
-  --query properties.endpoint -o tsv)"
-openai_api_key="$(az cognitiveservices account keys list \
-  --name "$openai_account_name" \
   --resource-group "$resource_group" \
   --query key1 -o tsv)"
 
@@ -780,6 +713,47 @@ if [ -n "$foundry_model_deployment" ]; then
       --sku-capacity "$foundry_model_capacity" >/dev/null
   fi
 fi
+
+echo "Ensuring chat model deployment $openai_model_deployment on Foundry account $foundry_account_name"
+if ! az cognitiveservices account deployment show \
+  --name "$foundry_account_name" \
+  --resource-group "$resource_group" \
+  --deployment-name "$openai_model_deployment" >/dev/null 2>&1; then
+  az cognitiveservices account deployment create \
+    --name "$foundry_account_name" \
+    --resource-group "$resource_group" \
+    --deployment-name "$openai_model_deployment" \
+    --model-format OpenAI \
+    --model-name "$openai_model_name" \
+    --model-version "$openai_model_version" \
+    --sku-name GlobalStandard \
+    --sku-capacity "$openai_model_capacity" >/dev/null
+fi
+
+echo "Ensuring embedding deployment $openai_embedding_deployment on Foundry account $foundry_account_name"
+if ! az cognitiveservices account deployment show \
+  --name "$foundry_account_name" \
+  --resource-group "$resource_group" \
+  --deployment-name "$openai_embedding_deployment" >/dev/null 2>&1; then
+  az cognitiveservices account deployment create \
+    --name "$foundry_account_name" \
+    --resource-group "$resource_group" \
+    --deployment-name "$openai_embedding_deployment" \
+    --model-format OpenAI \
+    --model-name "$openai_embedding_model_name" \
+    --model-version "$openai_embedding_model_version" \
+    --sku-name GlobalStandard \
+    --sku-capacity "$openai_embedding_capacity" >/dev/null
+fi
+
+openai_endpoint="$(az cognitiveservices account show \
+  --name "$foundry_account_name" \
+  --resource-group "$resource_group" \
+  --query properties.endpoint -o tsv)"
+openai_api_key="$(az cognitiveservices account keys list \
+  --name "$foundry_account_name" \
+  --resource-group "$resource_group" \
+  --query key1 -o tsv)"
 
 search_endpoint="https://${search_service_name}.search.windows.net"
 search_primary_key="$(az search admin-key show \
@@ -1377,9 +1351,6 @@ echo "Created resources:"
 echo "  Azure AI Document Intelligence account: $document_intelligence_account_name"
 echo "  Azure AI Document Intelligence custom domain: $document_intelligence_custom_domain"
 echo "  Azure AI Document Intelligence endpoint: $document_intelligence_endpoint"
-echo "  Azure OpenAI account: $openai_account_name"
-echo "  Azure OpenAI endpoint: $openai_endpoint"
-echo "  Azure OpenAI deployment: $openai_model_deployment"
 echo "  Azure AI Search service: $search_service_name"
 echo "  Azure AI Search endpoint: $search_endpoint"
 if [ -n "$storage_account_name" ]; then
@@ -1387,10 +1358,13 @@ if [ -n "$storage_account_name" ]; then
   echo "  Aspire blob storage container: $storage_container_name"
 fi
 echo "  Azure AI Foundry account: $foundry_account_name"
+echo "  Azure AI Foundry account endpoint: $openai_endpoint"
 echo "  Azure AI Foundry project: $foundry_project_name"
 if [ -n "$foundry_model_deployment" ]; then
   echo "  Azure AI Foundry model deployment: $foundry_model_deployment"
 fi
+echo "  Chat model deployment: $openai_model_deployment"
+echo "  Embedding deployment: $openai_embedding_deployment"
 echo "  Azure AI Foundry project endpoint: $foundry_project_endpoint"
 if [ -n "$connection_id" ]; then
   echo "  Azure AI Search project connection: $search_connection_name"
