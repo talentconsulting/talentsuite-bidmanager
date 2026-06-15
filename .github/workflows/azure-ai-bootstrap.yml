@@ -111,6 +111,7 @@ jobs:
             echo "BOOTSTRAP_SEARCH_INDEX_NAME=$search_index_name"
             echo "BOOTSTRAP_STORAGE_ACCOUNT=$storage_account"
             echo "BOOTSTRAP_STORAGE_CONTAINER=$storage_container"
+            echo "BOOTSTRAP_TAGS=owner=rgparkings project=talentsuite azd-env-name=${env_suffix}"
           } >> "$GITHUB_ENV"
 
       - name: Bootstrap Azure AI resources
@@ -140,6 +141,7 @@ jobs:
             --search-index-name "${BOOTSTRAP_SEARCH_INDEX_NAME}"
             --storage-container "${BOOTSTRAP_STORAGE_CONTAINER}"
             --auto-index-blob-storage
+            --tags "${BOOTSTRAP_TAGS}"
             --emit-azd-env
           )
 

@@ -42,6 +42,7 @@ Usage:
     [--auto-index-blob-storage] \
     [--agent-name <name>] \
     [--agent-instructions <text>] \
+    [--tags <key=value ...>] \
     [--emit-azd-env]
 
 Purpose:
@@ -90,6 +91,12 @@ slugify() {
 
 json_escape() {
   printf '%s' "$1" | jq -Rs .
+}
+
+tags_to_json() {
+  local t="${1:-}"
+  [ -n "$t" ] || { printf '{}'; return; }
+  printf '%s' "$t" | tr ' ' '\n' | jq -Rn '[inputs | split("=") | {(.[0]): .[1]}] | add // {}'
 }
 
 retry_command() {
@@ -417,6 +424,7 @@ knowledge_base_name=""
 auto_index_blob_storage="false"
 agent_name=""
 agent_instructions=""
+tags_str=""
 emit_azd_env="false"
 
 while [ $# -gt 0 ]; do
@@ -565,6 +573,10 @@ while [ $# -gt 0 ]; do
       agent_instructions="${2:-}"
       shift 2
       ;;
+    --tags)
+      tags_str="${2:-}"
+      shift 2
+      ;;
     --emit-azd-env)
       emit_azd_env="true"
       shift 1
@@ -625,7 +637,8 @@ az account set --subscription "$subscription"
 
 az group create \
   --name "$resource_group" \
-  --location "$location" >/dev/null
+  --location "$location" \
+  ${tags_str:+--tags $tags_str} >/dev/null
 
 echo "Ensuring Azure AI Document Intelligence account $document_intelligence_account_name"
 if ! az cognitiveservices account show --name "$document_intelligence_account_name" --resource-group "$resource_group" >/dev/null 2>&1; then
@@ -636,7 +649,8 @@ if ! az cognitiveservices account show --name "$document_intelligence_account_na
     --kind FormRecognizer \
     --sku "$document_intelligence_sku" \
     --custom-domain "$document_intelligence_custom_domain" \
-    --yes >/dev/null
+    --yes \
+    ${tags_str:+--tags $tags_str} >/dev/null
 fi
 
 echo "Ensuring Azure AI Document Intelligence custom subdomain $document_intelligence_custom_domain"
@@ -662,7 +676,8 @@ if ! az search service show --name "$search_service_name" --resource-group "$res
     --location "$location" \
     --sku "$search_sku" \
     --replica-count "$search_replicas" \
-    --partition-count "$search_partitions" >/dev/null
+    --partition-count "$search_partitions" \
+    ${tags_str:+--tags $tags_str} >/dev/null
 fi
 
 echo "Ensuring Azure AI Foundry account $foundry_account_name"
@@ -674,7 +689,8 @@ if ! az cognitiveservices account show --name "$foundry_account_name" --resource
     --kind AIServices \
     --sku S0 \
     --allow-project-management \
-    --yes >/dev/null
+    --yes \
+    ${tags_str:+--tags $tags_str} >/dev/null
 
 fi
 
@@ -693,7 +709,8 @@ if ! az cognitiveservices account project show \
     --name "$foundry_account_name" \
     --resource-group "$resource_group" \
     --project-name "$foundry_project_name" \
-    --location "$location" >/dev/null
+    --location "$location" \
+    ${tags_str:+--tags $tags_str} >/dev/null
 fi
 
 if [ -n "$foundry_model_deployment" ]; then
@@ -1227,7 +1244,9 @@ if [ -n "$search_index_name" ]; then
   connection_payload="$(jq -n \
     --arg target "$search_endpoint" \
     --arg searchKey "$search_primary_key" \
+    --argjson tags "$(tags_to_json "$tags_str")" \
     '{
+      tags: $tags,
       properties: {
         category: "CognitiveSearch",
         target: $target,
