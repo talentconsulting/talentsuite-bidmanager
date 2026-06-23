@@ -333,11 +333,63 @@ else
     // var logAnalytics = builder.AddAzureLogAnalyticsWorkspace("log-analytics");
     // var appInsights = builder.AddAzureApplicationInsights("talentbidmanager-insights")
     //     .WithLogAnalyticsWorkspace(logAnalytics);
-    // // Azure Container Registry
-    // var acr = builder.AddAzureContainerRegistry("TalentSuite-ACR")
-    //                  .WithPurgeTask("0 1 * * *", ago: TimeSpan.FromDays(7), keep: 5);
+
+    var acr = builder.AddAzureContainerRegistry($"aca-{azureEnvironmentName}-acr");
+    acr.ConfigureInfrastructure(infra =>
+    {
+        foreach (var registry in infra.GetProvisionableResources().OfType<ContainerRegistryService>())
+        {
+            registry.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+        }
+    });
+
+    var privateAcr = builder.AddAzureContainerRegistry($"aca-{azureEnvironmentName}-private-acr");
+    privateAcr.ConfigureInfrastructure(infra =>
+    {
+        foreach (var registry in infra.GetProvisionableResources().OfType<ContainerRegistryService>())
+        {
+            registry.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+        }
+    });
+
+    var keycloakIdentity = builder.AddAzureUserAssignedIdentity("keycloak-identity");
+    keycloakIdentity.ConfigureInfrastructure(infra =>
+    {
+        foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+        {
+            identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+        }
+    });
+
+    var serverIdentity = builder.AddAzureUserAssignedIdentity("talentserver-identity");
+    serverIdentity.ConfigureInfrastructure(infra =>
+    {
+        foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+        {
+            identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+        }
+    });
+
+    var functionsIdentity = builder.AddAzureUserAssignedIdentity("talentfunctions-identity");
+    functionsIdentity.ConfigureInfrastructure(infra =>
+    {
+        foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+        {
+            identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+        }
+    });
+
+    var grafanaIdentity = builder.AddAzureUserAssignedIdentity("grafana-identity");
+    grafanaIdentity.ConfigureInfrastructure(infra =>
+    {
+        foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+        {
+            identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+        }
+    });
 
     defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment($"aca-{azureEnvironmentName}")
+        .WithAzureContainerRegistry(acr)
         .ConfigureInfrastructure(infra =>
         {
             foreach (var env in infra.GetProvisionableResources().OfType<ContainerAppManagedEnvironment>())
@@ -399,8 +451,8 @@ else
         .WithParameter("sqlServerName", msSql.Resource.NameOutputReference);
 
     privateAcaEnvironment = builder.AddAzureContainerAppEnvironment($"aca-{azureEnvironmentName}-private")
+        .WithAzureContainerRegistry(privateAcr)
         //.WithAzureLogAnalyticsWorkspace(logAnalytics)
-        //.WithAzureContainerRegistry(acr)
         .ConfigureInfrastructure(infra =>
         {
             var containerAppEnvironment = infra.GetProvisionableResources()
@@ -427,6 +479,7 @@ else
         .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", keycloakPassword)
         .WithEnvironment("KC_DB_PASSWORD", keycloakDbPassword)
         .WithComputeEnvironment(privateAcaEnvironment)
+        .WithAppIdentity(keycloakIdentity)
         .WaitFor(keycloakDb);
 
     server
@@ -445,6 +498,7 @@ else
         .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", keycloakPassword)
         .WithEnvironment("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
         .WithComputeEnvironment(privateAcaEnvironment)
+        .WithAppIdentity(serverIdentity)
         .PublishAsAzureContainerApp((infra, app) =>
         {
             app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
@@ -459,6 +513,7 @@ else
     functions
         .WithEnvironment("APPLICATIONINSIGHTS_CONNECTION_STRING", appInsights.GetOutput("applicationInsightsConnectionString"))
         .WithComputeEnvironment(privateAcaEnvironment!)
+        .WithAppIdentity(functionsIdentity)
         .PublishAsAzureContainerApp((infra, app) =>
         {
             app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
@@ -536,6 +591,7 @@ else
                 $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token";
         })
         .WithComputeEnvironment(privateAcaEnvironment!)
+        .WithAppIdentity(grafanaIdentity)
         .PublishAsAzureContainerApp((infra, app) =>
         {
             app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
