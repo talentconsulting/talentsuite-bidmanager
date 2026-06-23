@@ -333,9 +333,6 @@ else
     // var logAnalytics = builder.AddAzureLogAnalyticsWorkspace("log-analytics");
     // var appInsights = builder.AddAzureApplicationInsights("talentbidmanager-insights")
     //     .WithLogAnalyticsWorkspace(logAnalytics);
-    // // Azure Container Registry
-    // var acr = builder.AddAzureContainerRegistry("TalentSuite-ACR")
-    //                  .WithPurgeTask("0 1 * * *", ago: TimeSpan.FromDays(7), keep: 5);
 
     defaultAcaEnvironment = builder.AddAzureContainerAppEnvironment($"aca-{azureEnvironmentName}")
         .ConfigureInfrastructure(infra =>
@@ -400,7 +397,6 @@ else
 
     privateAcaEnvironment = builder.AddAzureContainerAppEnvironment($"aca-{azureEnvironmentName}-private")
         //.WithAzureLogAnalyticsWorkspace(logAnalytics)
-        //.WithAzureContainerRegistry(acr)
         .ConfigureInfrastructure(infra =>
         {
             var containerAppEnvironment = infra.GetProvisionableResources()
@@ -418,6 +414,18 @@ else
             foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
                 identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
         });
+
+    foreach (var registryResource in builder.Resources.OfType<AzureContainerRegistryResource>())
+    {
+        builder.CreateResourceBuilder(registryResource).ConfigureInfrastructure(infra =>
+        {
+            foreach (var registry in infra.GetProvisionableResources().OfType<ContainerRegistryService>())
+            {
+                registry.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            }
+        });
+    }
+
     // var appDb = sql.AddDatabase("talentconsultingdb");
     // var keycloakDb = sql.AddDatabase("keycloakdb");
 
