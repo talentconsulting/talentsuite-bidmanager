@@ -153,18 +153,20 @@ namespace TalentSuite.ServiceDefaults
 
         public static WebApplication MapDefaultEndpoints(this WebApplication app)
         {
-            // Adding health checks endpoints to applications in non-development environments has security implications.
-            // See https://aka.ms/dotnet/aspire/healthchecks for details before enabling these endpoints in non-development environments.
+            // /alive (liveness) is always mapped — container orchestration (ACA, Kubernetes) needs it in all
+            // environments to know whether to restart an instance. It only checks the "live" tag, so it never
+            // exposes sensitive dependency details.
+            app.MapHealthChecks(AlivenessEndpointPath, new HealthCheckOptions
+            {
+                Predicate = r => r.Tags.Contains("live")
+            });
+
+            // /health (readiness) is dev-only via this middleware because the Server exposes a richer
+            // controller-based readiness endpoint that works in all environments. See HealthController.
+            // See https://aka.ms/dotnet/aspire/healthchecks for security considerations.
             if (app.Environment.IsDevelopment())
             {
-                // All health checks must pass for app to be considered ready to accept traffic after starting
                 app.MapHealthChecks(HealthEndpointPath);
-
-                // Only health checks tagged with the "live" tag must pass for app to be considered alive
-                app.MapHealthChecks(AlivenessEndpointPath, new HealthCheckOptions
-                {
-                    Predicate = r => r.Tags.Contains("live")
-                });
             }
 
             return app;
