@@ -2,6 +2,9 @@ using Projects;
 using Azure.Provisioning.ServiceBus;
 using Azure.Provisioning.Sql;
 using Azure.Provisioning.AppContainers;
+using Azure.Provisioning.ContainerRegistry;
+using Azure.Provisioning.Resources;
+using Azure.Provisioning.Roles;
 using Azure.Provisioning.Storage;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Azure;
@@ -166,9 +169,13 @@ else
         .WithArgs("--proxy-headers=xforwarded")
         .WithArgs("--http-enabled=true")
         .WithArgs("--hostname-strict=false")
-        .PublishAsAzureContainerApp((_, app) =>
+        .PublishAsAzureContainerApp((infra, app) =>
         {
             app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+            {
+                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            }
             app.Template ??= new();
             app.Template.Scale ??= new ContainerAppScale();
             app.Template.Scale.MinReplicas = 1;
@@ -335,6 +342,12 @@ else
         {
             foreach (var env in infra.GetProvisionableResources().OfType<ContainerAppManagedEnvironment>())
                 env.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+
+            foreach (var acr in infra.GetProvisionableResources().OfType<ContainerRegistryService>())
+                acr.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+
+            foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
         });
     var appInsights = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
 
@@ -363,6 +376,11 @@ else
                 database.MinCapacity = 0.5;
                 database.UseFreeLimit = false;
                 database.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            }
+
+            foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+            {
+                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
             }
 
             if (server.Administrators is { } admin)
@@ -399,6 +417,12 @@ else
                     .AsProvisioningParameter(infra, "acaInfrastructureSubnetId")
             };
             containerAppEnvironment.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+
+            foreach (var acr in infra.GetProvisionableResources().OfType<ContainerRegistryService>())
+                acr.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+
+            foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
         });
     // var appDb = sql.AddDatabase("talentconsultingdb");
     // var keycloakDb = sql.AddDatabase("keycloakdb");
@@ -427,9 +451,13 @@ else
         .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", keycloakPassword)
         .WithEnvironment("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
         .WithComputeEnvironment(privateAcaEnvironment)
-        .PublishAsAzureContainerApp((_, app) =>
+        .PublishAsAzureContainerApp((infra, app) =>
         {
             app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+            {
+                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            }
         })
         .WaitFor(appDb)
         .WaitFor(keycloak);
@@ -437,9 +465,13 @@ else
     functions
         .WithEnvironment("APPLICATIONINSIGHTS_CONNECTION_STRING", appInsights.GetOutput("applicationInsightsConnectionString"))
         .WithComputeEnvironment(privateAcaEnvironment!)
-        .PublishAsAzureContainerApp((_, app) =>
+        .PublishAsAzureContainerApp((infra, app) =>
         {
             app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+            {
+                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            }
         });
 }
 
@@ -510,9 +542,13 @@ else
                 $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token";
         })
         .WithComputeEnvironment(privateAcaEnvironment!)
-        .PublishAsAzureContainerApp((_, app) =>
+        .PublishAsAzureContainerApp((infra, app) =>
         {
             app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+            {
+                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            }
             app.Configuration ??= new();
             app.Configuration.Ingress ??= new();
             app.Configuration.Ingress.External = true;
