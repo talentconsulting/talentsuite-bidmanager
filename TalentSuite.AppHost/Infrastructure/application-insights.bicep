@@ -7,6 +7,11 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   name: appInsightsName
   location: location
   kind: 'web'
+  tags: {
+    project: 'talentsuite'
+    Owner: 'rgparkins'
+    'azd-env-name': environmentName
+  }
   properties: {
     Application_Type: 'web'
     Flow_Type: 'Bluefield'

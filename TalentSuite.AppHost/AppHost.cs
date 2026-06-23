@@ -168,7 +168,7 @@ else
         .WithArgs("--hostname-strict=false")
         .PublishAsAzureContainerApp((_, app) =>
         {
-            app.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
+            app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
             app.Template ??= new();
             app.Template.Scale ??= new ContainerAppScale();
             app.Template.Scale.MinReplicas = 1;
@@ -179,7 +179,7 @@ var messaging = builder.AddAzureServiceBus("messaging")
     .ConfigureInfrastructure(infra =>
     {
         foreach (var ns in infra.GetProvisionableResources().OfType<ServiceBusNamespace>())
-            ns.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
+            ns.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
     });
 if (local)
 {
@@ -193,7 +193,7 @@ var storage = builder.AddAzureStorage("storage")
     .ConfigureInfrastructure(infra =>
     {
         foreach (var sa in infra.GetProvisionableResources().OfType<StorageAccount>())
-            sa.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
+            sa.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
     });
 if (local)
 {
@@ -207,7 +207,7 @@ var bidStorage = local
         .ConfigureInfrastructure(infra =>
         {
             foreach (var sa in infra.GetProvisionableResources().OfType<StorageAccount>())
-                sa.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
+                sa.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
         })
         .AddBlobs("bidstorage");
 
@@ -334,9 +334,9 @@ else
         .ConfigureInfrastructure(infra =>
         {
             foreach (var env in infra.GetProvisionableResources().OfType<ContainerAppManagedEnvironment>())
-                env.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
+                env.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
         });
-    _ = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
+    var appInsights = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
 
     
 
@@ -347,7 +347,7 @@ else
             var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
             server.AdministratorLogin = "sqladm72";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
-            server.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
+            server.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
 
             foreach (var database in infra.GetProvisionableResources().OfType<SqlDatabase>())
             {
@@ -362,7 +362,7 @@ else
                 database.AutoPauseDelay = 60;
                 database.MinCapacity = 0.5;
                 database.UseFreeLimit = false;
-                database.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
+                database.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
             }
 
             if (server.Administrators is { } admin)
@@ -398,7 +398,7 @@ else
                     .GetOutput("acaInfrastructureSubnetId")
                     .AsProvisioningParameter(infra, "acaInfrastructureSubnetId")
             };
-            containerAppEnvironment.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
+            containerAppEnvironment.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
         });
     // var appDb = sql.AddDatabase("talentconsultingdb");
     // var keycloakDb = sql.AddDatabase("keycloakdb");
@@ -415,7 +415,7 @@ else
         .WithReference(appDb)
         .WithReference(keycloak)
         .WithReference(messaging)
-        //.WithReference(appInsights)
+        .WithEnvironment("APPLICATIONINSIGHTS_CONNECTION_STRING", appInsights.GetOutput("applicationInsightsConnectionString"))
         .WithEnvironment("AUTHENTICATION_ENABLED", authenticationEnabled)
         .WithEnvironment("USE_IN_MEMORY_DATA", useInMemoryData)
         .WithEnvironment("AzureServiceBus__InviteUserEntityName", "invite-user")
@@ -429,17 +429,17 @@ else
         .WithComputeEnvironment(privateAcaEnvironment)
         .PublishAsAzureContainerApp((_, app) =>
         {
-            app.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
+            app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
         })
         .WaitFor(appDb)
         .WaitFor(keycloak);
 
     functions
-        //.WithReference(appInsights)
+        .WithEnvironment("APPLICATIONINSIGHTS_CONNECTION_STRING", appInsights.GetOutput("applicationInsightsConnectionString"))
         .WithComputeEnvironment(privateAcaEnvironment!)
         .PublishAsAzureContainerApp((_, app) =>
         {
-            app.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
+            app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
         });
 }
 
@@ -512,7 +512,7 @@ else
         .WithComputeEnvironment(privateAcaEnvironment!)
         .PublishAsAzureContainerApp((_, app) =>
         {
-            app.Tags = new BicepDictionary<string> { ["project"] = "TalentSuite", ["owner"] = "rgparkins" };
+            app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
             app.Configuration ??= new();
             app.Configuration.Ingress ??= new();
             app.Configuration.Ingress.External = true;

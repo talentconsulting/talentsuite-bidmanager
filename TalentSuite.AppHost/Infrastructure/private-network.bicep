@@ -14,6 +14,11 @@ var privateDnsZoneName = 'privatelink.database.windows.net'
 resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   name: vnetName
   location: location
+  tags: {
+    project: 'talentsuite'
+    Owner: 'rgparkins'
+    'azd-env-name': normalizedEnvironmentName
+  }
   properties: {
     addressSpace: {
       addressPrefixes: [
@@ -60,6 +65,11 @@ resource privateEndpointSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-0
 resource sqlPrivateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
   name: privateDnsZoneName
   location: 'global'
+  tags: {
+    project: 'talentsuite'
+    Owner: 'rgparkins'
+    'azd-env-name': normalizedEnvironmentName
+  }
 }
 
 resource sqlPrivateDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
@@ -77,6 +87,11 @@ resource sqlPrivateDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLink
 resource sqlPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-07-01' = {
   name: 'pep-sql-talentsuite-${normalizedEnvironmentName}'
   location: location
+  tags: {
+    project: 'talentsuite'
+    Owner: 'rgparkins'
+    'azd-env-name': normalizedEnvironmentName
+  }
   properties: {
     subnet: {
       id: privateEndpointSubnet.id

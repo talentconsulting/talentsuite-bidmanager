@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "5884101773241339348"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    }
+  },
+  "variables": {
+    "environmentName": "[replace(resourceGroup().name, 'rg-', '')]",
+    "appInsightsName": "[format('appi-talentsuite-{0}', variables('environmentName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('appInsightsName')]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "tags": {
+        "project": "talentsuite",
+        "Owner": "rgparkins",
+        "azd-env-name": "[variables('environmentName')]"
+      },
+      "properties": {
+        "Application_Type": "web",
+        "Flow_Type": "Bluefield",
+        "IngestionMode": "ApplicationInsights"
+      }
+    }
+  ],
+  "outputs": {
+    "applicationInsightsConnectionString": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
+    }
+  }
+}

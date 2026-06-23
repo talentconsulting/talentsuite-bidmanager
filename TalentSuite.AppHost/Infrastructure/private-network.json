@@ -1,0 +1,164 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "17535586832894523846"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "sqlServerName": {
+      "type": "string"
+    },
+    "environmentName": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().name]"
+    }
+  },
+  "variables": {
+    "normalizedEnvironmentName": "[if(startsWith(parameters('environmentName'), 'rg-'), substring(parameters('environmentName'), 3), parameters('environmentName'))]",
+    "vnetName": "[format('vnet-talentsuite-{0}', variables('normalizedEnvironmentName'))]",
+    "acaSubnetName": "aca-infrastructure",
+    "privateEndpointSubnetName": "private-endpoints",
+    "privateDnsZoneName": "privatelink.database.windows.net"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2024-05-01",
+      "name": "[variables('vnetName')]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "project": "talentsuite",
+        "Owner": "rgparkins",
+        "azd-env-name": "[variables('normalizedEnvironmentName')]"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.42.0.0/16"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', variables('vnetName'), variables('acaSubnetName'))]",
+      "properties": {
+        "addressPrefix": "10.42.0.0/23",
+        "delegations": [
+          {
+            "name": "aca-delegation",
+            "properties": {
+              "serviceName": "Microsoft.App/environments"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', variables('vnetName'), variables('privateEndpointSubnetName'))]",
+      "properties": {
+        "addressPrefix": "10.42.2.0/24",
+        "privateEndpointNetworkPolicies": "Disabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "[variables('privateDnsZoneName')]",
+      "location": "global",
+      "tags": {
+        "project": "talentsuite",
+        "Owner": "rgparkins",
+        "azd-env-name": "[variables('normalizedEnvironmentName')]"
+      }
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', variables('privateDnsZoneName'), format('{0}-link', variables('vnetName')))]",
+      "location": "global",
+      "properties": {
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+        },
+        "registrationEnabled": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2024-07-01",
+      "name": "[format('pep-sql-talentsuite-{0}', variables('normalizedEnvironmentName'))]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "project": "talentsuite",
+        "Owner": "rgparkins",
+        "azd-env-name": "[variables('normalizedEnvironmentName')]"
+      },
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('privateEndpointSubnetName'))]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "sqlServerConnection",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))]",
+              "groupIds": [
+                "sqlServer"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('privateEndpointSubnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2024-07-01",
+      "name": "[format('{0}/{1}', format('pep-sql-talentsuite-{0}', variables('normalizedEnvironmentName')), 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "sqlServerDnsZone",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneName'))]",
+        "[resourceId('Microsoft.Network/privateEndpoints', format('pep-sql-talentsuite-{0}', variables('normalizedEnvironmentName')))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "acaInfrastructureSubnetId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('acaSubnetName'))]"
+    }
+  }
+}
