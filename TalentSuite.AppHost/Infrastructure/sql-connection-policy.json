@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "14200461659266261340"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "sqlServerName": {
+      "type": "string"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Sql/servers/connectionPolicies",
+      "apiVersion": "2023-08-01",
+      "name": "[format('{0}/default', parameters('sqlServerName'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "connectionType": "Proxy"
+      }
+    }
+  ]
+}

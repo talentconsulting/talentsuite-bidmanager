@@ -14,13 +14,14 @@ require_env() {
 require_env "AZURE_ENV_NAME"
 
 resource_group="rg-${AZURE_ENV_NAME}"
-project_tag="TalentSuite"
+project_tag="talentsuite"
 owner_tag="rgparkins"
+env_tag="${AZURE_ENV_NAME}"
 
 echo "Applying tags to resource group: $resource_group"
 az group update \
   --name "$resource_group" \
-  --set "tags.project=$project_tag" "tags.owner=$owner_tag" \
+  --set "tags.project=$project_tag" "tags.Owner=$owner_tag" "tags.azd-env-name=$env_tag" \
   >/dev/null
 
 resource_ids="$(az resource list \
@@ -38,7 +39,7 @@ while IFS= read -r resource_id; do
   if ! az tag update \
     --resource-id "$resource_id" \
     --operation Merge \
-    --tags project="$project_tag" owner="$owner_tag" \
+    --tags project="$project_tag" Owner="$owner_tag" azd-env-name="$env_tag" \
     >/dev/null 2>&1; then
     echo "Warning: could not tag resource '$resource_id'; continuing."
   fi
