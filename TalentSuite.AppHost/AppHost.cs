@@ -343,9 +343,6 @@ else
             foreach (var env in infra.GetProvisionableResources().OfType<ContainerAppManagedEnvironment>())
                 env.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
 
-            foreach (var acr in infra.GetProvisionableResources().OfType<ContainerRegistryService>())
-                acr.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
-
             foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
                 identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
         });
@@ -417,9 +414,6 @@ else
                     .AsProvisioningParameter(infra, "acaInfrastructureSubnetId")
             };
             containerAppEnvironment.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
-
-            foreach (var acr in infra.GetProvisionableResources().OfType<ContainerRegistryService>())
-                acr.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
 
             foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
                 identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
