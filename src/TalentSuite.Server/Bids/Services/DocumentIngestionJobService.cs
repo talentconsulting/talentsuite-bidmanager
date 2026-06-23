@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using TalentSuite.Server.Bids.Data;
@@ -22,24 +23,28 @@ public interface IDocumentIngestionJobService
     Task<DocumentIngestionJobStatusResponse?> GetJobAsync(string jobId, string ownerUserKey, CancellationToken cancellationToken = default);
 }
 
-public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
+public sealed partial class DocumentIngestionJobService : IDocumentIngestionJobService
 {
+    private static readonly ActivitySource IngestionSource = new("TalentSuite.DocumentIngestion");
     private static readonly TimeSpan StreamPollInterval = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan DefaultJobTimeout = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan DefaultAbandonedJobThreshold = TimeSpan.FromMinutes(10);
     private readonly ConcurrentDictionary<string, IngestionJobState> _jobs = new(StringComparer.OrdinalIgnoreCase);
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DocumentIngestionJobService> _logger;
+    private readonly TalentSuiteMetrics _metrics;
     private readonly TimeSpan _jobTimeout;
     private readonly TimeSpan _abandonedJobThreshold;
 
     public DocumentIngestionJobService(
         IServiceScopeFactory scopeFactory,
         IConfiguration configuration,
-        ILogger<DocumentIngestionJobService> logger)
+        ILogger<DocumentIngestionJobService> logger,
+        TalentSuiteMetrics metrics)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _metrics = metrics;
         _jobTimeout = GetConfiguredDuration(configuration, "DocumentIngestion:JobTimeout", DefaultJobTimeout);
         _abandonedJobThreshold = GetConfiguredDuration(configuration, "DocumentIngestion:AbandonedJobThreshold", DefaultAbandonedJobThreshold);
 
@@ -77,6 +82,8 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
 
         if (!_jobs.TryAdd(jobId, jobState))
             throw new InvalidOperationException("Could not create a new ingestion job.");
+
+        _metrics.JobStarted();
 
         PersistJobStateAsync(jobState, cancellationToken).GetAwaiter().GetResult();
 
@@ -195,6 +202,11 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
         BidStage stage,
         CancellationToken cancellationToken)
     {
+        using var activity = IngestionSource.StartActivity("DocumentIngestion.Process", ActivityKind.Internal);
+        activity?.SetTag("job.id", jobId);
+        activity?.SetTag("job.filename", fileName);
+        activity?.SetTag("job.stage", stage.ToString());
+        var sw = Stopwatch.StartNew();
         try
         {
             Publish(jobState, new DocumentIngestionJobEventResponse
@@ -220,12 +232,14 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
                 });
             });
 
+            activity?.AddEvent(new ActivityEvent("ExtractionStarted"));
             var parsed = await ingestionService.ExtractDocumentAsync(
                 stream,
                 fileName,
                 stage,
                 progress,
                 timeoutCts.Token);
+            activity?.AddEvent(new ActivityEvent("ExtractionCompleted"));
 
             var response = parsed is null ? null : mapper.ToResponse(parsed);
             Publish(jobState, new DocumentIngestionJobEventResponse
@@ -236,6 +250,9 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
                 Result = response
             });
             await PersistJobStateAsync(jobState, cancellationToken);
+            activity?.SetStatus(ActivityStatusCode.Ok);
+            _metrics.JobFinished(sw.Elapsed.TotalSeconds, succeeded: true);
+            LogJobCompleted(jobId, fileName, sw.Elapsed.TotalSeconds);
         }
         catch (Exception ex)
         {
@@ -243,7 +260,14 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
                 ? $"Document ingestion exceeded the {_jobTimeout.TotalMinutes:0} minute time limit. Please retry with a smaller document or contact support if the issue persists."
                 : ex.Message;
 
-            _logger.LogError(ex, "Document ingestion job {JobId} failed.", jobId);
+            LogJobFailed(ex, jobId, fileName);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
+            {
+                ["exception.type"] = ex.GetType().FullName,
+                ["exception.message"] = ex.Message,
+                ["exception.stacktrace"] = ex.ToString()
+            }));
             Publish(jobState, new DocumentIngestionJobEventResponse
             {
                 Status = "failed",
@@ -251,6 +275,7 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
                 IsError = true
             });
             await PersistJobStateAsync(jobState, cancellationToken);
+            _metrics.JobFinished(sw.Elapsed.TotalSeconds, succeeded: false);
         }
         finally
         {
@@ -370,7 +395,7 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to persist document ingestion job {JobId}.", jobState.JobId);
+            LogPersistFailed(ex, jobState.JobId);
         }
     }
 
@@ -401,6 +426,15 @@ public sealed class DocumentIngestionJobService : IDocumentIngestionJobService
             ? parsed
             : fallback;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Document ingestion job {JobId} completed for file '{FileName}' in {DurationSeconds:0.##}s")]
+    private partial void LogJobCompleted(string jobId, string fileName, double durationSeconds);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Document ingestion job {JobId} failed for file '{FileName}'")]
+    private partial void LogJobFailed(Exception exception, string jobId, string fileName);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to persist document ingestion job {JobId}")]
+    private partial void LogPersistFailed(Exception exception, string jobId);
 
     private sealed class IngestionJobState
     {

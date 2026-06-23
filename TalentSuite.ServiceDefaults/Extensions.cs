@@ -60,11 +60,13 @@ namespace TalentSuite.ServiceDefaults
                     metrics.AddAspNetCoreInstrumentation()
                         .AddHttpClientInstrumentation()
                         .AddRuntimeInstrumentation()
-                        .AddSqlClientInstrumentation();
+                        .AddSqlClientInstrumentation()
+                        .AddMeter("TalentSuite.Server");
                 })
                 .WithTracing(tracing =>
                 {
                     tracing.AddSource(builder.Environment.ApplicationName)
+                        .AddSource("TalentSuite.DocumentIngestion")
                         .AddAspNetCoreInstrumentation(tracing =>
                             // Exclude health check requests from tracing
                             tracing.Filter = context =>

@@ -15,6 +15,7 @@ public static class Extensions
 
     public static void AddBidServices(this IServiceCollection services, IConfiguration? configuration = null)
     {
+        services.AddSingleton<TalentSuiteMetrics>();
         services.AddScoped<IBidService, BidService>();
         services.AddSingleton<IDocumentIngestionJobService, DocumentIngestionJobService>();
 

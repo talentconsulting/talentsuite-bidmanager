@@ -21,6 +21,8 @@ dotnet run --project TalentSuite.AppHost
 
 ## Architecture
 
+**Pattern:** Feature-folder / Vertical Slice Architecture — each feature (Bids, Users, Health, Messaging, Security) owns its controllers, services, data, and models in one folder. No shared base classes crossing feature boundaries.
+
 This is an Aspire-orchestrated .NET 10 multi-service application for managing tender bids with AI-assisted document ingestion.
 
 ### Services
@@ -60,3 +62,73 @@ Blazor WASM SPA. Key page groups under `Pages/Bids/`: bid list (`Home.razor`), d
 ### Local vs Azure mode
 
 `AppHost.cs` checks `TALENTSUITE_INFRA_MODE`. When `azure`, it provisions Azure Container Apps, Azure SQL, Service Bus, Storage, OpenAI, AI Foundry, and AI Search. Locally it uses Docker containers (SQL Server, Keycloak, Service Bus Emulator, Azurite). The `azure.yaml` manifest drives `azd` deployments; separate GitHub Actions workflows handle individual service deploys (`azure-talentserver.yml`, `azure-frontend.yml`, `azure-functions.yml`).
+
+## Coding Conventions
+
+### Naming
+
+- **Controllers:** `{Feature}Controller` — `[ApiController]`, `[Authorize]`, explicit HTTP verb attributes
+- **Services:** `I{Feature}Service` interface + sealed `{Feature}Service` implementation
+- **Repositories:** `I{Feature}Repository` interface (e.g. `IManageBids`) + `SqlServer{Feature}Repository` implementation; `InMemory{Feature}Repository` for tests
+- **Data models:** `{Entity}DataModel` (DB layer); `{Entity}Model` (service layer); `{Entity}Response` / `{Entity}Request` (HTTP DTOs)
+- **Mappers:** `{Feature}Mapper` — Riok.Mapperly source-generated, registered as DI dependency
+- **Test files:** `{Feature}_{scenario}.cs` (e.g. `Bid_files.cs`, `Draft_management.cs`), inherit from `SliceTestBase`
+
+### Method signatures
+
+- All async methods take `CancellationToken ct` as the last parameter (non-optional in controllers, `ct = default` in services)
+- Throw `InvalidOperationException` / `KeyNotFoundException` for domain errors; no custom exception hierarchy
+
+### DI Registration
+
+- Each feature registers via an extension method in `Program.cs`: `builder.AddBidServices()`, `builder.AddUserServices()`, etc.
+- Mappers registered as singleton, repositories and services as scoped
+
+### Data Access (Dapper)
+
+- Use `CommandDefinition` for all parameterized queries
+- JSON columns (`NVARCHAR(MAX)`) with SQL Server JSON functions (`JSON_MODIFY`, `OPENJSON`, `JSON_VALUE`)
+- Upsert with `IF EXISTS … BEGIN UPDATE … ELSE INSERT … END`
+- Schema initialization once per process via `SemaphoreSlim` lock in `EnsureSchemaAsync()`
+- Explicit transaction management: `await connection.BeginTransactionAsync()`
+
+### Tests (NUnit + `Microsoft.AspNetCore.Mvc.Testing`)
+
+- Arrange-Act-Assert with HTTP calls against `TestWebApplicationFactory` (no mocks)
+- Assert HTTP status codes: `Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK))`
+- Extract common setup into helper methods (`CreateBidAsync()`, etc.)
+- No Testcontainers — use the in-memory repository swap in `TestWebApplicationFactory`
+
+## Tech Stack Summary
+
+| Concern | Choice |
+| ------- | ------ |
+| Runtime | .NET 10 |
+| API | ASP.NET Core 10 Web API (controllers) |
+| Frontend | Blazor WebAssembly |
+| Background | Azure Functions v4 |
+| Orchestration | .NET Aspire 13 |
+| Data | Dapper + SQL Server |
+| Auth | JWT Bearer + Keycloak OIDC |
+| Messaging | Azure Service Bus (direct SDK) |
+| AI | Azure AI Document Intelligence, Azure OpenAI, Azure AI Foundry |
+| Mapping | Riok.Mapperly (source-generated) |
+| Observability | OpenTelemetry → Azure Monitor |
+| Testing | NUnit + `Microsoft.AspNetCore.Mvc.Testing` |
+
+## dotnet-claude-kit Skills
+
+Use these skills when working in this codebase:
+
+| Task | Skill |
+| ---- | ----- |
+| Add a new feature end-to-end | `/feature-dev` |
+| Review a PR or recent changes | `/code-review` |
+| Fix a broken build | `/build-fix` |
+| Check code quality & health | `/health-check` (after init) |
+| Security audit | `/security-scan` |
+| Logging improvements | `/serilog` or `/opentelemetry` |
+| Resilience / retry policies | `/resilience` |
+| New API endpoint | `/minimal-api` or `/openapi` |
+| Architecture decisions | `/architecture-advisor` |
+| Scaffold a new feature slice | `/vertical-slice` |

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "dotnet-claude-kit": {
+      "command": "dotnet",
+      "args": [
+        "tool",
+        "run",
+        "cwm-roslyn-navigator",
+        "--",
+        "--solution",
+        "TalentSuite.sln"
+      ]
+    }
+  }
+}
