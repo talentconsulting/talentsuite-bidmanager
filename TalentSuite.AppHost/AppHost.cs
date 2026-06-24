@@ -6,9 +6,11 @@ using Azure.Provisioning.ContainerRegistry;
 using Azure.Provisioning.Resources;
 using Azure.Provisioning.Roles;
 using Azure.Provisioning.Storage;
+using Azure.Provisioning.OperationalInsights;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Azure;
 using Aspire.Hosting.Azure.AppContainers;
+using Aspire.Hosting.Publishing;
 using Azure.Core;
 using Azure.Provisioning;
 using Azure.Provisioning.Expressions;
@@ -79,6 +81,119 @@ static BicepDictionary<string> ToBicepTags(IReadOnlyDictionary<string, string> t
     }
 
     return bicepTags;
+}
+
+static string GetLeadingWhitespace(string line)
+{
+    var index = 0;
+    while (index < line.Length && char.IsWhiteSpace(line[index]))
+    {
+        index++;
+    }
+
+    return line.Substring(0, index);
+}
+
+static bool IsBareBicepIdentifier(string value)
+{
+    if (string.IsNullOrEmpty(value))
+    {
+        return false;
+    }
+
+    var first = value[0];
+    if (!(char.IsLetter(first) || first == '_'))
+    {
+        return false;
+    }
+
+    for (var i = 1; i < value.Length; i++)
+    {
+        var ch = value[i];
+        if (!(char.IsLetterOrDigit(ch) || ch == '_'))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static string EscapeBicepString(string value) => value.Replace("'", "''", StringComparison.Ordinal);
+
+static string FormatBicepTagKey(string key)
+{
+    if (IsBareBicepIdentifier(key))
+    {
+        return key;
+    }
+
+    return $"'{EscapeBicepString(key)}'";
+}
+
+static string AddTagsToDeploymentScripts(string bicepContent, IReadOnlyDictionary<string, string> tags)
+{
+    var newline = bicepContent.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+    var lines = bicepContent.Split(["\r\n", "\n"], StringSplitOptions.None).ToList();
+    var changed = false;
+
+    for (var i = 0; i < lines.Count; i++)
+    {
+        if (!lines[i].Contains("Microsoft.Resources/deploymentScripts@", StringComparison.Ordinal))
+        {
+            continue;
+        }
+
+        var resourceIndent = GetLeadingWhitespace(lines[i]);
+        var hasTags = false;
+        var identityIndex = -1;
+
+        for (var j = i + 1; j < lines.Count; j++)
+        {
+            var trimmed = lines[j].TrimStart();
+            var lineIndent = GetLeadingWhitespace(lines[j]);
+
+            if (trimmed.StartsWith("resource ", StringComparison.Ordinal) && lineIndent.Length <= resourceIndent.Length)
+            {
+                break;
+            }
+
+            if (trimmed.StartsWith("tags:", StringComparison.Ordinal))
+            {
+                hasTags = true;
+            }
+
+            if (trimmed.StartsWith("identity:", StringComparison.Ordinal))
+            {
+                identityIndex = j;
+                break;
+            }
+        }
+
+        if (hasTags || identityIndex < 0)
+        {
+            continue;
+        }
+
+        var indent = GetLeadingWhitespace(lines[identityIndex]);
+        var insertion = new List<string>
+        {
+            $"{indent}tags: {{"
+        };
+
+        foreach (var tag in tags)
+        {
+            insertion.Add($"{indent}  {FormatBicepTagKey(tag.Key)}: '{EscapeBicepString(tag.Value)}'");
+        }
+
+        insertion.Add($"{indent}}}");
+
+        lines.InsertRange(identityIndex, insertion);
+        changed = true;
+        i = identityIndex + insertion.Count;
+    }
+
+    return changed ? string.Join(newline, lines) : bicepContent;
 }
 
 var keycloakPassword = builder.AddParameter(
@@ -440,6 +555,11 @@ else
                 identity.Tags = ToBicepTags(resourceTags);
             }
 
+            foreach (var script in infra.GetProvisionableResources().OfType<ArmDeploymentScript>())
+            {
+                script.Tags = ToBicepTags(resourceTags);
+            }
+
             if (server.Administrators is { } admin)
             {
                 server.Administrators = new ServerExternalAdministrator
@@ -651,6 +771,64 @@ else
 
 if (!local)
 {
+    // Ensure generated deployment scripts and log analytics workspaces also receive
+    // policy-compliant tags.
+    builder.Eventing.Subscribe<BeforeStartEvent>((evt, ct) =>
+    {
+        foreach (var resource in evt.Model.Resources.OfType<AzureProvisioningResource>())
+        {
+            builder.CreateResourceBuilder(resource).ConfigureInfrastructure(infra =>
+            {
+                foreach (var script in infra.GetProvisionableResources().OfType<ArmDeploymentScript>())
+                {
+                    script.Tags = ToBicepTags(resourceTags);
+                }
+
+                foreach (var workspace in infra.GetProvisionableResources().OfType<OperationalInsightsWorkspace>())
+                {
+                    workspace.Tags = ToBicepTags(resourceTags);
+                }
+            });
+        }
+
+        return Task.CompletedTask;
+    });
+
+    builder.OnAfterPublish(async (evt, ct) =>
+    {
+        var candidateRoots = new[]
+        {
+            Path.Combine(Directory.GetCurrentDirectory(), "TalentSuite.AppHost", "aspire-output"),
+            Path.Combine(Directory.GetCurrentDirectory(), "aspire-output")
+        };
+
+        string? outputRoot = null;
+        foreach (var candidate in candidateRoots)
+        {
+            if (Directory.Exists(candidate))
+            {
+                outputRoot = candidate;
+                break;
+            }
+        }
+
+        if (outputRoot is null)
+        {
+            return;
+        }
+
+        foreach (var bicepFile in Directory.EnumerateFiles(outputRoot, "*-roles-sql.bicep", SearchOption.AllDirectories))
+        {
+            var content = await File.ReadAllTextAsync(bicepFile, ct);
+            var updated = AddTagsToDeploymentScripts(content, resourceTags);
+
+            if (!string.Equals(content, updated, StringComparison.Ordinal))
+            {
+                await File.WriteAllTextAsync(bicepFile, updated, ct);
+            }
+        }
+    });
+
     server.WithRoleAssignments(messaging, ServiceBusBuiltInRole.AzureServiceBusDataSender);
     functions.WithRoleAssignments(messaging, ServiceBusBuiltInRole.AzureServiceBusDataReceiver);
 }
