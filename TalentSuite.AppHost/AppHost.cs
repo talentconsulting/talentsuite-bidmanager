@@ -12,11 +12,74 @@ using Aspire.Hosting.Azure.AppContainers;
 using Azure.Core;
 using Azure.Provisioning;
 using Azure.Provisioning.Expressions;
+using System.Text.Json;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
 var local = builder.ExecutionContext.IsRunMode;
 var azureEnvironmentName = builder.Configuration["AZURE_ENV_NAME"] ?? "dev";
+var resourceTags = BuildResourceTags(
+    azureEnvironmentName,
+    builder.Configuration["AZD_INFRA_TAGS"],
+    builder.Configuration["AZURE_RESOURCE_TAGS"]);
+
+static Dictionary<string, string> BuildResourceTags(
+    string environmentName,
+    string? azdInfraTagsJson,
+    string? azureResourceTagsJson)
+{
+    var tags = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["project"] = "talentsuite",
+        ["Owner"] = "rgparkins",
+        ["azd-env-name"] = environmentName
+    };
+
+    MergeTagsFromJson(azdInfraTagsJson, tags);
+    MergeTagsFromJson(azureResourceTagsJson, tags);
+
+    return tags;
+}
+
+static void MergeTagsFromJson(string? rawJson, IDictionary<string, string> tags)
+{
+    if (string.IsNullOrWhiteSpace(rawJson))
+    {
+        return;
+    }
+
+    try
+    {
+        using var document = JsonDocument.Parse(rawJson);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        foreach (var property in document.RootElement.EnumerateObject())
+        {
+            if (property.Value.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False)
+            {
+                tags[property.Name] = property.Value.ToString();
+            }
+        }
+    }
+    catch (JsonException)
+    {
+        // Keep default tags if an override payload is malformed.
+    }
+}
+
+static BicepDictionary<string> ToBicepTags(IReadOnlyDictionary<string, string> tags)
+{
+    var bicepTags = new BicepDictionary<string>();
+    foreach (var pair in tags)
+    {
+        bicepTags[pair.Key] = pair.Value;
+    }
+
+    return bicepTags;
+}
 
 var keycloakPassword = builder.AddParameter(
                                 "KeycloakPassword",
@@ -171,10 +234,10 @@ else
         .WithArgs("--hostname-strict=false")
         .PublishAsAzureContainerApp((infra, app) =>
         {
-            app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            app.Tags = ToBicepTags(resourceTags);
             foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
             {
-                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+                identity.Tags = ToBicepTags(resourceTags);
             }
             app.Template ??= new();
             app.Template.Scale ??= new ContainerAppScale();
@@ -186,7 +249,7 @@ var messaging = builder.AddAzureServiceBus("messaging")
     .ConfigureInfrastructure(infra =>
     {
         foreach (var ns in infra.GetProvisionableResources().OfType<ServiceBusNamespace>())
-            ns.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            ns.Tags = ToBicepTags(resourceTags);
     });
 if (local)
 {
@@ -200,7 +263,7 @@ var storage = builder.AddAzureStorage("storage")
     .ConfigureInfrastructure(infra =>
     {
         foreach (var sa in infra.GetProvisionableResources().OfType<StorageAccount>())
-            sa.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            sa.Tags = ToBicepTags(resourceTags);
     });
 if (local)
 {
@@ -214,7 +277,7 @@ var bidStorage = local
         .ConfigureInfrastructure(infra =>
         {
             foreach (var sa in infra.GetProvisionableResources().OfType<StorageAccount>())
-                sa.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+                sa.Tags = ToBicepTags(resourceTags);
         })
         .AddBlobs("bidstorage");
 
@@ -338,14 +401,14 @@ else
         .ConfigureInfrastructure(infra =>
         {
             foreach (var env in infra.GetProvisionableResources().OfType<ContainerAppManagedEnvironment>())
-                env.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+                env.Tags = ToBicepTags(resourceTags);
 
             foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
-                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+                identity.Tags = ToBicepTags(resourceTags);
         });
     var appInsights = builder.AddBicepTemplate("application-insights", "Infrastructure/application-insights.bicep");
 
-    
+
 
     //sql = builder.AddAzureSqlServer("sql")
     msSql
@@ -354,7 +417,7 @@ else
             var server = infra.GetProvisionableResources().OfType<SqlServer>().Single();
             server.AdministratorLogin = "sqladm72";
             server.AdministratorLoginPassword = sqlPassword.AsProvisioningParameter(infra);
-            server.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            server.Tags = ToBicepTags(resourceTags);
 
             foreach (var database in infra.GetProvisionableResources().OfType<SqlDatabase>())
             {
@@ -369,12 +432,12 @@ else
                 database.AutoPauseDelay = 60;
                 database.MinCapacity = 0.5;
                 database.UseFreeLimit = false;
-                database.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+                database.Tags = ToBicepTags(resourceTags);
             }
 
             foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
             {
-                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+                identity.Tags = ToBicepTags(resourceTags);
             }
 
             if (server.Administrators is { } admin)
@@ -409,10 +472,31 @@ else
                     .GetOutput("acaInfrastructureSubnetId")
                     .AsProvisioningParameter(infra, "acaInfrastructureSubnetId")
             };
-            containerAppEnvironment.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            containerAppEnvironment.Tags = ToBicepTags(resourceTags);
 
             foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
-                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+                identity.Tags = ToBicepTags(resourceTags);
+        });
+
+    var keycloakIdentity = builder.AddAzureUserAssignedIdentity("keycloak-identity")
+        .ConfigureInfrastructure(infra =>
+        {
+            foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+                identity.Tags = ToBicepTags(resourceTags);
+        });
+
+    var talentserverIdentity = builder.AddAzureUserAssignedIdentity("talentserver-identity")
+        .ConfigureInfrastructure(infra =>
+        {
+            foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+                identity.Tags = ToBicepTags(resourceTags);
+        });
+
+    var talentfunctionsIdentity = builder.AddAzureUserAssignedIdentity("talentfunctions-identity")
+        .ConfigureInfrastructure(infra =>
+        {
+            foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+                identity.Tags = ToBicepTags(resourceTags);
         });
 
     foreach (var registryResource in builder.Resources.OfType<AzureContainerRegistryResource>())
@@ -421,7 +505,7 @@ else
         {
             foreach (var registry in infra.GetProvisionableResources().OfType<ContainerRegistryService>())
             {
-                registry.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+                registry.Tags = ToBicepTags(resourceTags);
             }
         });
     }
@@ -434,6 +518,7 @@ else
         .WithEnvironment("KC_DB_USERNAME", keycloakDbUsername)
         .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", keycloakPassword)
         .WithEnvironment("KC_DB_PASSWORD", keycloakDbPassword)
+        .WithAzureUserAssignedIdentity(keycloakIdentity)
         .WithComputeEnvironment(privateAcaEnvironment)
         .WaitFor(keycloakDb);
 
@@ -452,13 +537,14 @@ else
         .WithEnvironment("KEYCLOAK_ADMIN_USERNAME", "admin")
         .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", keycloakPassword)
         .WithEnvironment("KEYCLOAK_ADMIN_CLIENT_ID", "admin-cli")
+        .WithAzureUserAssignedIdentity(talentserverIdentity)
         .WithComputeEnvironment(privateAcaEnvironment)
         .PublishAsAzureContainerApp((infra, app) =>
         {
-            app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            app.Tags = ToBicepTags(resourceTags);
             foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
             {
-                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+                identity.Tags = ToBicepTags(resourceTags);
             }
         })
         .WaitFor(appDb)
@@ -466,13 +552,14 @@ else
 
     functions
         .WithEnvironment("APPLICATIONINSIGHTS_CONNECTION_STRING", appInsights.GetOutput("applicationInsightsConnectionString"))
+        .WithAzureUserAssignedIdentity(talentfunctionsIdentity)
         .WithComputeEnvironment(privateAcaEnvironment!)
         .PublishAsAzureContainerApp((infra, app) =>
         {
-            app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            app.Tags = ToBicepTags(resourceTags);
             foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
             {
-                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+                identity.Tags = ToBicepTags(resourceTags);
             }
         });
 }
@@ -546,10 +633,10 @@ else
         .WithComputeEnvironment(privateAcaEnvironment!)
         .PublishAsAzureContainerApp((infra, app) =>
         {
-            app.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+            app.Tags = ToBicepTags(resourceTags);
             foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
             {
-                identity.Tags = new BicepDictionary<string> { ["project"] = "talentsuite", ["Owner"] = "rgparkins", ["azd-env-name"] = azureEnvironmentName };
+                identity.Tags = ToBicepTags(resourceTags);
             }
             app.Configuration ??= new();
             app.Configuration.Ingress ??= new();
@@ -566,29 +653,6 @@ if (!local)
 {
     server.WithRoleAssignments(messaging, ServiceBusBuiltInRole.AzureServiceBusDataSender);
     functions.WithRoleAssignments(messaging, ServiceBusBuiltInRole.AzureServiceBusDataReceiver);
-
-    // AzureUserAssignedIdentityResource instances (talentserver-identity, talentfunctions-identity,
-    // keycloak-identity) are created by "azure-prepare-resources", which runs as a prerequisite
-    // for BeforeStart. Subscribing to BeforeStartEvent gives us the window to attach
-    // ConfigureInfrastructure callbacks with the required tags after those resources exist.
-    builder.Eventing.Subscribe<BeforeStartEvent>((evt, ct) =>
-    {
-        var tags = new BicepDictionary<string>
-        {
-            ["project"] = "talentsuite",
-            ["Owner"] = "rgparkins",
-            ["azd-env-name"] = azureEnvironmentName
-        };
-        foreach (var resource in evt.Model.Resources.OfType<AzureUserAssignedIdentityResource>())
-        {
-            builder.CreateResourceBuilder(resource).ConfigureInfrastructure(infra =>
-            {
-                foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
-                    identity.Tags = tags;
-            });
-        }
-        return Task.CompletedTask;
-    });
 }
 
 if (local)
@@ -605,3 +669,4 @@ if (local)
 }
 
 builder.Build().Run();
+
