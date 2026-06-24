@@ -566,6 +566,29 @@ if (!local)
 {
     server.WithRoleAssignments(messaging, ServiceBusBuiltInRole.AzureServiceBusDataSender);
     functions.WithRoleAssignments(messaging, ServiceBusBuiltInRole.AzureServiceBusDataReceiver);
+
+    // AzureUserAssignedIdentityResource instances (talentserver-identity, talentfunctions-identity,
+    // keycloak-identity) are created by "azure-prepare-resources", which runs as a prerequisite
+    // for BeforeStart. Subscribing to BeforeStartEvent gives us the window to attach
+    // ConfigureInfrastructure callbacks with the required tags after those resources exist.
+    builder.Eventing.Subscribe<BeforeStartEvent>((evt, ct) =>
+    {
+        var tags = new BicepDictionary<string>
+        {
+            ["project"] = "talentsuite",
+            ["Owner"] = "rgparkins",
+            ["azd-env-name"] = azureEnvironmentName
+        };
+        foreach (var resource in evt.Model.Resources.OfType<AzureUserAssignedIdentityResource>())
+        {
+            builder.CreateResourceBuilder(resource).ConfigureInfrastructure(infra =>
+            {
+                foreach (var identity in infra.GetProvisionableResources().OfType<UserAssignedIdentity>())
+                    identity.Tags = tags;
+            });
+        }
+        return Task.CompletedTask;
+    });
 }
 
 if (local)
