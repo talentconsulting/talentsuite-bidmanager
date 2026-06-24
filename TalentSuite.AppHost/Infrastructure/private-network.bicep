@@ -76,6 +76,11 @@ resource sqlPrivateDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLink
   parent: sqlPrivateDnsZone
   name: '${vnetName}-link'
   location: 'global'
+  tags: {
+    project: 'talentsuite'
+    Owner: 'rgparkins'
+    'azd-env-name': normalizedEnvironmentName
+  }
   properties: {
     virtualNetwork: {
       id: vnet.id
