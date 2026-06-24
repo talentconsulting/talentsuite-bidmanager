@@ -20,10 +20,14 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 var local = builder.ExecutionContext.IsRunMode;
 var azureEnvironmentName = builder.Configuration["AZURE_ENV_NAME"] ?? "dev";
+var azdInfraTagsJson = Environment.GetEnvironmentVariable("AZD_INFRA_TAGS")
+    ?? builder.Configuration["AZD_INFRA_TAGS"];
+var azureResourceTagsJson = Environment.GetEnvironmentVariable("AZURE_RESOURCE_TAGS")
+    ?? builder.Configuration["AZURE_RESOURCE_TAGS"];
 var resourceTags = BuildResourceTags(
     azureEnvironmentName,
-    builder.Configuration["AZD_INFRA_TAGS"],
-    builder.Configuration["AZURE_RESOURCE_TAGS"]);
+    azdInfraTagsJson,
+    azureResourceTagsJson);
 
 static Dictionary<string, string> BuildResourceTags(
     string environmentName,

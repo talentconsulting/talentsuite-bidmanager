@@ -184,6 +184,7 @@ jobs:
           infra_tags_json="$(jq -cn --argjson defaults "${default_tags_json}" --argjson policy "${policy_tags_json}" '$defaults + $policy')"
 
           echo "AZD_INFRA_TAGS=${infra_tags_json}" >> "$GITHUB_ENV"
+          echo "AZURE_RESOURCE_TAGS=${infra_tags_json}" >> "$GITHUB_ENV"
           echo "Computed infra tags for policy compliance: ${infra_tags_json}"
           echo "Infra tags: ${infra_tags_json}" >> "$GITHUB_STEP_SUMMARY"
 
@@ -293,6 +294,24 @@ jobs:
           azd env set GrafanaAzureMonitorSubscriptionId "${GrafanaAzureMonitorSubscriptionId}" --environment "${AZURE_ENV_NAME}"
           azd env set GrafanaEntraClientSecret "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
 
+      - name: Cleanup stale deployment scripts
+        if: ${{ inputs.deployment_mode != 'apps-only' }}
+        run: |
+          set -euo pipefail
+          resource_group="rg-${AZURE_ENV_NAME}"
+          stale_script_ids="$(az resource list \
+            --resource-group "$resource_group" \
+            --resource-type Microsoft.Resources/deploymentScripts \
+            --query '[].id' \
+            -o tsv 2>/dev/null || true)"
+
+          if [ -n "$stale_script_ids" ]; then
+            echo "$stale_script_ids" | while IFS= read -r id; do
+              [ -z "$id" ] && continue
+              az resource delete --ids "$id"
+            done
+          fi
+
       - name: Provision
         if: ${{ inputs.deployment_mode != 'apps-only' }}
         working-directory: ${{ env.AZD_WORKING_DIR }}
@@ -339,6 +358,7 @@ jobs:
           azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${{ env.AZURE_ENV_NAME }}"
 
           principalId="${AZD_PRINCIPAL_ID}" \
+          AZURE_RESOURCE_TAGS="${AZD_INFRA_TAGS}" \
           AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
           AZURE_GOOGLE_DRIVE_SYNC_SERVICE_ACCOUNT_JSON_BASE64="${GoogleDriveSyncServiceAccountJsonBase64}" \
           AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
@@ -471,6 +491,7 @@ jobs:
           if [ "$deploy_target" = "all" ]; then
             env \
               principalId="${AZD_PRINCIPAL_ID}" \
+              AZURE_RESOURCE_TAGS="${AZD_INFRA_TAGS}" \
               KeycloakDbUsername="${KeycloakDbUsername}" \
               AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
               AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
@@ -486,6 +507,7 @@ jobs:
           else
             env \
               principalId="${AZD_PRINCIPAL_ID}" \
+              AZURE_RESOURCE_TAGS="${AZD_INFRA_TAGS}" \
               KeycloakDbUsername="${KeycloakDbUsername}" \
               AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
               AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
