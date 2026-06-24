@@ -167,6 +167,26 @@ jobs:
           az provider register --namespace Microsoft.Storage --wait
           az provider register --namespace Microsoft.ContainerInstance --wait
 
+      - name: Build infra tags for Azure Policy compliance
+        run: |
+          set -euo pipefail
+
+          required_tags="$(
+            az policy assignment list \
+              --scope "/subscriptions/${AZURE_SUBSCRIPTION_ID}" \
+              --query "[?policyDefinitionId=='/providers/Microsoft.Authorization/policyDefinitions/871b6d14-10aa-478d-b590-94f262ecfa99'].parameters.tagName.value" \
+              -o tsv 2>/dev/null || true
+          )"
+
+          # Keep existing standard tags and merge any required tag names from policy.
+          default_tags_json="$(jq -cn --arg env "${AZURE_ENV_NAME}" '{"project":"talentsuite","Owner":"rgparkins","azd-env-name":$env}')"
+          policy_tags_json="$(printf '%s\n' "${required_tags}" | jq -Rn --arg env "${AZURE_ENV_NAME}" 'reduce (inputs | select(length > 0)) as $name ({}; .[$name] = $env)')"
+          infra_tags_json="$(jq -cn --argjson defaults "${default_tags_json}" --argjson policy "${policy_tags_json}" '$defaults + $policy')"
+
+          echo "AZD_INFRA_TAGS=${infra_tags_json}" >> "$GITHUB_ENV"
+          echo "Computed infra tags for policy compliance: ${infra_tags_json}"
+          echo "Infra tags: ${infra_tags_json}" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Seed azd environment from explicit vars and secrets
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
@@ -174,6 +194,7 @@ jobs:
 
           azd env get-values --environment "${AZURE_ENV_NAME}" >/dev/null 2>&1 \
             || azd env new "${AZURE_ENV_NAME}" --no-prompt
+          test -n "${AZD_INFRA_TAGS:-}" || (echo "AZD_INFRA_TAGS missing" && exit 1)
           azd env set principalId "${AZD_PRINCIPAL_ID}" --environment "${AZURE_ENV_NAME}"
           azd env set AuthenticationEnabled "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
           azd env set AUTHENTICATION_ENABLED "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
@@ -186,6 +207,7 @@ jobs:
           azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
           azd env set SqlPassword "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
           azd env set Password "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.tags" "${AZD_INFRA_TAGS}" --environment "${AZURE_ENV_NAME}"
           azd env config set "infra.parameters.GoogleDriveSyncServiceAccountJsonBase64" "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
           azd env config set "infra.parameters.InviteSmtpPassword" "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
           azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
@@ -230,6 +252,7 @@ jobs:
         run: |
           set -euo pipefail
 
+          test -n "${AZD_INFRA_TAGS:-}" || (echo "AZD_INFRA_TAGS missing" && exit 1)
           azd env set principalId "${AZD_PRINCIPAL_ID}" --environment "${AZURE_ENV_NAME}"
           azd env set AuthenticationEnabled "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
           azd env set AUTHENTICATION_ENABLED "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
@@ -242,6 +265,7 @@ jobs:
           azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
           azd env set SqlPassword "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
           azd env set Password "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
+          azd env config set "infra.parameters.tags" "${AZD_INFRA_TAGS}" --environment "${AZURE_ENV_NAME}"
           azd env config set "infra.parameters.GoogleDriveSyncServiceAccountJsonBase64" "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
           azd env config set "infra.parameters.InviteSmtpPassword" "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
           azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
@@ -311,6 +335,7 @@ jobs:
           azd env set SqlPassword "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set Password "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env config set "infra.parameters.tags" "${AZD_INFRA_TAGS}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${{ env.AZURE_ENV_NAME }}"
 
           principalId="${AZD_PRINCIPAL_ID}" \
@@ -430,6 +455,7 @@ jobs:
           azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env config set "infra.parameters.InviteSmtpPassword" "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env config set "infra.parameters.SqlPassword" "${SqlPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
+          azd env config set "infra.parameters.tags" "${AZD_INFRA_TAGS}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${{ env.AZURE_ENV_NAME }}"
           azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${{ env.AZURE_ENV_NAME }}"
 
