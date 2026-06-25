@@ -316,7 +316,7 @@ jobs:
         working-directory: ${{ env.AZD_WORKING_DIR }}
         run: |
           set -euo pipefail
-          az policy exemption create \  
+          az policy exemption create \
           --name "azd-deploymentscript-exemption" \
           --policy-assignment "/subscriptions/${AZURE_SUBSCRIPTION_ID}/providers/Microsoft.Authorization/policyAssignments/871b6d14-10aa-478d-b590-94f262ecfa99" \
           --scope "/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/rg-${AZURE_ENV_NAME}" \
