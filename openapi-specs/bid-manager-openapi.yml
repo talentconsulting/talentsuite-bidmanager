@@ -1,0 +1,49 @@
+openapi: 3.1.0
+info:
+  title: Bid Manager
+  version: v1
+servers:
+  - url: /
+paths:
+  /health:
+    get:
+      summary: Health checks
+      description: Performs health checks on the application and returns status.
+      responses:
+        '200':
+          description: Application is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+        '503':
+          description: Application is unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+        - Health
+  /messages:
+    post:
+      summary: Publish message to service bus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Message successfully published
+      tags:
+        - Messaging
+components:
+  securitySchemes:
+    Bearer:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Enter 'Bearer' followed by your token
+security:
+  - Bearer: []
