@@ -1,0 +1,176 @@
+openapi: 3.1.0
+info:
+  title: Bid Manager API
+  version: v1
+servers:
+  - url: /
+tags:
+  - name: Bids
+paths:
+  /api/v1/Bids:
+    get:
+      tags:
+        - Bids
+      operationId: GetBids
+      summary: Gets a list of bids.
+      parameters:
+        - name: AuctionId
+          in: query
+          schema:
+            type: integer
+            nullable: true
+        - name: UserId
+          in: query
+          schema:
+            type: integer
+            nullable: true
+      responses:
+        '200':
+          description: A list of bids.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BidDto'
+    post:
+      tags:
+        - Bids
+      operationId: CreateBid
+      summary: Creates a new bid.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBidRequest'
+      responses:
+        '201':
+          description: The created bid.
+          headers:
+            Location:
+              description: URL of the created bid.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BidDto'
+  /api/v1/Bids/{id}:
+    get:
+      tags:
+        - Bids
+      operationId: GetBid
+      summary: Gets a bid by ID.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: The requested bid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BidDto'
+        '404':
+          description: Bid not found.
+    put:
+      tags:
+        - Bids
+      operationId: UpdateBid
+      summary: Updates an existing bid.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBidRequest'
+      responses:
+        '204':
+          description: Bid updated successfully.
+        '400':
+          description: Bad request.
+    delete:
+      tags:
+        - Bids
+      operationId: DeleteBid
+      summary: Deletes a bid by ID.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Bid deleted successfully.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    BidDto:
+      type: object
+      properties:
+        Id:
+          type: integer
+        AuctionId:
+          type: integer
+        UserId:
+          type: integer
+        Amount:
+          type: number
+        Timestamp:
+          type: string
+          format: date-time
+      required:
+        - Id
+        - AuctionId
+        - UserId
+        - Amount
+        - Timestamp
+    BidQueryParameters:
+      type: object
+      properties:
+        AuctionId:
+          type: integer
+          nullable: true
+        UserId:
+          type: integer
+          nullable: true
+    CreateBidRequest:
+      type: object
+      properties:
+        AuctionId:
+          type: integer
+        UserId:
+          type: integer
+        Amount:
+          type: number
+      required:
+        - AuctionId
+        - UserId
+        - Amount
+    UpdateBidRequest:
+      type: object
+      properties:
+        Id:
+          type: integer
+        Amount:
+          type: number
+      required:
+        - Id
+        - Amount
+security:
+  - bearerAuth: []
