@@ -324,7 +324,7 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
         {
             using var content = new FormUrlEncodedContent(form);
             var url = urls[index];
-            var response = await http.PostAsync(url, content, ct);
+            using var response = await http.PostAsync(url, content, ct);
             if (response.IsSuccessStatusCode)
                 return await response.Content.ReadFromJsonAsync<KeycloakTokenResponse>(ct);
 
@@ -401,7 +401,7 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
             $"{_keycloakBaseUrl!.TrimEnd('/')}/admin/realms/{Uri.EscapeDataString(_targetRealm)}/users/{Uri.EscapeDataString(userId)}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        var response = await http.SendAsync(request, ct);
+        using var response = await http.SendAsync(request, ct);
         if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return true;
 
@@ -421,7 +421,7 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        var response = await http.SendAsync(request, ct);
+        using var response = await http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
             return new List<string>();
 
@@ -440,7 +440,7 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        var response = await http.SendAsync(request, ct);
+        using var response = await http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
             return new List<string>();
 
@@ -463,7 +463,7 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        var response = await http.SendAsync(request, ct);
+        using var response = await http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(ct);
@@ -489,7 +489,7 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        var response = await http.SendAsync(request, ct);
+        using var response = await http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
             return new List<KeycloakRoleRepresentation>();
 
@@ -512,7 +512,7 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        var response = await http.SendAsync(request, ct);
+        using var response = await http.SendAsync(request, ct);
         if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NoContent)
             return true;
 
@@ -544,7 +544,7 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        var response = await http.SendAsync(request, ct);
+        using var response = await http.SendAsync(request, ct);
         if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NoContent)
             return true;
 

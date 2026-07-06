@@ -51,7 +51,10 @@ public class UserInvitesController : ControllerBase
         });
     }
 
+    // Diagnostic endpoint exposing raw claims and identity-matching internals; that
+    // detail maps how ResolveCurrentUserAsync matches users, so it is admin-only.
     [HttpGet("me-identity-debug")]
+    [Authorize(Policy = "RequireAdminRole")]
     public async Task<ActionResult<object>> GetCurrentIdentityDebug(CancellationToken ct)
     {
         var subject = User.FindFirst("sub")?.Value

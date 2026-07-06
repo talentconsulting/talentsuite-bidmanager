@@ -32,6 +32,9 @@ builder.Services.AddRazorPages();
 
 builder.AddSqlServerClient(connectionName: "talentconsultingdb");
 
+builder.Services.AddMemoryCache();
+builder.Services.AddHostedService<UserSeedingHostedService>();
+
 // Ingestion service
 builder.Services.AddBidServices(builder.Configuration);
 builder.Services.AddUserServices(builder.Configuration);
@@ -175,8 +178,6 @@ if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 }
-
-await app.SeedUsersAsync();
 
 app.Run();
 
