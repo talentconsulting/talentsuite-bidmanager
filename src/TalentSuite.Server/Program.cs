@@ -14,6 +14,14 @@ using TalentSuite.ServiceDefaults;
 var builder = WebApplication.CreateBuilder(args);
 var authenticationEnabled = IsAuthenticationEnabled(builder.Configuration);
 
+// The bypass handler authenticates every request as an admin, so it must never
+// be reachable outside local development.
+if (!authenticationEnabled && !builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException(
+        "AUTHENTICATION_ENABLED=false grants every request admin privileges and is only permitted in the Development environment.");
+}
+
 builder.AddServiceDefaults();
 
 // API Controllers (instead of Minimal API)
@@ -24,10 +32,13 @@ builder.Services.AddRazorPages();
 
 builder.AddSqlServerClient(connectionName: "talentconsultingdb");
 
+builder.Services.AddMemoryCache();
+builder.Services.AddHostedService<UserSeedingHostedService>();
+
 // Ingestion service
 builder.Services.AddBidServices(builder.Configuration);
 builder.Services.AddUserServices(builder.Configuration);
-builder.Services.AddAzureServiceBusMessaging(builder.Configuration);
+builder.AddAzureServiceBusMessaging();
 builder.Services.AddScoped<IHealthCheckProbe, SqlDatabaseHealthCheckProbe>();
 
 var keycloakAuthority = Environment.GetEnvironmentVariable("KEYCLOAK_AUTHORITY")
@@ -46,7 +57,11 @@ if (authenticationEnabled)
             options.Authority = keycloakAuthority;
             options.Audience = keycloakAudience;
             options.RequireHttpsMetadata = !keycloakAuthority.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
-            options.TokenValidationParameters.ValidateAudience = false;
+            // Keycloak includes this API's audience via the oidc-audience-mapper on the
+            // frontend client (see TalentConsulting-realm.json); "account" covers tokens
+            // that also carry Keycloak account-service roles.
+            options.TokenValidationParameters.ValidateAudience = true;
+            options.TokenValidationParameters.ValidAudiences = [keycloakAudience, "account"];
             options.TokenValidationParameters.ValidateIssuer = !builder.Environment.IsDevelopment();
             options.TokenValidationParameters.RoleClaimType = ClaimTypes.Role;
 
@@ -134,6 +149,12 @@ builder.Services.AddUserMappings();
 
 var app = builder.Build();
 
+if (!authenticationEnabled)
+{
+    app.Logger.LogWarning(
+        "AUTHENTICATION BYPASS ACTIVE: every request is treated as an admin user. This must only ever appear in local development.");
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
@@ -157,8 +178,6 @@ if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 }
-
-await app.SeedUsersAsync();
 
 app.Run();
 
@@ -251,17 +270,11 @@ static bool IsAllowedFrontendOrigin(string? origin, string configuredOrigin, str
     if (string.Equals(origin, configuredOrigin, StringComparison.OrdinalIgnoreCase))
         return true;
 
-    if (!string.IsNullOrWhiteSpace(additionalOrigin)
-        && string.Equals(origin, additionalOrigin, StringComparison.OrdinalIgnoreCase))
-    {
-        return true;
-    }
-
-    if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri))
-        return false;
-
-    return originUri.Scheme == Uri.UriSchemeHttps
-           && originUri.Host.EndsWith(".z33.web.core.windows.net", StringComparison.OrdinalIgnoreCase);
+    // Only explicitly configured origins are allowed. A suffix match on the shared
+    // *.z33.web.core.windows.net zone would admit any Azure customer's static site,
+    // so deployed environments must set FRONTEND_PUBLIC_ORIGIN to the exact origin.
+    return !string.IsNullOrWhiteSpace(additionalOrigin)
+           && string.Equals(origin, additionalOrigin, StringComparison.OrdinalIgnoreCase);
 }
 
 namespace TalentSuite.Server

@@ -7,8 +7,10 @@ using TalentSuite.Shared.Users;
 
 namespace TalentSuite.Server.Users.Controllers;
 
+// Policies are applied per action: multiple [Authorize] attributes AND together, so a
+// class-level admin policy would lock bid managers out of GetUsers despite its own
+// attribute. Every action must therefore carry an explicit policy.
 [ApiController]
-[Authorize(Policy = "RequireAdminRole")]
 [Route("api/users")]
 public class UsersController: ControllerBase
 {
@@ -31,6 +33,7 @@ public class UsersController: ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "RequireAdminRole")]
     public async Task<ActionResult<UserResponse>> AddUser([FromBody] CreateUserRequest request, CancellationToken ct)
     {
         if (!ModelState.IsValid)
@@ -45,10 +48,14 @@ public class UsersController: ControllerBase
         }, ct);
 
         var response = _mapper.ToResponse(created);
+        // Admin-only creation response is the one place (besides resend-invite) that
+        // may carry the invitation token, so the admin can share the invite link.
+        response.InvitationToken = created.InvitationToken;
         return CreatedAtAction(nameof(GetUser), new { userId = response.Id }, response);
     }
 
     [HttpGet("{userId}")]
+    [Authorize(Policy = "RequireAdminRole")]
     public async Task<ActionResult<UserResponse>> GetUser(string userId, CancellationToken ct)
     {
         var user = await _userService.GetUser(userId, ct);
@@ -59,6 +66,7 @@ public class UsersController: ControllerBase
     }
 
     [HttpPut("{userId}")]
+    [Authorize(Policy = "RequireAdminRole")]
     public async Task<IActionResult> UpdateUser(string userId, [FromBody] UpdateUserRequest request, CancellationToken ct)
     {
         if (!ModelState.IsValid)
@@ -81,6 +89,7 @@ public class UsersController: ControllerBase
     }
 
     [HttpPost("{userId}/resend-invite")]
+    [Authorize(Policy = "RequireAdminRole")]
     public async Task<ActionResult<ResendInviteResponse>> ResendInvite(string userId, CancellationToken ct)
     {
         var user = await _userService.ResendInvite(userId, ct);
@@ -95,6 +104,7 @@ public class UsersController: ControllerBase
     }
 
     [HttpDelete("{userId}")]
+    [Authorize(Policy = "RequireAdminRole")]
     public async Task<IActionResult> DeleteUser(string userId, CancellationToken ct)
     {
         var deleted = await _userService.DeleteUser(userId, ct);

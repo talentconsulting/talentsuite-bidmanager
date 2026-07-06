@@ -20,7 +20,7 @@ public interface IBidService
 
     Task<Guid> CreateBid(CreateBidModel request, CancellationToken ct = default);
 
-    Task<BidModel> GetBid(string id, CancellationToken ct = default);
+    Task<BidModel?> GetBid(string id, CancellationToken ct = default);
 
     Task UpdateBidOverview(
         string bidId,
@@ -230,15 +230,15 @@ public sealed class BidService : IBidService
     public async Task<Guid> CreateBid(CreateBidModel request, CancellationToken ct = default)
     {
         var dataModel = _mapper.ToDataModel(request);
-        
-        return await _repository.StoreBid(dataModel);
+
+        return await _repository.StoreBid(dataModel, ct);
     }
 
-    public async Task<BidModel> GetBid(string id, CancellationToken ct)
+    public async Task<BidModel?> GetBid(string id, CancellationToken ct)
     {
-        var model = await _repository.GetBid(id);
+        var model = await _repository.GetBid(id, ct);
 
-        return _mapper.ToModel(model);
+        return model is null ? null : _mapper.ToModel(model);
     }
 
     public Task UpdateBidOverview(
@@ -795,6 +795,12 @@ public sealed class BidService : IBidService
             try
             {
                 var bid = await _repository.GetBid(bidId, ct);
+                if (bid is null)
+                {
+                    bidTitlesById[bidId] = bidId;
+                    continue;
+                }
+
                 bidTitlesById[bidId] = string.IsNullOrWhiteSpace(bid.Company) ? bidId : bid.Company;
 
                 foreach (var question in bid.Questions)

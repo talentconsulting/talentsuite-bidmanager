@@ -71,6 +71,19 @@
         "http://talentfrontend",
         "https://talentfrontend",
         "https://dev.talentsuite.uk"
+      ],
+      "protocolMappers": [
+        {
+          "name": "talentsuite-server-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "talentsuite-server",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
       ]
     },
     {

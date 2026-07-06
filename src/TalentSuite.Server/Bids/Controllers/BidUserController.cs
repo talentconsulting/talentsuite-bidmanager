@@ -19,33 +19,33 @@ public sealed class BidUserController : ControllerBase
     
     [HttpGet]
     [Authorize(Policy = "RequireBidAccess")]
-    public async Task<IActionResult> GetBidUsers(string bidId)
+    public async Task<IActionResult> GetBidUsers(string bidId, CancellationToken ct)
     {
-        var result = await _bidService.GetBidUsers(bidId);
+        var result = await _bidService.GetBidUsers(bidId, ct);
 
         return Ok(result);
     }
-    
+
     [HttpPost]
     [Authorize(Policy = "RequireBidManagementRole")]
-    public async Task<IActionResult> AddBidUser(string bidId, [FromBody] UserAssignmentRequest request)
+    public async Task<IActionResult> AddBidUser(string bidId, [FromBody] UserAssignmentRequest request, CancellationToken ct)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
-        
-        await _bidService.AddBidUser(bidId, request.UserId);
+
+        await _bidService.AddBidUser(bidId, request.UserId, ct);
 
         return Ok();
     }
-    
+
     [HttpDelete()]
     [Authorize(Policy = "RequireBidManagementRole")]
-    public async Task<IActionResult> RemoveBidUser(string bidId, [FromBody] UserAssignmentRequest request)
+    public async Task<IActionResult> RemoveBidUser(string bidId, [FromBody] UserAssignmentRequest request, CancellationToken ct)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
-        
-        await _bidService.RemoveBidUser(bidId, request.UserId);
+
+        await _bidService.RemoveBidUser(bidId, request.UserId, ct);
 
         return Ok();
     }

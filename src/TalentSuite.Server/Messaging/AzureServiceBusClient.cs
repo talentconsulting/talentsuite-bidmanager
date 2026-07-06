@@ -1,10 +1,8 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Threading;
-using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using TalentSuite.Shared;
 using TalentSuite.Shared.Messaging;
 
@@ -12,17 +10,17 @@ namespace TalentSuite.Server.Messaging;
 
 public sealed class AzureServiceBusClient : IAzureServiceBusClient, IAsyncDisposable
 {
-    private readonly AzureServiceBusOptions _options;
+    private readonly ServiceBusClient _client;
     private readonly ILogger<AzureServiceBusClient> _logger;
     private readonly JsonSerializerOptions _serializerOptions = SerialiserOptions.JsonOptions;
-    private readonly ConcurrentDictionary<string, ServiceBusSender> _senders = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Lazy<ServiceBusClient> _client;
+    // Lazy values so racing GetOrAdd calls cannot create senders that are never
+    // stored (and therefore never disposed).
+    private readonly ConcurrentDictionary<string, Lazy<ServiceBusSender>> _senders = new(StringComparer.OrdinalIgnoreCase);
 
-    public AzureServiceBusClient(IOptions<AzureServiceBusOptions> options, ILogger<AzureServiceBusClient> logger)
+    public AzureServiceBusClient(ServiceBusClient client, ILogger<AzureServiceBusClient> logger)
     {
-        _options = options.Value;
+        _client = client;
         _logger = logger;
-        _client = new Lazy<ServiceBusClient>(() => CreateClient(), LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public Task PublishAsync<T>(string entityName, T payload, CancellationToken ct = default)
@@ -39,8 +37,12 @@ public sealed class AzureServiceBusClient : IAzureServiceBusClient, IAsyncDispos
         if (payload is null)
             throw new ArgumentNullException(nameof(payload));
 
-        var client = GetOrCreateClient();
-        var sender = _senders.GetOrAdd(entityName, client.CreateSender);
+        var sender = _senders.GetOrAdd(
+            entityName,
+            static (name, c) => new Lazy<ServiceBusSender>(
+                () => c.CreateSender(name),
+                LazyThreadSafetyMode.ExecutionAndPublication),
+            _client).Value;
 
         var body = JsonSerializer.SerializeToUtf8Bytes(payload, payloadType, _serializerOptions);
         var message = new ServiceBusMessage(body)
@@ -63,30 +65,12 @@ public sealed class AzureServiceBusClient : IAzureServiceBusClient, IAsyncDispos
 
     public async ValueTask DisposeAsync()
     {
+        // The ServiceBusClient itself is owned and disposed by the DI container.
         foreach (var sender in _senders.Values)
         {
-            await sender.DisposeAsync();
+            if (sender.IsValueCreated)
+                await sender.Value.DisposeAsync();
         }
-
-        if (_client.IsValueCreated)
-        {
-            await _client.Value.DisposeAsync();
-        }
-    }
-
-    private ServiceBusClient GetOrCreateClient() => _client.Value;
-
-    private ServiceBusClient CreateClient()
-    {
-        if (!string.IsNullOrWhiteSpace(_options.ConnectionString))
-            return new ServiceBusClient(_options.ConnectionString);
-
-        var fullyQualifiedNamespace = _options.FullyQualifiedNamespace;
-        if (!string.IsNullOrWhiteSpace(fullyQualifiedNamespace))
-            return new ServiceBusClient(fullyQualifiedNamespace, new DefaultAzureCredential());
-
-        throw new InvalidOperationException(
-            $"Azure Service Bus is not configured. Set '{AzureServiceBusOptions.SectionName}:ConnectionString', '{AzureServiceBusOptions.SectionName}:FullyQualifiedNamespace', or the related environment variables.");
     }
 
     private static string ResolveMessageKind(Type payloadType)

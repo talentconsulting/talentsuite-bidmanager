@@ -14,8 +14,10 @@ public partial class UserMapper
     public UserResponse ToResponse(UserModel source)
     {
         var response = MapToResponse(source);
-        if (source.HasAcceptedRegistration)
-            response.InvitationToken = string.Empty;
+        // The invitation token is a credential: anyone holding it can register against
+        // the anonymous accept-invite endpoint, so it must never appear on read
+        // endpoints. The admin create/resend flows attach it explicitly.
+        response.InvitationToken = string.Empty;
         return response;
     }
 

@@ -20,45 +20,45 @@ public sealed class BidQuestionUserController : ControllerBase
     
     [HttpGet]
     [Authorize(Policy = "RequireBidAccess")]
-    public async Task<IActionResult> GetQuestionUsers(string bidId, string questionId)
+    public async Task<IActionResult> GetQuestionUsers(string bidId, string questionId, CancellationToken ct)
     {
-        var result = await _bidService.GetBidQuestionUsers(bidId, questionId);
+        var result = await _bidService.GetBidQuestionUsers(bidId, questionId, ct);
 
         return Ok(result);
     }
-    
+
     [HttpPost]
     [Authorize(Policy = "RequireBidManagementRole")]
-    public async Task<IActionResult> AddBidUser(string bidId, string questionId, [FromBody] QuestionUserAssignmentRequest request)
+    public async Task<IActionResult> AddBidUser(string bidId, string questionId, [FromBody] QuestionUserAssignmentRequest request, CancellationToken ct)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
-        
-        await _bidService.AddBidQuestionUser(bidId, questionId, request.UserId, request.Role);
+
+        await _bidService.AddBidQuestionUser(bidId, questionId, request.UserId, request.Role, ct);
 
         return Ok();
     }
 
     [HttpPut]
     [Authorize(Policy = "RequireBidManagementRole")]
-    public async Task<IActionResult> UpdateBidUserRole(string bidId, string questionId, [FromBody] QuestionUserAssignmentRequest request)
+    public async Task<IActionResult> UpdateBidUserRole(string bidId, string questionId, [FromBody] QuestionUserAssignmentRequest request, CancellationToken ct)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        await _bidService.UpdateBidQuestionUserRole(bidId, questionId, request.UserId, request.Role);
+        await _bidService.UpdateBidQuestionUserRole(bidId, questionId, request.UserId, request.Role, ct);
 
         return Ok();
     }
-    
+
     [HttpDelete()]
     [Authorize(Policy = "RequireBidManagementRole")]
-    public async Task<IActionResult> RemoveBidUser(string bidId, string questionId, [FromBody] UserAssignmentRequest request)
+    public async Task<IActionResult> RemoveBidUser(string bidId, string questionId, [FromBody] UserAssignmentRequest request, CancellationToken ct)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
-        
-        await _bidService.RemoveBidQuestionUser(bidId, questionId, request.UserId);
+
+        await _bidService.RemoveBidQuestionUser(bidId, questionId, request.UserId, ct);
 
         return Ok();
     }

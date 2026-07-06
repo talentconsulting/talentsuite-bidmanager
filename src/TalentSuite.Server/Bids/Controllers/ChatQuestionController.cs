@@ -32,18 +32,18 @@ public class ChatQuestionController : ControllerBase
     }
 
     [HttpPost("{questionId}")]
-    public async Task<IActionResult> AskQuestions(string questionId, [FromBody] ChatQuestionRequest chatQuestionRequest)
+    public async Task<IActionResult> AskQuestions(string questionId, [FromBody] ChatQuestionRequest chatQuestionRequest, CancellationToken ct)
     {
         var resolvedQuestionId = string.IsNullOrWhiteSpace(chatQuestionRequest.QuestionId)
             ? questionId
             : chatQuestionRequest.QuestionId;
 
-        if (!await _authorizationService.CanManageBidAsync(User, chatQuestionRequest.BidId, HttpContext.RequestAborted))
+        if (!await _authorizationService.CanManageBidAsync(User, chatQuestionRequest.BidId, ct))
             return Forbid();
 
         try
         {
-            var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, resolvedQuestionId);
+            var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, resolvedQuestionId, ct);
 
             var userId = ResolveCurrentUserKey();
             var persistedThreadId = string.IsNullOrWhiteSpace(userId)
@@ -51,20 +51,22 @@ public class ChatQuestionController : ControllerBase
                 : await _bidService.GetChatThreadId(
                     chatQuestionRequest.BidId,
                     resolvedQuestionId,
-                    userId);
+                    userId,
+                    ct);
 
             var lengthConstraint = string.IsNullOrWhiteSpace(question.Length)
                 ? ""
                 : $" Keep your response within the following length: {question.Length}.";
             var systemPrompt =
-                $"Please use the bid library we have to return the answer to the question: ${question.Description}.{lengthConstraint}";
+                $"Please use the bid library we have to return the answer to the question: {question.Description}.{lengthConstraint}";
 
             var userPrompt = $"""{chatQuestionRequest.FreeTextQuestion}""";
 
             var result = await _azureOpenAiChatService.AskAsync(
                 userPrompt,
                 systemPrompt,
-                chatQuestionRequest.ThreadId ?? persistedThreadId);
+                chatQuestionRequest.ThreadId ?? persistedThreadId,
+                ct);
 
             if (!string.IsNullOrWhiteSpace(userId))
             {
@@ -75,7 +77,8 @@ public class ChatQuestionController : ControllerBase
                     userId,
                     "user",
                     chatQuestionRequest.FreeTextQuestion,
-                    now);
+                    now,
+                    ct: ct);
                 await _bidService.AddChatMessage(
                     chatQuestionRequest.BidId,
                     resolvedQuestionId,
@@ -84,12 +87,14 @@ public class ChatQuestionController : ControllerBase
                     result.Response,
                     now.AddMilliseconds(1),
                     result.Sources,
-                    result.UsedSourcesOutsideBidLibrary);
+                    result.UsedSourcesOutsideBidLibrary,
+                    ct);
                 await _bidService.SetChatThreadId(
                     chatQuestionRequest.BidId,
                     resolvedQuestionId,
                     userId,
-                    result.ThreadId);
+                    result.ThreadId,
+                    ct);
             }
 
             return Ok(new ChatQuestionResponse
@@ -163,7 +168,7 @@ public class ChatQuestionController : ControllerBase
 
         try
         {
-            var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, resolvedQuestionId);
+            var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, resolvedQuestionId, ct);
             var persistedThreadId = await _bidService.GetChatThreadId(chatQuestionRequest.BidId, resolvedQuestionId, userId, ct);
             var systemPrompt =
                 $"Use the bid library, dont merge different aspects between projects if asking for specific examples. Add citation information of document and location in document. Where we have scoring dont use that if its scores 2 or below. Answer this question: {question.Description}";

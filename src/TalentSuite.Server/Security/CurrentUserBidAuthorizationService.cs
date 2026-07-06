@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.Extensions.Caching.Memory;
 using TalentSuite.Server.Bids.Services;
 using TalentSuite.Server.Users.Services;
 
@@ -16,8 +17,14 @@ public interface ICurrentUserBidAuthorizationService
 
 public sealed class CurrentUserBidAuthorizationService(
     IBidService bidService,
-    IUserService userService) : ICurrentUserBidAuthorizationService
+    IUserService userService,
+    IMemoryCache cache) : ICurrentUserBidAuthorizationService
 {
+    // This lookup runs on every RequireBidAccess/RequireBidManagementRole request and
+    // scans the full user table; the subject→userId mapping only changes at invite
+    // acceptance, so a short cache removes the per-request scan.
+    private static readonly TimeSpan IdentityCacheTtl = TimeSpan.FromMinutes(5);
+
     public bool IsAdmin(ClaimsPrincipal user)
         => user.IsInRole("admin") || user.IsInRole("Admin");
 
@@ -34,6 +41,22 @@ public sealed class CurrentUserBidAuthorizationService(
         var username = user.FindFirst("preferred_username")?.Value
                        ?? user.FindFirst(ClaimTypes.Name)?.Value;
 
+        if (string.IsNullOrWhiteSpace(subject) && string.IsNullOrWhiteSpace(username))
+            return null;
+
+        var cacheKey = $"current-user-id::{subject}::{username}";
+        if (cache.TryGetValue(cacheKey, out string? cachedUserId))
+            return cachedUserId;
+
+        var resolvedUserId = await ResolveUserIdUncachedAsync(subject, username, ct);
+        if (resolvedUserId is not null)
+            cache.Set(cacheKey, resolvedUserId, IdentityCacheTtl);
+
+        return resolvedUserId;
+    }
+
+    private async Task<string?> ResolveUserIdUncachedAsync(string? subject, string? username, CancellationToken ct)
+    {
         var users = await userService.GetUsers(ct);
 
         if (!string.IsNullOrWhiteSpace(subject))

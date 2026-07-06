@@ -12,7 +12,7 @@ namespace TalentSuite.Server.Bids.Services;
 
 public interface IDocumentIngestionJobService
 {
-    string StartJob(
+    Task<string> StartJobAsync(
         string ownerUserKey,
         byte[] fileBytes,
         string fileName,
@@ -29,12 +29,14 @@ public sealed partial class DocumentIngestionJobService : IDocumentIngestionJobS
     private static readonly TimeSpan StreamPollInterval = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan DefaultJobTimeout = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan DefaultAbandonedJobThreshold = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan DefaultCompletedJobRetention = TimeSpan.FromMinutes(5);
     private readonly ConcurrentDictionary<string, IngestionJobState> _jobs = new(StringComparer.OrdinalIgnoreCase);
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DocumentIngestionJobService> _logger;
     private readonly TalentSuiteMetrics _metrics;
     private readonly TimeSpan _jobTimeout;
     private readonly TimeSpan _abandonedJobThreshold;
+    private readonly TimeSpan _completedJobRetention;
 
     public DocumentIngestionJobService(
         IServiceScopeFactory scopeFactory,
@@ -47,12 +49,13 @@ public sealed partial class DocumentIngestionJobService : IDocumentIngestionJobS
         _metrics = metrics;
         _jobTimeout = GetConfiguredDuration(configuration, "DocumentIngestion:JobTimeout", DefaultJobTimeout);
         _abandonedJobThreshold = GetConfiguredDuration(configuration, "DocumentIngestion:AbandonedJobThreshold", DefaultAbandonedJobThreshold);
+        _completedJobRetention = GetConfiguredDuration(configuration, "DocumentIngestion:CompletedJobRetention", DefaultCompletedJobRetention);
 
         if (_abandonedJobThreshold < _jobTimeout)
             _abandonedJobThreshold = _jobTimeout;
     }
 
-    public string StartJob(
+    public async Task<string> StartJobAsync(
         string ownerUserKey,
         byte[] fileBytes,
         string fileName,
@@ -85,7 +88,7 @@ public sealed partial class DocumentIngestionJobService : IDocumentIngestionJobS
 
         _metrics.JobStarted();
 
-        PersistJobStateAsync(jobState, cancellationToken).GetAwaiter().GetResult();
+        await PersistJobStateAsync(jobState, cancellationToken);
 
         // The background job must outlive the request that created it.
         _ = Task.Run(
@@ -95,7 +98,7 @@ public sealed partial class DocumentIngestionJobService : IDocumentIngestionJobS
         return jobId;
     }
 
-    public Task<List<DocumentIngestionJobStatusResponse>> ListJobsAsync(string ownerUserKey, CancellationToken cancellationToken = default)
+    public async Task<List<DocumentIngestionJobStatusResponse>> ListJobsAsync(string ownerUserKey, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerUserKey);
         cancellationToken.ThrowIfCancellationRequested();
@@ -107,20 +110,22 @@ public sealed partial class DocumentIngestionJobService : IDocumentIngestionJobS
 
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IManageBids>();
-        var jobs = repository.GetDocumentIngestionJobsForUser(ownerUserKey, cancellationToken)
-            .GetAwaiter()
-            .GetResult()
-            .Select(job => TryMarkStoredJobAsAbandonedAsync(job, repository, cancellationToken).GetAwaiter().GetResult())
-            .Select(ToResponse)
-            .Where(job => !liveJobs.ContainsKey(job.JobId))
-            .Concat(liveJobs.Values)
-            .OrderByDescending(job => job.CreatedAtUtc)
-            .ToList();
+        var storedJobs = await repository.GetDocumentIngestionJobsForUser(ownerUserKey, cancellationToken);
 
-        return Task.FromResult(jobs);
+        var jobs = new List<DocumentIngestionJobStatusResponse>();
+        foreach (var storedJob in storedJobs)
+        {
+            var job = await TryMarkStoredJobAsAbandonedAsync(storedJob, repository, cancellationToken);
+            var response = ToResponse(job);
+            if (!liveJobs.ContainsKey(response.JobId))
+                jobs.Add(response);
+        }
+
+        jobs.AddRange(liveJobs.Values);
+        return jobs.OrderByDescending(job => job.CreatedAtUtc).ToList();
     }
 
-    public Task<DocumentIngestionJobStatusResponse?> GetJobAsync(string jobId, string ownerUserKey, CancellationToken cancellationToken = default)
+    public async Task<DocumentIngestionJobStatusResponse?> GetJobAsync(string jobId, string ownerUserKey, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(jobId);
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerUserKey);
@@ -129,25 +134,21 @@ public sealed partial class DocumentIngestionJobService : IDocumentIngestionJobS
         if (_jobs.TryGetValue(jobId, out var liveJob)
             && string.Equals(liveJob.OwnerUserKey, ownerUserKey, StringComparison.OrdinalIgnoreCase))
         {
-            return Task.FromResult<DocumentIngestionJobStatusResponse?>(ToResponse(liveJob));
+            return ToResponse(liveJob);
         }
 
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IManageBids>();
-        var job = repository.GetDocumentIngestionJob(jobId, cancellationToken)
-            .GetAwaiter()
-            .GetResult();
+        var job = await repository.GetDocumentIngestionJob(jobId, cancellationToken);
         if (job is null)
-            return Task.FromResult<DocumentIngestionJobStatusResponse?>(null);
+            return null;
 
         if (!string.Equals(job.OwnerUserKey, ownerUserKey, StringComparison.OrdinalIgnoreCase))
-            return Task.FromResult<DocumentIngestionJobStatusResponse?>(null);
+            return null;
 
-        job = TryMarkStoredJobAsAbandonedAsync(job, repository, cancellationToken)
-            .GetAwaiter()
-            .GetResult();
+        job = await TryMarkStoredJobAsAbandonedAsync(job, repository, cancellationToken);
 
-        return Task.FromResult<DocumentIngestionJobStatusResponse?>(ToResponse(job));
+        return ToResponse(job);
     }
 
     public async IAsyncEnumerable<DocumentIngestionJobEventResponse> StreamJobAsync(
@@ -279,6 +280,22 @@ public sealed partial class DocumentIngestionJobService : IDocumentIngestionJobS
         }
         finally
         {
+            // State is persisted to SQL, so the in-memory entry only needs to live long
+            // enough for streaming clients to drain; without eviction the singleton
+            // dictionary (holding full parsed results) grows for the process lifetime.
+            _ = EvictJobAfterRetentionAsync(jobId);
+        }
+    }
+
+    private async Task EvictJobAfterRetentionAsync(string jobId)
+    {
+        try
+        {
+            await Task.Delay(_completedJobRetention);
+        }
+        finally
+        {
+            _jobs.TryRemove(jobId, out _);
         }
     }
 
@@ -302,7 +319,7 @@ public sealed partial class DocumentIngestionJobService : IDocumentIngestionJobS
             }
         }
 
-        _ = PersistJobStateFireAndForgetAsync(jobState);
+        _ = PersistJobStateSafeAsync(jobState);
     }
 
     private static DocumentIngestionJobStatusResponse ToResponse(IngestionJobState jobState)
@@ -380,14 +397,18 @@ public sealed partial class DocumentIngestionJobService : IDocumentIngestionJobS
         }
     }
 
-    private async Task PersistJobStateAsync(IngestionJobState jobState, CancellationToken cancellationToken)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IManageBids>();
-        await repository.SaveDocumentIngestionJob(ToDataModel(jobState), cancellationToken);
-    }
+    // All persists for a job are chained so snapshots commit in publish order; an
+    // unordered fire-and-forget write could land after the terminal write and leave
+    // the stored job permanently incomplete.
+    private Task PersistJobStateAsync(IngestionJobState jobState, CancellationToken cancellationToken)
+        => jobState.EnqueuePersistAsync(async () =>
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IManageBids>();
+            await repository.SaveDocumentIngestionJob(ToDataModel(jobState), cancellationToken);
+        });
 
-    private async Task PersistJobStateFireAndForgetAsync(IngestionJobState jobState)
+    private async Task PersistJobStateSafeAsync(IngestionJobState jobState)
     {
         try
         {
@@ -438,6 +459,8 @@ public sealed partial class DocumentIngestionJobService : IDocumentIngestionJobS
 
     private sealed class IngestionJobState
     {
+        private Task _persistChain = Task.CompletedTask;
+
         public object SyncRoot { get; } = new();
         public string JobId { get; init; } = string.Empty;
         public string OwnerUserKey { get; init; } = string.Empty;
@@ -451,5 +474,30 @@ public sealed partial class DocumentIngestionJobService : IDocumentIngestionJobS
         public ParsedDocumentResponse? Result { get; set; }
         public List<DocumentIngestionJobEventResponse> History { get; } = [];
         public bool IsCompleted { get; set; }
+
+        public Task EnqueuePersistAsync(Func<Task> persist)
+        {
+            lock (SyncRoot)
+            {
+                var link = RunAfterAsync(_persistChain, persist);
+                _persistChain = link;
+                return link;
+            }
+        }
+
+        private static async Task RunAfterAsync(Task previous, Func<Task> action)
+        {
+            try
+            {
+                await previous.ConfigureAwait(false);
+            }
+            catch
+            {
+                // The previous link's failure is observed (and logged) by its own caller;
+                // it must not break subsequent persists.
+            }
+
+            await action().ConfigureAwait(false);
+        }
     }
 }

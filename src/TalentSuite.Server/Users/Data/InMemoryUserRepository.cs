@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using TalentSuite.Server.Users.Services.DataModels;
 using TalentSuite.Shared.Users;
 
@@ -5,13 +6,15 @@ namespace TalentSuite.Server.Users.Data;
 
 public class InMemoryUserRepository : IManageUsers
 {
-    private readonly Dictionary<string, UserDataModel> _users = new();
-    
+    // Registered as a singleton and hit by concurrent requests, so the store must be
+    // thread-safe.
+    private readonly ConcurrentDictionary<string, UserDataModel> _users = new();
+
     public InMemoryUserRepository()
     {
         var id = "04d3fde7-8b47-4558-905b-1888fb8a4db0";
-        
-        _users.Add(id, new UserDataModel(id)
+
+        _users.TryAdd(id, new UserDataModel(id)
         {
             Name = "Richard Parkins",
             Email = "rgparkins@hotmail.com",
@@ -23,8 +26,8 @@ public class InMemoryUserRepository : IManageUsers
         });
 
         id = "0cf878f8-0840-4e1f-81af-983462b73722";
-        
-        _users.Add(id, new UserDataModel(id)
+
+        _users.TryAdd(id, new UserDataModel(id)
         {
             Name = "Karen Spearing",
             Email = "karen.spearing@hotmail.com",
@@ -72,10 +75,8 @@ public class InMemoryUserRepository : IManageUsers
         if (string.IsNullOrWhiteSpace(userId) || updatedUser is null)
             return Task.FromResult(false);
 
-        if (!_users.ContainsKey(userId))
+        if (!_users.TryGetValue(userId, out var existing))
             return Task.FromResult(false);
-
-        var existing = _users[userId];
 
         _users[userId] = new UserDataModel(userId)
         {
@@ -98,7 +99,7 @@ public class InMemoryUserRepository : IManageUsers
         if (string.IsNullOrWhiteSpace(userId))
             return Task.FromResult(false);
 
-        return Task.FromResult(_users.Remove(userId));
+        return Task.FromResult(_users.TryRemove(userId, out _));
     }
 
     public Task<UserDataModel?> ResendInvite(string userId, CancellationToken ct = default)
