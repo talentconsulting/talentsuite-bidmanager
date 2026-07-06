@@ -1,3 +1,6 @@
+using Azure;
+using Azure.AI.DocumentIntelligence;
+using Azure.AI.OpenAI;
 using TalentSuite.Server.Bids.Data;
 using TalentSuite.Server.Bids.Mappers;
 using TalentSuite.Server.Bids.Services;
@@ -31,6 +34,14 @@ public static class Extensions
         }
         else
         {
+            // Azure SDK clients are thread-safe and pool connections; singletons avoid
+            // rebuilding client pipelines on every request.
+            services.AddSingleton(_ => new DocumentIntelligenceClient(
+                new Uri(configuration![DocumentIntelligenceEndpointKey]!),
+                new AzureKeyCredential(configuration[DocumentIntelligenceApiKeyKey]!)));
+            services.AddSingleton(_ => new AzureOpenAIClient(
+                new Uri(configuration![AzureOpenAiEndpointKey]!),
+                new AzureKeyCredential(configuration[AzureOpenAiApiKeyKey]!)));
             services.AddScoped<IDocumentIngestionservice, DocumentIngestionService>();
         }
 
@@ -44,7 +55,9 @@ public static class Extensions
             services.AddSingleton<IManageBids, InMemoryBidRepository>();
         }
 
-        services.AddScoped<IAzureOpenAiChatService, AzureOpenAiChatService>();
+        // Singleton so the Foundry agents client, credential handshake, and the
+        // file-name cache survive across requests instead of being rebuilt per scope.
+        services.AddSingleton<IAzureOpenAiChatService, AzureOpenAiChatService>();
     }
     
     public static IServiceCollection AddBidMappings(this IServiceCollection services)

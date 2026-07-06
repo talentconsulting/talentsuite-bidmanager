@@ -38,7 +38,7 @@ builder.Services.AddHostedService<UserSeedingHostedService>();
 // Ingestion service
 builder.Services.AddBidServices(builder.Configuration);
 builder.Services.AddUserServices(builder.Configuration);
-builder.Services.AddAzureServiceBusMessaging(builder.Configuration);
+builder.AddAzureServiceBusMessaging();
 builder.Services.AddScoped<IHealthCheckProbe, SqlDatabaseHealthCheckProbe>();
 
 var keycloakAuthority = Environment.GetEnvironmentVariable("KEYCLOAK_AUTHORITY")

@@ -38,29 +38,17 @@ public sealed class DocumentIngestionService : IDocumentIngestionservice
     private readonly TimeSpan _throttleRetryDelay;
     private readonly ILogger<DocumentIngestionService> _logger;
     
-    public DocumentIngestionService(IConfiguration config, ILogger<DocumentIngestionService> logger)
+    public DocumentIngestionService(
+        DocumentIntelligenceClient diClient,
+        AzureOpenAIClient aoaiClient,
+        IConfiguration config,
+        ILogger<DocumentIngestionService> logger)
     {
         _logger = logger;
-        // ---- Document Intelligence ----
-        var diEndpoint = config["DocumentIntelligence:Endpoint"]
-            ?? throw new InvalidOperationException("Missing config: DocumentIntelligence:Endpoint");
-
-        var diKey = config["DocumentIntelligence:ApiKey"]
-            ?? throw new InvalidOperationException("Missing config: DocumentIntelligence:ApiKey");
-
-        _diClient = new DocumentIntelligenceClient(new Uri(diEndpoint), new AzureKeyCredential(diKey));
-
-        // ---- Azure OpenAI ----
-        var aoaiEndpoint = config["AzureOpenAI:Endpoint"]
-            ?? throw new InvalidOperationException("Missing config: AzureOpenAI:Endpoint");
-
-        var aoaiKey = config["AzureOpenAI:ApiKey"]
-            ?? throw new InvalidOperationException("Missing config: AzureOpenAI:ApiKey");
-
+        _diClient = diClient;
+        _aoaiClient = aoaiClient;
         _chatDeployment = config["AzureOpenAI:ChatDeployment"]
             ?? throw new InvalidOperationException("Missing config: AzureOpenAI:ChatDeployment");
-
-        _aoaiClient = new AzureOpenAIClient(new Uri(aoaiEndpoint), new AzureKeyCredential(aoaiKey));
         _throttleRetryDelay = GetConfiguredDelay(config["DocumentIngestion:ThrottleRetryDelay"], DefaultThrottleRetryDelay);
     }
 
