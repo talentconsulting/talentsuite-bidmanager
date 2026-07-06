@@ -39,12 +39,12 @@ public sealed class BidsController : ControllerBase
     
     [HttpPost]
     [Authorize(Policy = "RequireAdminRole")]
-    public async Task<IActionResult> Create([FromBody] CreateBidRequest req)
+    public async Task<IActionResult> Create([FromBody] CreateBidRequest req, CancellationToken ct)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
-        
-        var result = await _bidService.CreateBid(_mapper.ToModel(req));
+
+        var result = await _bidService.CreateBid(_mapper.ToModel(req), ct);
         
         return CreatedAtAction(
             nameof(Get),

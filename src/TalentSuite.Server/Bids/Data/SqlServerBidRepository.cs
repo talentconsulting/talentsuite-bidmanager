@@ -681,6 +681,9 @@ public sealed class SqlServerBidRepository : IManageBids
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
+        // One transaction so a failure mid-sweep cannot leave comments completed while
+        // the bid status update never lands (or vice versa).
+        await using var tx = (SqlTransaction)await connection.BeginTransactionAsync(ct);
 
         if (status == BidStatus.Submitted)
         {
@@ -688,12 +691,13 @@ public sealed class SqlServerBidRepository : IManageBids
                 new CommandDefinition(
                     "SELECT Payload FROM dbo.Bids WHERE Id = @Id",
                     new { Id = bidId },
+                    transaction: tx,
                     cancellationToken: ct));
             if (payload is null)
                 return;
 
             var bid = Deserialize<BidDataModel>(payload);
-            await SetAllCommentsCompleteForBidAsync(connection, bid, ct);
+            await SetAllCommentsCompleteForBidAsync(connection, tx, bid, ct);
         }
 
         await connection.ExecuteAsync(new CommandDefinition(
@@ -703,7 +707,10 @@ public sealed class SqlServerBidRepository : IManageBids
             WHERE Id = @Id;
             """,
             new { Id = bidId, Status = (int)status },
+            transaction: tx,
             cancellationToken: ct));
+
+        await tx.CommitAsync(ct);
     }
 
     public async Task<BidLibraryPushDataModel> PushBidToLibrary(
@@ -996,10 +1003,11 @@ public sealed class SqlServerBidRepository : IManageBids
 
     public async Task UpdateQuestionDraft(string bidId, string questionId, string draftId, string draft, CancellationToken ct)
     {
-        await EnsureSchemaAsync(ct);
-        var item = await GetDraftOrThrow(questionId, draftId, ct);
-        item.Response = draft;
-        await UpsertDraftAsync(questionId, item, ct);
+        await UpdateDraftInTransactionAsync(questionId, draftId, item =>
+        {
+            item.Response = draft;
+            return true;
+        }, ct);
     }
 
     public async Task<DraftCommentDataModel> AddQuestionDraftComment(
@@ -1014,15 +1022,14 @@ public sealed class SqlServerBidRepository : IManageBids
         string selectedText,
         CancellationToken ct = default)
     {
-        await EnsureSchemaAsync(ct);
-        var draft = await GetDraftOrThrow(questionId, draftId, ct);
-        draft.Comments ??= new List<DraftCommentDataModel>();
+        return await UpdateDraftInTransactionAsync(questionId, draftId, draft =>
+        {
+            draft.Comments ??= new List<DraftCommentDataModel>();
 
-        var newComment = CreateInlineComment(comment, userId, authorName, startIndex, endIndex, selectedText);
-        draft.Comments.Add(newComment);
-
-        await UpsertDraftAsync(questionId, draft, ct);
-        return newComment;
+            var newComment = CreateInlineComment(comment, userId, authorName, startIndex, endIndex, selectedText);
+            draft.Comments.Add(newComment);
+            return newComment;
+        }, ct);
     }
 
     public async Task<List<DraftCommentDataModel>> GetQuestionDraftComments(string bidId, string questionId, string draftId,
@@ -1042,14 +1049,14 @@ public sealed class SqlServerBidRepository : IManageBids
         bool isComplete,
         CancellationToken ct = default)
     {
-        await EnsureSchemaAsync(ct);
-        var draft = await GetDraftOrThrow(questionId, draftId, ct);
-        draft.Comments ??= new List<DraftCommentDataModel>();
-        var comment = draft.Comments.FirstOrDefault(c => string.Equals(c.Id, commentId, StringComparison.OrdinalIgnoreCase))
-                      ?? throw new Exception("Invalid request, commentId does not exist");
-        comment.IsComplete = isComplete;
-        await UpsertDraftAsync(questionId, draft, ct);
-        return comment;
+        return await UpdateDraftInTransactionAsync(questionId, draftId, draft =>
+        {
+            draft.Comments ??= new List<DraftCommentDataModel>();
+            var comment = draft.Comments.FirstOrDefault(c => string.Equals(c.Id, commentId, StringComparison.OrdinalIgnoreCase))
+                          ?? throw new KeyNotFoundException("Invalid request, commentId does not exist");
+            comment.IsComplete = isComplete;
+            return comment;
+        }, ct);
     }
 
     public async Task CreateMentionTasks(
@@ -1281,39 +1288,31 @@ public sealed class SqlServerBidRepository : IManageBids
         if (string.IsNullOrWhiteSpace(questionId))
             return;
 
-        await EnsureSchemaAsync(ct);
-        var existing = await GetRedReview(bidId, questionId, ct);
-        var toStore = new RedReviewDataModel
-        {
-            QuestionId = questionId,
-            ResultText = review.ResultText ?? string.Empty,
-            State = review.State,
-            Comments = (existing?.Comments ?? new List<DraftCommentDataModel>())
-                .Select(c => new DraftCommentDataModel(c.Id)
+        await UpdateQuestionDocumentInTransactionAsync<RedReviewDataModel, bool>(
+            QuestionDocumentTable.RedReviews,
+            questionId,
+            existing =>
+            {
+                var toStore = new RedReviewDataModel
                 {
-                    Comment = c.Comment,
-                    IsComplete = c.IsComplete,
-                    UserId = c.UserId,
-                    AuthorName = c.AuthorName,
-                    CreatedAtUtc = c.CreatedAtUtc,
-                    StartIndex = c.StartIndex,
-                    EndIndex = c.EndIndex,
-                    SelectedText = c.SelectedText
-                })
-                .ToList(),
-            Reviewers = review.Reviewers
-                .Where(r => !string.IsNullOrWhiteSpace(r.UserId))
-                .GroupBy(r => r.UserId, StringComparer.OrdinalIgnoreCase)
-                .Select(g => g.First())
-                .Select(r => new RedReviewReviewerDataModel
-                {
-                    UserId = r.UserId,
-                    State = r.State
-                })
-                .ToList()
-        };
-
-        await UpsertDocumentByQuestionIdAsync("dbo.RedReviews", questionId, toStore, ct);
+                    QuestionId = questionId,
+                    ResultText = review.ResultText ?? string.Empty,
+                    State = review.State,
+                    Comments = existing?.Comments ?? new List<DraftCommentDataModel>(),
+                    Reviewers = review.Reviewers
+                        .Where(r => !string.IsNullOrWhiteSpace(r.UserId))
+                        .GroupBy(r => r.UserId, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.First())
+                        .Select(r => new RedReviewReviewerDataModel
+                        {
+                            UserId = r.UserId,
+                            State = r.State
+                        })
+                        .ToList()
+                };
+                return (toStore, true);
+            },
+            ct);
     }
 
     public async Task<FinalAnswerDataModel?> GetFinalAnswer(string bidId, string questionId, CancellationToken ct = default)
@@ -1401,29 +1400,21 @@ public sealed class SqlServerBidRepository : IManageBids
         if (string.IsNullOrWhiteSpace(questionId))
             return;
 
-        await EnsureSchemaAsync(ct);
-        var existing = await GetFinalAnswer(bidId, questionId, ct);
-        var toStore = new FinalAnswerDataModel
-        {
-            QuestionId = questionId,
-            AnswerText = answer.AnswerText ?? string.Empty,
-            ReadyForSubmission = answer.ReadyForSubmission,
-            Comments = (existing?.Comments ?? new List<DraftCommentDataModel>())
-                .Select(c => new DraftCommentDataModel(c.Id)
+        await UpdateQuestionDocumentInTransactionAsync<FinalAnswerDataModel, bool>(
+            QuestionDocumentTable.FinalAnswers,
+            questionId,
+            existing =>
+            {
+                var toStore = new FinalAnswerDataModel
                 {
-                    Comment = c.Comment,
-                    IsComplete = c.IsComplete,
-                    UserId = c.UserId,
-                    AuthorName = c.AuthorName,
-                    CreatedAtUtc = c.CreatedAtUtc,
-                    StartIndex = c.StartIndex,
-                    EndIndex = c.EndIndex,
-                    SelectedText = c.SelectedText
-                })
-                .ToList()
-        };
-
-        await UpsertDocumentByQuestionIdAsync("dbo.FinalAnswers", questionId, toStore, ct);
+                    QuestionId = questionId,
+                    AnswerText = answer.AnswerText ?? string.Empty,
+                    ReadyForSubmission = answer.ReadyForSubmission,
+                    Comments = existing?.Comments ?? new List<DraftCommentDataModel>()
+                };
+                return (toStore, true);
+            },
+            ct);
     }
 
     public async Task<DraftCommentDataModel> AddRedReviewComment(
@@ -1438,16 +1429,21 @@ public sealed class SqlServerBidRepository : IManageBids
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(questionId))
-            throw new Exception("Invalid request, questionId is null or empty");
+            throw new InvalidOperationException("Invalid request, questionId is null or empty");
 
-        var review = await GetRedReview(bidId, questionId, ct) ?? new RedReviewDataModel { QuestionId = questionId };
-        review.Comments ??= new List<DraftCommentDataModel>();
+        return await UpdateQuestionDocumentInTransactionAsync<RedReviewDataModel, DraftCommentDataModel>(
+            QuestionDocumentTable.RedReviews,
+            questionId,
+            existing =>
+            {
+                var review = existing ?? new RedReviewDataModel { QuestionId = questionId };
+                review.Comments ??= new List<DraftCommentDataModel>();
 
-        var newComment = CreateInlineComment(comment, userId, authorName, startIndex, endIndex, selectedText);
-        review.Comments.Add(newComment);
-
-        await UpsertDocumentByQuestionIdAsync("dbo.RedReviews", questionId, review, ct);
-        return newComment;
+                var newComment = CreateInlineComment(comment, userId, authorName, startIndex, endIndex, selectedText);
+                review.Comments.Add(newComment);
+                return (review, newComment);
+            },
+            ct);
     }
 
     public async Task<DraftCommentDataModel> AddFinalAnswerComment(
@@ -1462,16 +1458,21 @@ public sealed class SqlServerBidRepository : IManageBids
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(questionId))
-            throw new Exception("Invalid request, questionId is null or empty");
+            throw new InvalidOperationException("Invalid request, questionId is null or empty");
 
-        var answer = await GetFinalAnswer(bidId, questionId, ct) ?? new FinalAnswerDataModel { QuestionId = questionId };
-        answer.Comments ??= new List<DraftCommentDataModel>();
+        return await UpdateQuestionDocumentInTransactionAsync<FinalAnswerDataModel, DraftCommentDataModel>(
+            QuestionDocumentTable.FinalAnswers,
+            questionId,
+            existing =>
+            {
+                var answer = existing ?? new FinalAnswerDataModel { QuestionId = questionId };
+                answer.Comments ??= new List<DraftCommentDataModel>();
 
-        var newComment = CreateInlineComment(comment, userId, authorName, startIndex, endIndex, selectedText);
-        answer.Comments.Add(newComment);
-
-        await UpsertDocumentByQuestionIdAsync("dbo.FinalAnswers", questionId, answer, ct);
-        return newComment;
+                var newComment = CreateInlineComment(comment, userId, authorName, startIndex, endIndex, selectedText);
+                answer.Comments.Add(newComment);
+                return (answer, newComment);
+            },
+            ct);
     }
 
     public async Task<DraftCommentDataModel> SetRedReviewCommentCompletion(
@@ -1482,15 +1483,21 @@ public sealed class SqlServerBidRepository : IManageBids
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(questionId))
-            throw new Exception("Invalid request, questionId is null or empty");
+            throw new InvalidOperationException("Invalid request, questionId is null or empty");
 
-        var review = await GetRedReview(bidId, questionId, ct) ?? throw new Exception("Invalid request, red review does not exist");
-        review.Comments ??= new List<DraftCommentDataModel>();
-        var comment = review.Comments.FirstOrDefault(c => string.Equals(c.Id, commentId, StringComparison.OrdinalIgnoreCase))
-                      ?? throw new Exception("Invalid request, commentId does not exist");
-        comment.IsComplete = isComplete;
-        await UpsertDocumentByQuestionIdAsync("dbo.RedReviews", questionId, review, ct);
-        return comment;
+        return await UpdateQuestionDocumentInTransactionAsync<RedReviewDataModel, DraftCommentDataModel>(
+            QuestionDocumentTable.RedReviews,
+            questionId,
+            existing =>
+            {
+                var review = existing ?? throw new KeyNotFoundException("Invalid request, red review does not exist");
+                review.Comments ??= new List<DraftCommentDataModel>();
+                var comment = review.Comments.FirstOrDefault(c => string.Equals(c.Id, commentId, StringComparison.OrdinalIgnoreCase))
+                              ?? throw new KeyNotFoundException("Invalid request, commentId does not exist");
+                comment.IsComplete = isComplete;
+                return (review, comment);
+            },
+            ct);
     }
 
     public async Task<DraftCommentDataModel> SetFinalAnswerCommentCompletion(
@@ -1501,15 +1508,21 @@ public sealed class SqlServerBidRepository : IManageBids
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(questionId))
-            throw new Exception("Invalid request, questionId is null or empty");
+            throw new InvalidOperationException("Invalid request, questionId is null or empty");
 
-        var answer = await GetFinalAnswer(bidId, questionId, ct) ?? throw new Exception("Invalid request, final answer does not exist");
-        answer.Comments ??= new List<DraftCommentDataModel>();
-        var comment = answer.Comments.FirstOrDefault(c => string.Equals(c.Id, commentId, StringComparison.OrdinalIgnoreCase))
-                      ?? throw new Exception("Invalid request, commentId does not exist");
-        comment.IsComplete = isComplete;
-        await UpsertDocumentByQuestionIdAsync("dbo.FinalAnswers", questionId, answer, ct);
-        return comment;
+        return await UpdateQuestionDocumentInTransactionAsync<FinalAnswerDataModel, DraftCommentDataModel>(
+            QuestionDocumentTable.FinalAnswers,
+            questionId,
+            existing =>
+            {
+                var answer = existing ?? throw new KeyNotFoundException("Invalid request, final answer does not exist");
+                answer.Comments ??= new List<DraftCommentDataModel>();
+                var comment = answer.Comments.FirstOrDefault(c => string.Equals(c.Id, commentId, StringComparison.OrdinalIgnoreCase))
+                              ?? throw new KeyNotFoundException("Invalid request, commentId does not exist");
+                comment.IsComplete = isComplete;
+                return (answer, comment);
+            },
+            ct);
     }
 
     private async Task EnsureQuestionExistsAsync(string bidId, string questionId, CancellationToken ct)
@@ -1543,55 +1556,114 @@ public sealed class SqlServerBidRepository : IManageBids
         return Deserialize<DraftDataModel>(payload);
     }
 
-    private async Task UpsertDraftAsync(string questionId, DraftDataModel draft, CancellationToken ct)
+    private enum QuestionDocumentTable
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
-        await connection.ExecuteAsync(new CommandDefinition(
-            """
-            IF EXISTS (
-                SELECT 1 FROM dbo.QuestionDrafts WHERE QuestionId = @QuestionId AND DraftId = @DraftId
-            )
-            BEGIN
-                UPDATE dbo.QuestionDrafts
-                SET Payload = @Payload
-                WHERE QuestionId = @QuestionId AND DraftId = @DraftId;
-            END
-            ELSE
-            BEGIN
-                INSERT INTO dbo.QuestionDrafts (QuestionId, DraftId, Payload)
-                VALUES (@QuestionId, @DraftId, @Payload);
-            END;
-            """,
-            new { QuestionId = questionId, DraftId = draft.Id, Payload = Serialize(draft) },
-            cancellationToken: ct));
+        RedReviews,
+        FinalAnswers
     }
 
-    private async Task UpsertDocumentByQuestionIdAsync<T>(string tableName, string questionId, T model, CancellationToken ct)
+    private static string GetTableName(QuestionDocumentTable table) => table switch
     {
+        QuestionDocumentTable.RedReviews => "dbo.RedReviews",
+        QuestionDocumentTable.FinalAnswers => "dbo.FinalAnswers",
+        _ => throw new ArgumentOutOfRangeException(nameof(table))
+    };
+
+    // Read-modify-write on a QuestionDrafts row inside one transaction. UPDLOCK/HOLDLOCK
+    // serializes concurrent writers so a full-payload overwrite cannot drop another
+    // writer's comment.
+    private async Task<TResult> UpdateDraftInTransactionAsync<TResult>(
+        string questionId,
+        string draftId,
+        Func<DraftDataModel, TResult> mutate,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(questionId) || string.IsNullOrWhiteSpace(draftId))
+            throw new InvalidOperationException("Invalid request, questionId or draftId is null or empty");
+
         await EnsureSchemaAsync(ct);
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
-        await connection.ExecuteAsync(new CommandDefinition(
-            $"""
-            IF EXISTS (SELECT 1 FROM {tableName} WHERE QuestionId = @QuestionId)
-            BEGIN
-                UPDATE {tableName}
-                SET Payload = @Payload
-                WHERE QuestionId = @QuestionId;
-            END
-            ELSE
-            BEGIN
-                INSERT INTO {tableName} (QuestionId, Payload)
-                VALUES (@QuestionId, @Payload);
-            END;
+        await using var tx = (SqlTransaction)await connection.BeginTransactionAsync(ct);
+
+        var payload = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
+            """
+            SELECT Payload
+            FROM dbo.QuestionDrafts WITH (UPDLOCK, HOLDLOCK)
+            WHERE QuestionId = @QuestionId
+              AND DraftId = @DraftId;
             """,
-            new { QuestionId = questionId, Payload = Serialize(model) },
+            new { QuestionId = questionId, DraftId = draftId },
+            transaction: tx,
             cancellationToken: ct));
+
+        if (payload is null)
+            throw new KeyNotFoundException("Invalid request, draftId does not exist");
+
+        var draft = Deserialize<DraftDataModel>(payload);
+        var result = mutate(draft);
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE dbo.QuestionDrafts
+            SET Payload = @Payload
+            WHERE QuestionId = @QuestionId AND DraftId = @DraftId;
+            """,
+            new { QuestionId = questionId, DraftId = draftId, Payload = Serialize(draft) },
+            transaction: tx,
+            cancellationToken: ct));
+
+        await tx.CommitAsync(ct);
+        return result;
+    }
+
+    // Same pattern for the single-row-per-question documents (red reviews / final
+    // answers). HOLDLOCK keeps the key range stable, so insert-vs-update can be decided
+    // from the locked read without racing a concurrent first-insert.
+    private async Task<TResult> UpdateQuestionDocumentInTransactionAsync<TDocument, TResult>(
+        QuestionDocumentTable table,
+        string questionId,
+        Func<TDocument?, (TDocument ToStore, TResult Result)> mutate,
+        CancellationToken ct)
+        where TDocument : class
+    {
+        var tableName = GetTableName(table);
+
+        await EnsureSchemaAsync(ct);
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using var tx = (SqlTransaction)await connection.BeginTransactionAsync(ct);
+
+        var payload = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
+            $"""
+            SELECT Payload
+            FROM {tableName} WITH (UPDLOCK, HOLDLOCK)
+            WHERE QuestionId = @QuestionId;
+            """,
+            new { QuestionId = questionId },
+            transaction: tx,
+            cancellationToken: ct));
+
+        var existing = payload is null ? null : Deserialize<TDocument>(payload);
+        var (toStore, result) = mutate(existing);
+
+        var sql = payload is null
+            ? $"INSERT INTO {tableName} (QuestionId, Payload) VALUES (@QuestionId, @Payload);"
+            : $"UPDATE {tableName} SET Payload = @Payload WHERE QuestionId = @QuestionId;";
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            sql,
+            new { QuestionId = questionId, Payload = Serialize(toStore) },
+            transaction: tx,
+            cancellationToken: ct));
+
+        await tx.CommitAsync(ct);
+        return result;
     }
 
     private async Task SetAllCommentsCompleteForBidAsync(
         SqlConnection connection,
+        SqlTransaction tx,
         BidDataModel bid,
         CancellationToken ct)
     {
@@ -1612,6 +1684,7 @@ public sealed class SqlServerBidRepository : IManageBids
                 WHERE QuestionId = @QuestionId;
                 """,
                 new { QuestionId = questionId },
+                transaction: tx,
                 cancellationToken: ct))).ToList();
 
             foreach (var row in draftRows)
@@ -1631,6 +1704,7 @@ public sealed class SqlServerBidRepository : IManageBids
                         DraftId = row.DraftId,
                         Payload = Serialize(draft)
                     },
+                    transaction: tx,
                     cancellationToken: ct));
             }
 
@@ -1641,6 +1715,7 @@ public sealed class SqlServerBidRepository : IManageBids
                 WHERE QuestionId = @QuestionId;
                 """,
                 new { QuestionId = questionId },
+                transaction: tx,
                 cancellationToken: ct));
             if (redReviewPayload is not null)
             {
@@ -1654,6 +1729,7 @@ public sealed class SqlServerBidRepository : IManageBids
                     WHERE QuestionId = @QuestionId;
                     """,
                     new { QuestionId = questionId, Payload = Serialize(review) },
+                    transaction: tx,
                     cancellationToken: ct));
             }
 
@@ -1664,6 +1740,7 @@ public sealed class SqlServerBidRepository : IManageBids
                 WHERE QuestionId = @QuestionId;
                 """,
                 new { QuestionId = questionId },
+                transaction: tx,
                 cancellationToken: ct));
             if (finalAnswerPayload is not null)
             {
@@ -1677,6 +1754,7 @@ public sealed class SqlServerBidRepository : IManageBids
                     WHERE QuestionId = @QuestionId;
                     """,
                     new { QuestionId = questionId, Payload = Serialize(answer) },
+                    transaction: tx,
                     cancellationToken: ct));
             }
         }

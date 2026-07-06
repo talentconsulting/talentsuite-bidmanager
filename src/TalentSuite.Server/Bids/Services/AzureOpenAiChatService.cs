@@ -50,6 +50,8 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
     private readonly ConcurrentDictionary<string, string> _fileNameCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan ActiveRunPollInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan ActiveRunWaitBudget = TimeSpan.FromSeconds(10);
+    // Upper bound for any run poll so a stuck Foundry run cannot hang a request forever.
+    private static readonly TimeSpan DefaultRunWaitBudget = TimeSpan.FromMinutes(3);
 
     public AzureOpenAiChatService(IConfiguration config, IWebHostEnvironment environment)
     {
@@ -336,11 +338,12 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
         CancellationToken ct,
         TimeSpan? maxWait = null)
     {
+        var waitBudget = maxWait ?? DefaultRunWaitBudget;
         var startedAt = DateTimeOffset.UtcNow;
 
         while (run.Status == RunStatus.Queued || run.Status == RunStatus.InProgress)
         {
-            if (maxWait is { } budget && DateTimeOffset.UtcNow - startedAt >= budget)
+            if (DateTimeOffset.UtcNow - startedAt >= waitBudget)
                 return run;
 
             await Task.Delay(ActiveRunPollInterval, ct);

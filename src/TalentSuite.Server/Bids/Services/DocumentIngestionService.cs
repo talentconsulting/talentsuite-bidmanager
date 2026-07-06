@@ -463,6 +463,10 @@ DOCUMENT TEXT:
         return parsed;
     }
 
+    // Bounded so a permanently exhausted quota (which also matches the throttle
+    // heuristics) fails fast instead of hammering the endpoint until the job timeout.
+    private const int MaxThrottleRetryAttempts = 6;
+
     private async Task<T> ExecuteWithThrottleRetryAsync<T>(
         string operationName,
         Func<CancellationToken, Task<T>> action,
@@ -479,7 +483,7 @@ DOCUMENT TEXT:
             {
                 return await action(ct);
             }
-            catch (RequestFailedException ex) when (IsThrottleException(ex))
+            catch (RequestFailedException ex) when (IsThrottleException(ex) && attempt < MaxThrottleRetryAttempts)
             {
                 var delay = GetRetryDelay(ex, attempt);
                 LogThrottle(operationName, ex, attempt + 1, delay);
@@ -490,7 +494,7 @@ DOCUMENT TEXT:
                 await Task.Delay(delay, ct);
                 attempt++;
             }
-            catch (ClientResultException ex) when (IsThrottleException(ex))
+            catch (ClientResultException ex) when (IsThrottleException(ex) && attempt < MaxThrottleRetryAttempts)
             {
                 var delay = GetRetryDelay(attempt);
                 LogThrottle(operationName, ex, attempt + 1, delay);
@@ -506,8 +510,24 @@ DOCUMENT TEXT:
 
     private TimeSpan GetRetryDelay(RequestFailedException ex, int attempt)
     {
+        // Prefer the service-provided backoff over the exponential guess.
+        var response = ex.GetRawResponse();
+        if (response is not null)
+        {
+            var retryAfterMs = TryGetHeader(response.Headers, "retry-after-ms");
+            if (double.TryParse(retryAfterMs, out var ms) && ms > 0)
+                return CapRetryDelay(TimeSpan.FromMilliseconds(ms));
+
+            var retryAfter = TryGetHeader(response.Headers, "Retry-After");
+            if (double.TryParse(retryAfter, out var seconds) && seconds > 0)
+                return CapRetryDelay(TimeSpan.FromSeconds(seconds));
+        }
+
         return GetRetryDelay(attempt);
     }
+
+    private static TimeSpan CapRetryDelay(TimeSpan delay)
+        => delay > TimeSpan.FromSeconds(60) ? TimeSpan.FromSeconds(60) : delay;
 
     private TimeSpan GetRetryDelay(int attempt)
     {
