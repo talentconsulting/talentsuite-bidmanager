@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       target_environment:
-        description: "GitHub environment to use for this deployment"
+        description: 'GitHub environment to use for this deployment'
         required: true
-        default: "dev"
+        default: 'dev'
         type: environment
 
 permissions:
@@ -46,6 +46,7 @@ jobs:
           set -euo pipefail
 
           env_suffix="${AZURE_ENV_NAME}"
+          resource_tags="Owner=rgparkins project=talentsuite azd-env-name=${env_suffix}"
           frontdoor_resource_group="rg-talentsuite-common"
           target_resource_group="rg-${AZURE_ENV_NAME}"
           case "$env_suffix" in
@@ -77,6 +78,7 @@ jobs:
             echo "FRONTDOOR_AUTH_ENDPOINT_NAME=$auth_endpoint_name"
             echo "FRONTDOOR_API_ENDPOINT_NAME=$api_endpoint_name"
             echo "FRONTDOOR_GRAFANA_ENDPOINT_NAME=$grafana_endpoint_name"
+            echo "FRONTDOOR_RESOURCE_TAGS=$resource_tags"
             echo "FRONTDOOR_CUSTOM_DOMAIN=$custom_domain"
             echo "FRONTDOOR_AUTH_DOMAIN=$auth_domain"
             echo "FRONTDOOR_API_DOMAIN=$api_domain"
@@ -140,6 +142,7 @@ jobs:
           az group create \
             --name "$frontdoor_resource_group" \
             --location "${AZURE_LOCATION}" \
+            --tags ${FRONTDOOR_RESOURCE_TAGS} \
             >/dev/null
 
           azd_values="$(azd env get-values --environment "${AZURE_ENV_NAME}" 2>/dev/null || true)"
@@ -192,7 +195,8 @@ jobs:
             az afd profile create \
               --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
-              --sku "$sku" >/dev/null
+              --sku "$sku" \
+              --tags ${FRONTDOOR_RESOURCE_TAGS} >/dev/null
           fi
 
           if ! az afd endpoint show --resource-group "$frontdoor_resource_group" --profile-name "$profile_name" --endpoint-name "$endpoint_name" >/dev/null 2>&1; then
@@ -200,6 +204,7 @@ jobs:
               --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$endpoint_name" \
+              --tags ${FRONTDOOR_RESOURCE_TAGS} \
               --enabled-state Enabled >/dev/null
           fi
 
@@ -208,6 +213,7 @@ jobs:
               --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$auth_endpoint_name" \
+              --tags ${FRONTDOOR_RESOURCE_TAGS} \
               --enabled-state Enabled >/dev/null
           fi
 
@@ -216,6 +222,7 @@ jobs:
               --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$api_endpoint_name" \
+              --tags ${FRONTDOOR_RESOURCE_TAGS} \
               --enabled-state Enabled >/dev/null
           fi
 
@@ -224,6 +231,7 @@ jobs:
               --resource-group "$frontdoor_resource_group" \
               --profile-name "$profile_name" \
               --endpoint-name "$grafana_endpoint_name" \
+              --tags ${FRONTDOOR_RESOURCE_TAGS} \
               --enabled-state Enabled >/dev/null
           fi
 

@@ -45,12 +45,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: azure-deploy-${{ inputs.target_environment }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     permissions:
       id-token: write
       contents: read
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     environment: ${{ inputs.target_environment }}
     env:
       # ---- azd / Azure context ----
@@ -107,6 +112,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
       - name: Azure Login (OIDC)
         uses: azure/login@v3
         with:
@@ -125,10 +143,13 @@ jobs:
         run: echo '${{ toJson(inputs) }}' >> $GITHUB_STEP_SUMMARY
 
       - name: Validate Azure login inputs
+        env:
+          AzureClientId: ${{ secrets.AZURE_CLIENT_ID }}
+          AzureTenantId: ${{ secrets.AZURE_TENANT_ID }}
         run: |
-          test -n "${{ secrets.AZURE_CLIENT_ID }}" || (echo "AZURE_CLIENT_ID missing" && exit 1)
-          test -n "${{ secrets.AZURE_TENANT_ID }}" || (echo "AZURE_TENANT_ID missing" && exit 1)
-          test -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
+          test -n "${AzureClientId:-}" || (echo "AZURE_CLIENT_ID missing" && exit 1)
+          test -n "${AzureTenantId:-}" || (echo "AZURE_TENANT_ID missing" && exit 1)
+          test -n "${AZURE_SUBSCRIPTION_ID:-}" || (echo "AZURE_SUBSCRIPTION_ID missing" && exit 1)
           test -n "${AuthenticationEnabled:-}" || (echo "AUTHENTICATION_ENABLED var missing" && exit 1)
           test -n "${UseInMemoryData:-}" || (echo "USE_IN_MEMORY_DATA var missing" && exit 1)
           test -n "${KeycloakClientId:-}" || (echo "KEYCLOAK_CLIENT_ID var missing" && exit 1)
@@ -162,10 +183,18 @@ jobs:
 
       - name: Ensure required Azure resource providers are registered
         run: |
-          az provider register --namespace Microsoft.App --wait
-          az provider register --namespace Microsoft.KeyVault --wait
-          az provider register --namespace Microsoft.Storage --wait
-          az provider register --namespace Microsoft.ContainerInstance --wait
+          set -euo pipefail
+          pending=""
+          for ns in Microsoft.App Microsoft.KeyVault Microsoft.Storage Microsoft.ContainerInstance; do
+            state="$(az provider show --namespace "$ns" --query registrationState -o tsv 2>/dev/null || echo NotRegistered)"
+            if [ "$state" != "Registered" ]; then
+              az provider register --namespace "$ns"
+              pending="$pending $ns"
+            fi
+          done
+          for ns in $pending; do
+            az provider register --namespace "$ns" --wait
+          done
 
       - name: Build infra tags for Azure Policy compliance
         run: |
@@ -187,6 +216,16 @@ jobs:
           echo "AZURE_RESOURCE_TAGS=${infra_tags_json}" >> "$GITHUB_ENV"
           echo "Computed infra tags for policy compliance: ${infra_tags_json}"
           echo "Infra tags: ${infra_tags_json}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Refresh azd environment outputs from existing provisioned infra
+        if: ${{ inputs.deployment_mode == 'apps-only' }}
+        working-directory: ${{ env.AZD_WORKING_DIR }}
+        run: |
+          set -euo pipefail
+          azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
+          azd auth login --check-status >/dev/null
+          azd env refresh --environment "${AZURE_ENV_NAME}" --no-prompt
+          echo "Refreshed azd environment outputs for apps-only deploy."
 
       - name: Seed azd environment from explicit vars and secrets
         working-directory: ${{ env.AZD_WORKING_DIR }}
@@ -236,63 +275,6 @@ jobs:
           azd env set GrafanaAzureMonitorSubscriptionId "${GrafanaAzureMonitorSubscriptionId}" --environment "${AZURE_ENV_NAME}"
           azd env set GrafanaEntraClientSecret "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
           azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
-
-      - name: Refresh azd environment outputs from existing provisioned infra
-        if: ${{ inputs.deployment_mode == 'apps-only' }}
-        working-directory: ${{ env.AZD_WORKING_DIR }}
-        run: |
-          set -euo pipefail
-          azd auth login --client-id "${{ secrets.AZURE_CLIENT_ID }}" --tenant-id "${{ secrets.AZURE_TENANT_ID }}" --federated-credential-provider "github" --no-prompt
-          azd auth login --check-status >/dev/null
-          azd env refresh --environment "${AZURE_ENV_NAME}" --no-prompt
-          echo "Refreshed azd environment outputs for apps-only deploy."
-
-      - name: Re-seed azd environment after refresh
-        if: ${{ inputs.deployment_mode == 'apps-only' }}
-        working-directory: ${{ env.AZD_WORKING_DIR }}
-        run: |
-          set -euo pipefail
-
-          test -n "${AZD_INFRA_TAGS:-}" || (echo "AZD_INFRA_TAGS missing" && exit 1)
-          azd env set principalId "${AZD_PRINCIPAL_ID}" --environment "${AZURE_ENV_NAME}"
-          azd env set AuthenticationEnabled "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
-          azd env set AUTHENTICATION_ENABLED "${AuthenticationEnabled}" --environment "${AZURE_ENV_NAME}"
-          azd env set UseInMemoryData "${UseInMemoryData}" --environment "${AZURE_ENV_NAME}"
-          azd env set KeycloakClientId "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
-          azd env set KEYCLOAK_CLIENT_ID "${KeycloakClientId}" --environment "${AZURE_ENV_NAME}"
-          azd env set KeycloakDbUsername "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
-          azd env config set "infra.parameters.KeycloakDbUsername" "${KeycloakDbUsername}" --environment "${AZURE_ENV_NAME}"
-          azd env set KeycloakPassword "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
-          azd env set KeycloakDbPassword "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
-          azd env set SqlPassword "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
-          azd env set Password "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
-          azd env config set "infra.parameters.tags" "${AZD_INFRA_TAGS}" --environment "${AZURE_ENV_NAME}"
-          azd env config set "infra.parameters.GoogleDriveSyncServiceAccountJsonBase64" "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
-          azd env config set "infra.parameters.InviteSmtpPassword" "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
-          azd env config set "infra.parameters.KeycloakDbPassword" "${KeycloakDbPassword}" --environment "${AZURE_ENV_NAME}"
-          azd env config set "infra.parameters.KeycloakPassword" "${KeycloakPassword}" --environment "${AZURE_ENV_NAME}"
-          azd env config set "infra.parameters.SqlPassword" "${SqlPassword}" --environment "${AZURE_ENV_NAME}"
-          azd env config set "infra.parameters.GrafanaEntraClientSecret" "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
-          azd env set InviteEmailEnabled "${InviteEmailEnabled}" --environment "${AZURE_ENV_NAME}"
-          azd env set InviteFromEmail "${InviteFromEmail}" --environment "${AZURE_ENV_NAME}"
-          azd env set InviteSmtpHost "${InviteSmtpHost}" --environment "${AZURE_ENV_NAME}"
-          azd env set InviteSmtpPort "${InviteSmtpPort}" --environment "${AZURE_ENV_NAME}"
-          azd env set InviteSmtpEnableSsl "${InviteSmtpEnableSsl}" --environment "${AZURE_ENV_NAME}"
-          azd env set InviteSmtpUsername "${InviteSmtpUsername}" --environment "${AZURE_ENV_NAME}"
-          azd env set InviteSmtpPassword "${InviteSmtpPassword}" --environment "${AZURE_ENV_NAME}"
-          azd env set GoogleDriveSyncEnabled "${GoogleDriveSyncEnabled}" --environment "${AZURE_ENV_NAME}"
-          azd env set GoogleDriveSyncSourceContainerName "${GoogleDriveSyncSourceContainerName}" --environment "${AZURE_ENV_NAME}"
-          azd env set GoogleDriveSyncDriveFolderId "${GoogleDriveSyncDriveFolderId}" --environment "${AZURE_ENV_NAME}"
-          azd env set GoogleDriveSyncServiceAccountJsonBase64 "${GoogleDriveSyncServiceAccountJsonBase64}" --environment "${AZURE_ENV_NAME}"
-          azd env set KeycloakPublicOrigin "${KeycloakPublicOrigin}" --environment "${AZURE_ENV_NAME}"
-          azd env set KEYCLOAK_PUBLIC_ORIGIN "${KeycloakPublicOrigin}" --environment "${AZURE_ENV_NAME}"
-          azd env set KeyVaultName "${KeyVaultName}" --environment "${AZURE_ENV_NAME}"
-          azd env set GrafanaEntraEnabled "${GrafanaEntraEnabled}" --environment "${AZURE_ENV_NAME}"
-          azd env set GrafanaEntraClientId "${GrafanaEntraClientId}" --environment "${AZURE_ENV_NAME}"
-          azd env set GrafanaEntraTenantId "${GrafanaEntraTenantId}" --environment "${AZURE_ENV_NAME}"
-          azd env set GrafanaPublicOrigin "${GrafanaPublicOrigin}" --environment "${AZURE_ENV_NAME}"
-          azd env set GrafanaAzureMonitorSubscriptionId "${GrafanaAzureMonitorSubscriptionId}" --environment "${AZURE_ENV_NAME}"
-          azd env set GrafanaEntraClientSecret "${GrafanaEntraClientSecret}" --environment "${AZURE_ENV_NAME}"
 
       - name: Cleanup stale deployment scripts
         if: ${{ inputs.deployment_mode != 'apps-only' }}
@@ -499,38 +481,26 @@ jobs:
           # rebound to Key Vault references in the post-sync step.
           deploy_target="${{ inputs.deploy_target }}"
           if [ "$deploy_target" = "all" ]; then
-            env \
-              principalId="${AZD_PRINCIPAL_ID}" \
-              AZURE_RESOURCE_TAGS="${AZD_INFRA_TAGS}" \
-              KeycloakDbUsername="${KeycloakDbUsername}" \
-              AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
-              AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
-              AZURE_KEYCLOAK_DB_PASSWORD="${KeycloakDbPassword}" \
-              AZURE_KEYCLOAK_PASSWORD="${KeycloakPassword}" \
-              AZURE_SQL_PASSWORD="${SqlPassword}" \
-              SqlPassword="${SqlPassword}" \
-              Password="${SqlPassword}" \
-              KeycloakPassword="${KeycloakPassword}" \
-              KeycloakDbPassword="${KeycloakDbPassword}" \
-              InviteSmtpPassword="${InviteSmtpPassword}" \
-              azd deploy --all --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
+            set -- --all
           else
-            env \
-              principalId="${AZD_PRINCIPAL_ID}" \
-              AZURE_RESOURCE_TAGS="${AZD_INFRA_TAGS}" \
-              KeycloakDbUsername="${KeycloakDbUsername}" \
-              AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
-              AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
-              AZURE_KEYCLOAK_DB_PASSWORD="${KeycloakDbPassword}" \
-              AZURE_KEYCLOAK_PASSWORD="${KeycloakPassword}" \
-              AZURE_SQL_PASSWORD="${SqlPassword}" \
-              SqlPassword="${SqlPassword}" \
-              Password="${SqlPassword}" \
-              KeycloakPassword="${KeycloakPassword}" \
-              KeycloakDbPassword="${KeycloakDbPassword}" \
-              InviteSmtpPassword="${InviteSmtpPassword}" \
-              azd deploy "$deploy_target" --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
+            set -- "$deploy_target"
           fi
+
+          env \
+            principalId="${AZD_PRINCIPAL_ID}" \
+            AZURE_RESOURCE_TAGS="${AZD_INFRA_TAGS}" \
+            KeycloakDbUsername="${KeycloakDbUsername}" \
+            AZURE_KEYCLOAK_DB_USERNAME="${KeycloakDbUsername}" \
+            AZURE_INVITE_SMTP_PASSWORD="${InviteSmtpPassword}" \
+            AZURE_KEYCLOAK_DB_PASSWORD="${KeycloakDbPassword}" \
+            AZURE_KEYCLOAK_PASSWORD="${KeycloakPassword}" \
+            AZURE_SQL_PASSWORD="${SqlPassword}" \
+            SqlPassword="${SqlPassword}" \
+            Password="${SqlPassword}" \
+            KeycloakPassword="${KeycloakPassword}" \
+            KeycloakDbPassword="${KeycloakDbPassword}" \
+            InviteSmtpPassword="${InviteSmtpPassword}" \
+            azd deploy "$@" --environment "${{ env.AZURE_ENV_NAME }}" --no-prompt
 
       - name: Post-sync Container App secrets from GitHub secrets to Key Vault refs
         if: ${{ success() && inputs.deploy_target != 'frontend' }}
@@ -562,11 +532,12 @@ jobs:
           servicebus_fqdn="${servicebus_fqdn%/}"
           servicebus_fqdn="${servicebus_fqdn%%:*}"
 
-          identity_type="$(az containerapp show \
+          identity_json="$(az containerapp show \
             --name "$app_name" \
             --resource-group "$resource_group" \
-            --query 'identity.type' \
-            -o tsv)"
+            --query 'identity' \
+            -o json)"
+          identity_type="$(jq -r '.type // empty' <<<"$identity_json")"
 
           az containerapp update \
             --name "$app_name" \
@@ -574,11 +545,7 @@ jobs:
             --remove-env-vars ServiceBusConnection AzureWebJobsServiceBus >/dev/null || true
 
           if printf '%s' "$identity_type" | grep -qi 'UserAssigned'; then
-            identity_client_id="$(az containerapp show \
-              --name "$app_name" \
-              --resource-group "$resource_group" \
-              --query 'identity.userAssignedIdentities.*.clientId | [0]' \
-              -o tsv)"
+            identity_client_id="$(jq -r '[(.userAssignedIdentities // {})[] | .clientId][0] // empty' <<<"$identity_json")"
 
             test -n "$identity_client_id" || (echo "Could not resolve user-assigned managed identity clientId for $app_name" && exit 1)
 
@@ -713,43 +680,29 @@ jobs:
 
           test -n "$storage_account_name" || (echo "Could not resolve host storage account from STORAGE_BLOBENDPOINT" && exit 1)
 
-          storage_account_id="$(az storage account show \
+          storage_info="$(az storage account show \
             --name "$storage_account_name" \
             --resource-group "$resource_group" \
-            --query 'id' \
-            -o tsv)"
-          blob_service_uri="$(az storage account show \
-            --name "$storage_account_name" \
-            --resource-group "$resource_group" \
-            --query 'primaryEndpoints.blob' \
-            -o tsv)"
-          queue_service_uri="$(az storage account show \
-            --name "$storage_account_name" \
-            --resource-group "$resource_group" \
-            --query 'primaryEndpoints.queue' \
-            -o tsv)"
+            --query '{id: id, blob: primaryEndpoints.blob, queue: primaryEndpoints.queue}' \
+            -o json)"
+          storage_account_id="$(jq -r '.id // empty' <<<"$storage_info")"
+          blob_service_uri="$(jq -r '.blob // empty' <<<"$storage_info")"
+          queue_service_uri="$(jq -r '.queue // empty' <<<"$storage_info")"
 
           test -n "$storage_account_id" || (echo "Could not resolve host storage account id in $resource_group" && exit 1)
           test -n "$blob_service_uri" || (echo "Could not resolve host blob endpoint in $resource_group" && exit 1)
           test -n "$queue_service_uri" || (echo "Could not resolve host queue endpoint in $resource_group" && exit 1)
 
-          identity_type="$(az containerapp show \
+          identity_json="$(az containerapp show \
             --name "$app_name" \
             --resource-group "$resource_group" \
-            --query 'identity.type' \
-            -o tsv)"
+            --query 'identity' \
+            -o json)"
+          identity_type="$(jq -r '.type // empty' <<<"$identity_json")"
 
           if printf '%s' "$identity_type" | grep -qi 'UserAssigned'; then
-            identity_client_id="$(az containerapp show \
-              --name "$app_name" \
-              --resource-group "$resource_group" \
-              --query 'identity.userAssignedIdentities.*.clientId | [0]' \
-              -o tsv)"
-            identity_principal_id="$(az containerapp show \
-              --name "$app_name" \
-              --resource-group "$resource_group" \
-              --query 'identity.userAssignedIdentities.*.principalId | [0]' \
-              -o tsv)"
+            identity_client_id="$(jq -r '[(.userAssignedIdentities // {})[] | .clientId][0] // empty' <<<"$identity_json")"
+            identity_principal_id="$(jq -r '[(.userAssignedIdentities // {})[] | .principalId][0] // empty' <<<"$identity_json")"
 
             test -n "$identity_client_id" || (echo "Could not resolve user-assigned managed identity clientId for $app_name" && exit 1)
             test -n "$identity_principal_id" || (echo "Could not resolve user-assigned managed identity principalId for $app_name" && exit 1)
@@ -763,11 +716,7 @@ jobs:
                 AzureWebJobsStorage__credential=managedidentity \
                 AzureWebJobsStorage__clientId="$identity_client_id" >/dev/null
           else
-            identity_principal_id="$(az containerapp show \
-              --name "$app_name" \
-              --resource-group "$resource_group" \
-              --query 'identity.principalId' \
-              -o tsv)"
+            identity_principal_id="$(jq -r '.principalId // empty' <<<"$identity_json")"
 
             test -n "$identity_principal_id" || (echo "Could not resolve system-assigned managed identity principalId for $app_name" && exit 1)
 
@@ -832,42 +781,28 @@ jobs:
 
           test -n "$bidstorage_account_name" || (echo "Could not resolve bid storage account from BIDSTORAGE_BLOBENDPOINT" && exit 1)
 
-          storage_account_id="$(az storage account show \
+          storage_info="$(az storage account show \
             --name "$bidstorage_account_name" \
             --resource-group "$resource_group" \
-            --query 'id' \
-            -o tsv)"
-          blob_service_uri="$(az storage account show \
-            --name "$bidstorage_account_name" \
-            --resource-group "$resource_group" \
-            --query 'primaryEndpoints.blob' \
-            -o tsv)"
-          queue_service_uri="$(az storage account show \
-            --name "$bidstorage_account_name" \
-            --resource-group "$resource_group" \
-            --query 'primaryEndpoints.queue' \
-            -o tsv)"
+            --query '{id: id, blob: primaryEndpoints.blob, queue: primaryEndpoints.queue}' \
+            -o json)"
+          storage_account_id="$(jq -r '.id // empty' <<<"$storage_info")"
+          blob_service_uri="$(jq -r '.blob // empty' <<<"$storage_info")"
+          queue_service_uri="$(jq -r '.queue // empty' <<<"$storage_info")"
 
           test -n "$storage_account_id" || (echo "Could not resolve storage account id in $resource_group" && exit 1)
           test -n "$blob_service_uri" || (echo "Could not resolve blob endpoint in $resource_group" && exit 1)
 
-          identity_type="$(az containerapp show \
+          identity_json="$(az containerapp show \
             --name "$app_name" \
             --resource-group "$resource_group" \
-            --query 'identity.type' \
-            -o tsv)"
+            --query 'identity' \
+            -o json)"
+          identity_type="$(jq -r '.type // empty' <<<"$identity_json")"
 
           if printf '%s' "$identity_type" | grep -qi 'UserAssigned'; then
-            identity_client_id="$(az containerapp show \
-              --name "$app_name" \
-              --resource-group "$resource_group" \
-              --query 'identity.userAssignedIdentities.*.clientId | [0]' \
-              -o tsv)"
-            identity_principal_id="$(az containerapp show \
-              --name "$app_name" \
-              --resource-group "$resource_group" \
-              --query 'identity.userAssignedIdentities.*.principalId | [0]' \
-              -o tsv)"
+            identity_client_id="$(jq -r '[(.userAssignedIdentities // {})[] | .clientId][0] // empty' <<<"$identity_json")"
+            identity_principal_id="$(jq -r '[(.userAssignedIdentities // {})[] | .principalId][0] // empty' <<<"$identity_json")"
 
             test -n "$identity_client_id" || (echo "Could not resolve user-assigned managed identity clientId for $app_name" && exit 1)
             test -n "$identity_principal_id" || (echo "Could not resolve user-assigned managed identity principalId for $app_name" && exit 1)
@@ -879,11 +814,7 @@ jobs:
                 BidStorage__blobServiceUri="$blob_service_uri" \
                 BidStorage__clientId="$identity_client_id" >/dev/null
           else
-            identity_principal_id="$(az containerapp show \
-              --name "$app_name" \
-              --resource-group "$resource_group" \
-              --query 'identity.principalId' \
-              -o tsv)"
+            identity_principal_id="$(jq -r '.principalId // empty' <<<"$identity_json")"
 
             test -n "$identity_principal_id" || (echo "Could not resolve system-assigned managed identity principalId for $app_name" && exit 1)
 
@@ -938,7 +869,8 @@ jobs:
               --resource-type "Microsoft.Insights/components" \
               --api-version "2020-02-02" \
               --location "${AZURE_LOCATION}" \
-              --properties '{"Application_Type":"web","Flow_Type":"Bluefield","IngestionMode":"ApplicationInsights"}' \
+              --is-full-object \
+              --properties "{\"location\":\"${AZURE_LOCATION}\",\"tags\":{\"Owner\":\"rgparkins\",\"project\":\"talentsuite\",\"azd-env-name\":\"${AZURE_ENV_NAME}\"},\"properties\":{\"Application_Type\":\"web\",\"Flow_Type\":\"Bluefield\",\"IngestionMode\":\"ApplicationInsights\"}}" \
               >/dev/null
 
             connection_string="$(az resource show \
@@ -950,6 +882,9 @@ jobs:
           fi
 
           test -n "$connection_string" || (echo "Could not resolve Application Insights connection string in $resource_group" && exit 1)
+
+          # Cache for the talentserver App Insights step to avoid re-resolving.
+          echo "APPI_CONNECTION_STRING=$connection_string" >> "$GITHUB_ENV"
 
           az containerapp update \
             --name talentfunctions \
@@ -1093,12 +1028,16 @@ jobs:
 
           resource_group="rg-${AZURE_ENV_NAME}"
           appi_name="appi-talentsuite-${AZURE_ENV_NAME}"
-          connection_string="$(az resource show \
-            --resource-group "$resource_group" \
-            --name "$appi_name" \
-            --resource-type "Microsoft.Insights/components" \
-            --query 'properties.ConnectionString || properties.connectionString' \
-            -o tsv 2>/dev/null || true)"
+          # Reuse the connection string resolved by the talentfunctions step when available.
+          connection_string="${APPI_CONNECTION_STRING:-}"
+          if [ -z "$connection_string" ]; then
+            connection_string="$(az resource show \
+              --resource-group "$resource_group" \
+              --name "$appi_name" \
+              --resource-type "Microsoft.Insights/components" \
+              --query 'properties.ConnectionString || properties.connectionString' \
+              -o tsv 2>/dev/null || true)"
+          fi
 
           if [ -z "$connection_string" ]; then
             az resource create \
@@ -1107,7 +1046,8 @@ jobs:
               --resource-type "Microsoft.Insights/components" \
               --api-version "2020-02-02" \
               --location "${AZURE_LOCATION}" \
-              --properties '{"Application_Type":"web","Flow_Type":"Bluefield","IngestionMode":"ApplicationInsights"}' \
+              --is-full-object \
+              --properties "{\"location\":\"${AZURE_LOCATION}\",\"tags\":{\"Owner\":\"rgparkins\",\"project\":\"talentsuite\",\"azd-env-name\":\"${AZURE_ENV_NAME}\"},\"properties\":{\"Application_Type\":\"web\",\"Flow_Type\":\"Bluefield\",\"IngestionMode\":\"ApplicationInsights\"}}" \
               >/dev/null
 
             connection_string="$(az resource show \
@@ -1155,9 +1095,7 @@ jobs:
 
           foundry_project_id="${foundry_account_id}/projects/${foundry_project_name}"
 
-          echo "Waiting for managed identity service principal to propagate"
-          sleep 30
-
+          # Identity propagation is handled by the retry loop in ensure_role_assignment.
           ensure_role_assignment() {
             local scope="$1"
             local primary_role="$2"
