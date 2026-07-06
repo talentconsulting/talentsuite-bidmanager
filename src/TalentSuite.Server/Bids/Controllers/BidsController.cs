@@ -47,10 +47,10 @@ public sealed class BidsController : ControllerBase
         var result = await _bidService.CreateBid(_mapper.ToModel(req));
         
         return CreatedAtAction(
-            nameof(Get),                // Action name
-            new { result },   // Route values
-            new { result }              // Response body (optional)
-        ); 
+            nameof(Get),
+            new { bidId = result },
+            new { result }
+        );
     }
     
     // GET api/bids/{bidId}
@@ -217,7 +217,8 @@ public sealed class BidsController : ControllerBase
 
     private async Task PublishBidLibraryPushEventAsync(string bidId, CancellationToken ct)
     {
-        var model = await _bidService.GetBid(bidId, ct);
+        var model = await _bidService.GetBid(bidId, ct)
+            ?? throw new KeyNotFoundException($"Bid {bidId} was not found when publishing the library push event.");
         var bid = _mapper.ToResponse(model);
 
         var questionIds = bid.Questions

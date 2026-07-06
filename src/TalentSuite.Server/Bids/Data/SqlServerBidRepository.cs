@@ -85,7 +85,7 @@ public sealed class SqlServerBidRepository : IManageBids
         return guid;
     }
 
-    public async Task<BidDataModel> GetBid(string id, CancellationToken ct = default)
+    public async Task<BidDataModel?> GetBid(string id, CancellationToken ct = default)
     {
         await EnsureSchemaAsync(ct);
 
@@ -96,7 +96,7 @@ public sealed class SqlServerBidRepository : IManageBids
                 "SELECT Payload FROM dbo.Bids WHERE Id = @Id",
                 new { Id = id },
                 cancellationToken: ct));
-        return payload is null ? null! : Deserialize<BidDataModel>(payload);
+        return payload is null ? null : Deserialize<BidDataModel>(payload);
     }
 
     public async Task UpdateBidOverview(

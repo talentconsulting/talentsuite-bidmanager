@@ -5,7 +5,7 @@ namespace TalentSuite.Server.Bids.ModelBinders;
 
 public sealed class CreateBidModelBinder : IModelBinder
 {
-    public Task BindModelAsync(ModelBindingContext bindingContext)
+    public async Task BindModelAsync(ModelBindingContext bindingContext)
     {
         if (bindingContext is null)
             throw new ArgumentNullException(nameof(bindingContext));
@@ -15,10 +15,11 @@ public sealed class CreateBidModelBinder : IModelBinder
         if (!req.HasFormContentType)
         {
             bindingContext.Result = ModelBindingResult.Failed();
-            return Task.CompletedTask;
+            return;
         }
 
-        var form = req.Form;
+        // req.Form reads the body synchronously, which Kestrel disallows by default.
+        var form = await req.ReadFormAsync(bindingContext.HttpContext.RequestAborted);
 
         var model = new CreateBidRequest
         {
@@ -55,7 +56,6 @@ public sealed class CreateBidModelBinder : IModelBinder
         }
 
         bindingContext.Result = ModelBindingResult.Success(model);
-        return Task.CompletedTask;
     }
 
     private static IEnumerable<int> GetIndexes(IFormCollection form, string prefix)

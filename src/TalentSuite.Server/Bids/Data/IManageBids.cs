@@ -7,7 +7,7 @@ public interface IManageBids
 {
     Task<Guid> StoreBid(BidDataModel request, CancellationToken ct = default);
 
-    Task<BidDataModel> GetBid(string id, CancellationToken ct = default);
+    Task<BidDataModel?> GetBid(string id, CancellationToken ct = default);
 
     Task UpdateBidOverview(
         string bidId,

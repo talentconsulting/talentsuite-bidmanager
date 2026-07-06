@@ -15,7 +15,9 @@ public sealed class AzureServiceBusClient : IAzureServiceBusClient, IAsyncDispos
     private readonly AzureServiceBusOptions _options;
     private readonly ILogger<AzureServiceBusClient> _logger;
     private readonly JsonSerializerOptions _serializerOptions = SerialiserOptions.JsonOptions;
-    private readonly ConcurrentDictionary<string, ServiceBusSender> _senders = new(StringComparer.OrdinalIgnoreCase);
+    // Lazy values so racing GetOrAdd calls cannot create senders that are never
+    // stored (and therefore never disposed).
+    private readonly ConcurrentDictionary<string, Lazy<ServiceBusSender>> _senders = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lazy<ServiceBusClient> _client;
 
     public AzureServiceBusClient(IOptions<AzureServiceBusOptions> options, ILogger<AzureServiceBusClient> logger)
@@ -40,7 +42,12 @@ public sealed class AzureServiceBusClient : IAzureServiceBusClient, IAsyncDispos
             throw new ArgumentNullException(nameof(payload));
 
         var client = GetOrCreateClient();
-        var sender = _senders.GetOrAdd(entityName, client.CreateSender);
+        var sender = _senders.GetOrAdd(
+            entityName,
+            static (name, c) => new Lazy<ServiceBusSender>(
+                () => c.CreateSender(name),
+                LazyThreadSafetyMode.ExecutionAndPublication),
+            client).Value;
 
         var body = JsonSerializer.SerializeToUtf8Bytes(payload, payloadType, _serializerOptions);
         var message = new ServiceBusMessage(body)
@@ -65,7 +72,8 @@ public sealed class AzureServiceBusClient : IAzureServiceBusClient, IAsyncDispos
     {
         foreach (var sender in _senders.Values)
         {
-            await sender.DisposeAsync();
+            if (sender.IsValueCreated)
+                await sender.Value.DisposeAsync();
         }
 
         if (_client.IsValueCreated)

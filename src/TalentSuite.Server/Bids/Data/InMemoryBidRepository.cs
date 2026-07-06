@@ -87,7 +87,7 @@ public class InMemoryBidRepository : IManageBids
         return await Task.FromResult(guid);
     }
 
-    public async Task<BidDataModel> GetBid(string id, CancellationToken ct = default)
+    public async Task<BidDataModel?> GetBid(string id, CancellationToken ct = default)
     {
         return await Task.FromResult(_bids.FirstOrDefault(x => x.Key == id).Value);
     }
