@@ -159,14 +159,25 @@ public sealed class KeycloakAdminService : IKeycloakAdminService
         };
         createRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokenResponse.AccessToken);
 
-        var createResponse = await http.SendAsync(createRequest, ct);
+        using var createResponse = await http.SendAsync(createRequest, ct);
 
         string? createdUserId = null;
         if (createResponse.IsSuccessStatusCode)
         {
             createdUserId = TryParseUserIdFromLocation(createResponse.Headers.Location);
         }
-        else if (createResponse.StatusCode != System.Net.HttpStatusCode.Conflict)
+        else if (createResponse.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            // Adopting the pre-existing account here would grant the invited role to an
+            // account the registrant does not control (the supplied password is never
+            // verified against it). A username conflict is a hard failure.
+            _logger.LogWarning(
+                "Keycloak CreateUserAsync refused: username {Username} already exists in realm {Realm}.",
+                username,
+                _targetRealm);
+            return null;
+        }
+        else
         {
             var body = await createResponse.Content.ReadAsStringAsync(ct);
             _logger.LogWarning(

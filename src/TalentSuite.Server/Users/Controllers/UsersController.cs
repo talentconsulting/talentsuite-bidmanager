@@ -45,6 +45,9 @@ public class UsersController: ControllerBase
         }, ct);
 
         var response = _mapper.ToResponse(created);
+        // Admin-only creation response is the one place (besides resend-invite) that
+        // may carry the invitation token, so the admin can share the invite link.
+        response.InvitationToken = created.InvitationToken;
         return CreatedAtAction(nameof(GetUser), new { userId = response.Id }, response);
     }
 
