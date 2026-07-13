@@ -1,5 +1,4 @@
 @namespace TalentSuite.FrontEnd.Pages.Bids.Management.Tabs
-@using Markdig
 @using TalentSuite.FrontEnd.Pages.Bids.Management.Models
 
 <div class="card shadow-sm">
@@ -42,7 +41,7 @@
                         <div class="border rounded p-3 bg-white">
                             @if (isAssistant)
                             {
-                                @((MarkupString)RenderMarkdown(message.Content))
+                                <MarkdownContent Content="@message.Content" />
                             }
                             else
                             {
@@ -137,14 +136,6 @@
     private static int ResponseCharCountWithSpaces(string? content) => content?.Length ?? 0;
 
     private static int ResponseCharCountNoSpaces(string? content) => content?.Count(c => !char.IsWhiteSpace(c)) ?? 0;
-
-    private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
-        .DisableHtml()
-        .UseAdvancedExtensions()
-        .Build();
-
-    private static string RenderMarkdown(string? markdown)
-        => Markdown.ToHtml(markdown ?? string.Empty, MarkdownPipeline);
 
     private async Task OnQuestionKeyDown(KeyboardEventArgs args)
     {

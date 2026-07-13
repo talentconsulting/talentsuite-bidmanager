@@ -119,10 +119,20 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     private string? _pendingScrollElementId;
     private readonly HashSet<string> _dirtySources = new(StringComparer.OrdinalIgnoreCase);
     private bool _isBeforeUnloadEnabled;
+    private string? _loadedBidId;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync()
     {
         ReadDeepLinkTargetFromQuery();
+        return Task.CompletedTask;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.Equals(_loadedBidId, BidId, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _loadedBidId = BidId;
         await LoadBidAsync();
     }
 
@@ -150,6 +160,9 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     {
         await SetLoadingAsync();
         ErrorText = null;
+        Bid = null;
+        ActiveCategory = null;
+        ActiveQuestionId = null;
 
         try
         {
@@ -920,7 +933,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
             var submittedQuestion = ChatQuestionText ?? string.Empty;
             var payload = new ChatQuestionRequest
             {
-                BidId = Bid.Id,
+                BidId = BidId,
                 QuestionId = q.Id,
                 FreeTextQuestion = submittedQuestion,
                 ThreadId = q.ChatThreadId
@@ -987,7 +1000,11 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
                 if (string.Equals(update.Type, "delta", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(update.Content))
                 {
-                    assistantMessage.Content += update.Content;
+                    if (TryExtractStreamAnswerText(update.Content, out var extractedContent))
+                        assistantMessage.Content = extractedContent;
+                    else
+                        assistantMessage.Content += update.Content;
+
                     q.ChatResponse = assistantMessage.Content;
                     await InvokeAsync(StateHasChanged);
                     await ScrollChatToTopAsync(q.Id);
@@ -2089,6 +2106,56 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
             return Task.CompletedTask;
 
         return SubmitChatQuestionAsync(ActiveQuestion);
+    }
+
+    private static bool TryExtractStreamAnswerText(string? content, out string extractedContent)
+    {
+        extractedContent = string.Empty;
+        if (string.IsNullOrWhiteSpace(content))
+            return false;
+
+        var candidate = content.Trim();
+        if (candidate.StartsWith("```", StringComparison.Ordinal))
+        {
+            var firstNewLine = candidate.IndexOf('\n');
+            if (firstNewLine >= 0)
+                candidate = candidate[(firstNewLine + 1)..].Trim();
+
+            if (candidate.EndsWith("```", StringComparison.Ordinal))
+                candidate = candidate[..^3].Trim();
+        }
+
+        var firstBrace = candidate.IndexOf('{');
+        var lastBrace = candidate.LastIndexOf('}');
+        if (firstBrace < 0 || lastBrace < firstBrace)
+            return false;
+
+        var json = candidate[firstBrace..(lastBrace + 1)];
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                return false;
+
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (!string.Equals(property.Name, "answerText", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                extractedContent = property.Value.ValueKind == JsonValueKind.String
+                    ? property.Value.GetString() ?? string.Empty
+                    : property.Value.ToString();
+
+                return true;
+            }
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        return false;
     }
 
     protected async Task AddRedReviewInlineCommentAsync((string Comment, int? StartIndex, int? EndIndex, string SelectedText, List<string> MentionedUserIds) request)

@@ -32,16 +32,34 @@
                     <div class="border rounded p-3">
                         <div class="row g-3 align-items-start">
                             <div class="col-12 col-lg-8">
-                                <div class="text-muted small">
-                                    @GetWordCount(response.Response) words • @GetCharCount(response.Response) characters
+                                <div class="d-flex align-items-center justify-content-between gap-2">
+                                    <div class="text-muted small">
+                                        @GetWordCount(response.Response) words • @GetCharCount(response.Response) characters
+                                    </div>
+                                    <div class="btn-group btn-group-sm" role="group" aria-label="Draft editor mode">
+                                        <button type="button"
+                                                class="btn @(IsPreviewing(response.Id) ? "btn-outline-secondary" : "btn-secondary")"
+                                                @onclick="() => SetPreview(response.Id, false)">Write</button>
+                                        <button type="button"
+                                                class="btn @(IsPreviewing(response.Id) ? "btn-secondary" : "btn-outline-secondary")"
+                                                @onclick="() => SetPreview(response.Id, true)">Preview</button>
+                                    </div>
                                 </div>
-                                <textarea id="@GetDraftTextareaId(response.Id)"
-                                          class="form-control mt-2"
-                                          rows="8"
-                                          value="@response.Response"
-                                          @oninput="e => OnDraftInputAsync(response, e)"
-                                          @onmouseup="() => CaptureSelectionAsync(response.Id)"
-                                          @onkeyup="() => CaptureSelectionAsync(response.Id)"></textarea>
+                                @if (IsPreviewing(response.Id))
+                                {
+                                    <MarkdownContent Content="@response.Response"
+                                                     CssClass="border rounded p-3 mt-2 bg-body-tertiary" />
+                                }
+                                else
+                                {
+                                    <textarea id="@GetDraftTextareaId(response.Id)"
+                                              class="form-control mt-2"
+                                              rows="8"
+                                              value="@response.Response"
+                                              @oninput="e => OnDraftInputAsync(response, e)"
+                                              @onmouseup="() => CaptureSelectionAsync(response.Id)"
+                                              @onkeyup="() => CaptureSelectionAsync(response.Id)"></textarea>
+                                }
                                 <div class="d-flex justify-content-end gap-2 mt-2 flex-wrap">
                                     <button type="button"
                                             class="btn btn-outline-primary btn-sm"
@@ -152,13 +170,31 @@
             else
             {
                 <label class="form-label fw-bold">New draft response</label>
-                <div class="text-muted small mb-1">
-                    @GetWordCount(NewDraftText) words • @GetCharCount(NewDraftText) characters
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
+                    <div class="text-muted small">
+                        @GetWordCount(NewDraftText) words • @GetCharCount(NewDraftText) characters
+                    </div>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="New draft editor mode">
+                        <button type="button"
+                                class="btn @(_isNewDraftPreview ? "btn-outline-secondary" : "btn-secondary")"
+                                @onclick="() => _isNewDraftPreview = false">Write</button>
+                        <button type="button"
+                                class="btn @(_isNewDraftPreview ? "btn-secondary" : "btn-outline-secondary")"
+                                @onclick="() => _isNewDraftPreview = true">Preview</button>
+                    </div>
                 </div>
-                <textarea class="form-control mb-2"
-                          rows="6"
-                          value="@NewDraftText"
-                          @oninput="e => OnNewDraftTextChanged.InvokeAsync(e.Value?.ToString())"></textarea>
+                @if (_isNewDraftPreview)
+                {
+                    <MarkdownContent Content="@NewDraftText"
+                                     CssClass="border rounded p-3 mb-2 bg-body-tertiary" />
+                }
+                else
+                {
+                    <textarea class="form-control mb-2"
+                              rows="6"
+                              value="@NewDraftText"
+                              @oninput="e => OnNewDraftTextChanged.InvokeAsync(e.Value?.ToString())"></textarea>
+                }
                 <div class="d-flex gap-2">
                     <button type="button"
                             class="btn btn-primary"
@@ -199,8 +235,20 @@
     [Parameter] public EventCallback<(string QuestionId, string DraftId, string CommentId, bool IsComplete)> OnDraftCommentCompletionChanged { get; set; }
 
     private readonly Dictionary<string, InlineSelectionState> _inlineSelections = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _previewedDraftIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _mentionQueryByDraftId = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, HashSet<string>> _mentionedUserIdsByDraftId = new(StringComparer.OrdinalIgnoreCase);
+    private bool _isNewDraftPreview;
+
+    private bool IsPreviewing(string draftId) => _previewedDraftIds.Contains(draftId);
+
+    private void SetPreview(string draftId, bool preview)
+    {
+        if (preview)
+            _previewedDraftIds.Add(draftId);
+        else
+            _previewedDraftIds.Remove(draftId);
+    }
 
     private static int GetWordCount(string? text)
         => string.IsNullOrWhiteSpace(text)

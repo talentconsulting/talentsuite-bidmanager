@@ -200,6 +200,7 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
 
         ThreadRun? streamRun = null;
         List<ToolOutput> toolOutputs = [];
+        var completedYielded = false;
 
         do
         {
@@ -234,6 +235,9 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
                 if (streamingUpdate.UpdateKind == StreamingUpdateReason.RunCompleted)
                 {
                     var completedMessage = await GetLastAgentMessageAsync(effectiveThreadId, ct);
+                    var completedResponseText = completedMessage is null
+                        ? string.Empty
+                        : ExtractMessageText(completedMessage);
                     var fileNameMap = streamRun is null
                         ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                         : await BuildRunFileNameMapAsync(effectiveThreadId, streamRun.Id, ct);
@@ -245,9 +249,11 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
                     {
                         Type = "completed",
                         ThreadId = effectiveThreadId,
+                        Content = completedResponseText,
                         Sources = provenance.Sources,
                         UsedSourcesOutsideBidLibrary = provenance.UsedSourcesOutsideBidLibrary
                     };
+                    completedYielded = true;
                     yield break;
                 }
 
@@ -270,6 +276,28 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
                 stream = _client.Runs.SubmitToolOutputsToStreamAsync(streamRun!, toolOutputs, ct);
         }
         while (toolOutputs.Count > 0);
+
+        if (!completedYielded)
+        {
+            var completedMessage = await GetLastAgentMessageAsync(effectiveThreadId, ct);
+            if (completedMessage is not null)
+            {
+                var completedResponseText = ExtractMessageText(completedMessage);
+                var fileNameMap = streamRun is null
+                    ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    : await BuildRunFileNameMapAsync(effectiveThreadId, streamRun.Id, ct);
+                var provenance = ExtractProvenance(completedMessage, fileNameMap);
+
+                yield return new ChatStreamUpdate
+                {
+                    Type = "completed",
+                    ThreadId = effectiveThreadId,
+                    Content = completedResponseText,
+                    Sources = provenance.Sources,
+                    UsedSourcesOutsideBidLibrary = provenance.UsedSourcesOutsideBidLibrary
+                };
+            }
+        }
     }
 
     private async Task<string> AddUserMessageAsync(string threadId, string userPrompt, CancellationToken ct)

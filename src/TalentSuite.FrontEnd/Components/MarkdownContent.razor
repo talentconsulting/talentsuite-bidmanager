@@ -1,0 +1,26 @@
+@using Markdig
+@namespace TalentSuite.FrontEnd.Components
+
+<div class="markdown-content @CssClass">
+    @if (string.IsNullOrWhiteSpace(Content))
+    {
+        <span class="text-muted">Nothing to preview.</span>
+    }
+    else
+    {
+        @((MarkupString)RenderedHtml)
+    }
+</div>
+
+@code {
+    [Parameter] public string? Content { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+
+    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .DisableHtml()
+        .Build();
+
+    private string RenderedHtml =>
+        Markdown.ToHtml(Content ?? string.Empty, Pipeline);
+}

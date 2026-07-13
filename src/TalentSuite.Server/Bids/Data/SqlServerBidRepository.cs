@@ -112,42 +112,33 @@ public sealed class SqlServerBidRepository : IManageBids
     {
         await EnsureSchemaAsync(ct);
 
+        var bid = await GetBid(bidId, ct);
+        if (bid is null)
+            throw new KeyNotFoundException($"Bid '{bidId}' was not found.");
+
+        bid.UniqueReference = uniqueReference;
+        bid.Summary = summary;
+        bid.KeyInformation = keyInformation;
+        bid.Budget = budget;
+        bid.DeadlineForQualifying = deadlineForQualifying;
+        bid.DeadlineForSubmission = deadlineForSubmission;
+        bid.LengthOfContract = lengthOfContract;
+
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
 
-        var affected = await connection.ExecuteAsync(new CommandDefinition(
+        await connection.ExecuteAsync(new CommandDefinition(
             """
             UPDATE dbo.Bids
-            SET Payload = JSON_MODIFY(
-                JSON_MODIFY(
-                    JSON_MODIFY(
-                        JSON_MODIFY(
-                            JSON_MODIFY(
-                                JSON_MODIFY(
-                                    JSON_MODIFY(Payload, '$.UniqueReference', @UniqueReference),
-                                    '$.Summary', @Summary),
-                                '$.KeyInformation', @KeyInformation),
-                            '$.Budget', @Budget),
-                        '$.DeadlineForQualifying', @DeadlineForQualifying),
-                    '$.DeadlineForSubmission', @DeadlineForSubmission),
-                '$.LengthOfContract', @LengthOfContract)
+            SET Payload = @Payload
             WHERE Id = @Id;
             """,
             new
             {
                 Id = bidId,
-                UniqueReference = uniqueReference,
-                Summary = summary,
-                KeyInformation = keyInformation,
-                Budget = budget,
-                DeadlineForQualifying = deadlineForQualifying,
-                DeadlineForSubmission = deadlineForSubmission,
-                LengthOfContract = lengthOfContract
+                Payload = Serialize(bid)
             },
             cancellationToken: ct));
-
-        if (affected == 0)
-            throw new KeyNotFoundException($"Bid '{bidId}' was not found.");
     }
 
     public async Task<SearchDataModel> SearchBids(int page, int pageSize, CancellationToken ct = default)
@@ -157,22 +148,15 @@ public sealed class SqlServerBidRepository : IManageBids
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
 
-        using var multi = await connection.QueryMultipleAsync(
+        var payloads = (await connection.QueryAsync<string>(
             new CommandDefinition(
-                """
-                SELECT COUNT(*) FROM dbo.Bids;
-                SELECT Payload FROM dbo.Bids
-                ORDER BY CreatedAtUtc DESC
-                OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-                """,
-                new { Offset = (page - 1) * pageSize, PageSize = pageSize },
-                cancellationToken: ct));
+                "SELECT Payload FROM dbo.Bids ORDER BY CreatedAtUtc DESC",
+                cancellationToken: ct))).ToList();
 
-        var totalCount = await multi.ReadFirstAsync<int>();
-        var payloads = await multi.ReadAsync<string>();
-
-        var items = payloads
-            .Select(Deserialize<BidDataModel>)
+        var bids = payloads.Select(Deserialize<BidDataModel>).ToList();
+        var items = bids
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(b => new SearchItemDataModel
             {
                 Id = b.Id,
@@ -188,7 +172,7 @@ public sealed class SqlServerBidRepository : IManageBids
             CurrentPage = page,
             PageSize = pageSize,
             Items = items,
-            TotalCount = totalCount
+            TotalCount = bids.Count
         };
     }
 
@@ -675,34 +659,34 @@ public sealed class SqlServerBidRepository : IManageBids
     public async Task SetBidStatus(string bidId, BidStatus status, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(bidId))
-            throw new ArgumentException("Value cannot be null or whitespace.", nameof(bidId));
+            return;
 
         await EnsureSchemaAsync(ct);
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
 
-        if (status == BidStatus.Submitted)
-        {
-            var payload = await connection.QuerySingleOrDefaultAsync<string>(
-                new CommandDefinition(
-                    "SELECT Payload FROM dbo.Bids WHERE Id = @Id",
-                    new { Id = bidId },
-                    cancellationToken: ct));
-            if (payload is null)
-                return;
+        var payload = await connection.QuerySingleOrDefaultAsync<string>(
+            new CommandDefinition(
+                "SELECT Payload FROM dbo.Bids WHERE Id = @Id",
+                new { Id = bidId },
+                cancellationToken: ct));
+        if (payload is null)
+            return;
 
-            var bid = Deserialize<BidDataModel>(payload);
+        var bid = Deserialize<BidDataModel>(payload);
+        bid.Status = status;
+
+        if (status == BidStatus.Submitted)
             await SetAllCommentsCompleteForBidAsync(connection, bid, ct);
-        }
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
             UPDATE dbo.Bids
-            SET Payload = JSON_MODIFY(Payload, '$.Status', @Status)
+            SET Payload = @Payload
             WHERE Id = @Id;
             """,
-            new { Id = bidId, Status = (int)status },
+            new { Id = bidId, Payload = Serialize(bid) },
             cancellationToken: ct));
     }
 
@@ -721,50 +705,36 @@ public sealed class SqlServerBidRepository : IManageBids
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
 
-        var existingBidLibraryPushPayload = await connection.QuerySingleOrDefaultAsync<string>(
+        var payload = await connection.QuerySingleOrDefaultAsync<string>(
             new CommandDefinition(
-                "SELECT JSON_QUERY(Payload, '$.BidLibraryPush') FROM dbo.Bids WHERE Id = @Id",
+                "SELECT Payload FROM dbo.Bids WHERE Id = @Id",
                 new { Id = bidId },
                 cancellationToken: ct));
-        if (!string.IsNullOrWhiteSpace(existingBidLibraryPushPayload))
-            return Deserialize<BidLibraryPushDataModel>(existingBidLibraryPushPayload);
+        if (payload is null)
+            throw new InvalidOperationException("Invalid request, bid does not exist.");
 
-        var bidLibraryPush = new BidLibraryPushDataModel
+        var bid = Deserialize<BidDataModel>(payload);
+        if (bid.BidLibraryPush is not null)
+            return bid.BidLibraryPush;
+
+        bid.BidLibraryPush = new BidLibraryPushDataModel
         {
             BidId = bidId,
             PerformedByUserId = performedByUserId ?? string.Empty,
             PerformedByName = performedByName ?? string.Empty,
             PushedAtUtc = pushedAtUtc
         };
-        var bidLibraryPushPayload = Serialize(bidLibraryPush);
 
-        var affected = await connection.ExecuteAsync(new CommandDefinition(
+        await connection.ExecuteAsync(new CommandDefinition(
             """
             UPDATE dbo.Bids
-            SET Payload = JSON_MODIFY(Payload, '$.BidLibraryPush', JSON_QUERY(@BidLibraryPushPayload))
-            WHERE Id = @Id
-              AND JSON_QUERY(Payload, '$.BidLibraryPush') IS NULL;
+            SET Payload = @Payload
+            WHERE Id = @Id;
             """,
-            new
-            {
-                Id = bidId,
-                BidLibraryPushPayload = bidLibraryPushPayload
-            },
+            new { Id = bidId, Payload = Serialize(bid) },
             cancellationToken: ct));
 
-        if (affected == 1)
-            return bidLibraryPush;
-
-        existingBidLibraryPushPayload = await connection.QuerySingleOrDefaultAsync<string>(
-            new CommandDefinition(
-                "SELECT JSON_QUERY(Payload, '$.BidLibraryPush') FROM dbo.Bids WHERE Id = @Id",
-                new { Id = bidId },
-                cancellationToken: ct));
-
-        if (!string.IsNullOrWhiteSpace(existingBidLibraryPushPayload))
-            return Deserialize<BidLibraryPushDataModel>(existingBidLibraryPushPayload);
-
-        throw new InvalidOperationException("Invalid request, bid does not exist.");
+        return bid.BidLibraryPush;
     }
 
     public async Task<List<QuestionAssignmentDataModel>> GetBidQuestionUsers(string bidId, string questionId, CancellationToken ct = default)
@@ -802,7 +772,7 @@ public sealed class SqlServerBidRepository : IManageBids
         await connection.OpenAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
 
-        await UpsertQuestionUserAsync(connection, (SqlTransaction)tx, bidId, questionId, userId, role, ct);
+        await UpsertQuestionUserAsync(connection, (SqlTransaction)tx, questionId, userId, role, ct);
 
         if (role == QuestionUserRole.Owner)
         {
@@ -885,24 +855,13 @@ public sealed class SqlServerBidRepository : IManageBids
         if (string.IsNullOrWhiteSpace(bidId) || string.IsNullOrWhiteSpace(questionId))
             throw new Exception("Invalid request, bidId or questionId is null or empty");
 
-        await EnsureSchemaAsync(ct);
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
-
-        var questionPayload = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
-            """
-            SELECT TOP 1 q.[value]
-            FROM dbo.Bids AS b
-            CROSS APPLY OPENJSON(b.Payload, '$.Questions') AS q
-            WHERE b.Id = @BidId
-              AND JSON_VALUE(q.[value], '$.Id') = @QuestionId;
-            """,
-            new { BidId = bidId, QuestionId = questionId },
-            cancellationToken: ct));
-
-        if (!string.IsNullOrWhiteSpace(questionPayload))
-            return Deserialize<QuestionDataModel>(questionPayload);
+        var bid = await GetBid(bidId, ct);
+        if (bid is not null)
+        {
+            var question = bid.Questions?.FirstOrDefault(x => x.Id == questionId);
+            if (question is not null)
+                return question;
+        }
 
         throw new Exception("Invalid request, questionId does not exist");
     }
@@ -1140,9 +1099,9 @@ public sealed class SqlServerBidRepository : IManageBids
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
 
-        var assignments = (await connection.QueryAsync<(string QuestionId, int Role, string BidId)>(new CommandDefinition(
+        var assignments = (await connection.QueryAsync<(string QuestionId, int Role)>(new CommandDefinition(
             """
-            SELECT QuestionId, Role, BidId
+            SELECT QuestionId, Role
             FROM dbo.QuestionAssignments
             WHERE UserId = @UserId;
             """,
@@ -1156,18 +1115,8 @@ public sealed class SqlServerBidRepository : IManageBids
             .GroupBy(x => x.QuestionId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(x => x.Key, x => x.First().Role, StringComparer.OrdinalIgnoreCase);
 
-        var bidIds = assignments
-            .Select(x => x.BidId)
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (bidIds.Count == 0)
-            return new List<AssignedQuestionDataModel>();
-
         var payloads = (await connection.QueryAsync<string>(new CommandDefinition(
-            "SELECT Payload FROM dbo.Bids WHERE Id IN @BidIds",
-            new { BidIds = bidIds },
+            "SELECT Payload FROM dbo.Bids",
             cancellationToken: ct))).ToList();
 
         var results = new List<AssignedQuestionDataModel>();
@@ -1356,13 +1305,20 @@ public sealed class SqlServerBidRepository : IManageBids
 
     public async Task<List<FinalAnswerDataModel>> GetAllFinalAnswers(IEnumerable<string> questionIds, CancellationToken ct = default)
     {
-        var ids = questionIds.Where(id => !string.IsNullOrWhiteSpace(id)).ToList();
-        if (ids.Count == 0)
-            return new List<FinalAnswerDataModel>();
+        ArgumentNullException.ThrowIfNull(questionIds);
+
+        var ids = questionIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (ids.Length == 0)
+            return [];
 
         await EnsureSchemaAsync(ct);
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
+
         var payloads = await connection.QueryAsync<string>(
             new CommandDefinition(
                 "SELECT Payload FROM dbo.FinalAnswers WHERE QuestionId IN @QuestionIds",
@@ -1370,28 +1326,25 @@ public sealed class SqlServerBidRepository : IManageBids
                 cancellationToken: ct));
 
         return payloads
-            .Select(payload =>
+            .Select(Deserialize<FinalAnswerDataModel>)
+            .Select(answer => new FinalAnswerDataModel
             {
-                var answer = Deserialize<FinalAnswerDataModel>(payload);
-                return new FinalAnswerDataModel
-                {
-                    QuestionId = answer.QuestionId,
-                    AnswerText = answer.AnswerText,
-                    ReadyForSubmission = answer.ReadyForSubmission,
-                    Comments = answer.Comments
-                        .Select(c => new DraftCommentDataModel(c.Id)
-                        {
-                            Comment = c.Comment,
-                            IsComplete = c.IsComplete,
-                            UserId = c.UserId,
-                            AuthorName = c.AuthorName,
-                            CreatedAtUtc = c.CreatedAtUtc,
-                            StartIndex = c.StartIndex,
-                            EndIndex = c.EndIndex,
-                            SelectedText = c.SelectedText
-                        })
-                        .ToList()
-                };
+                QuestionId = answer.QuestionId,
+                AnswerText = answer.AnswerText,
+                ReadyForSubmission = answer.ReadyForSubmission,
+                Comments = answer.Comments
+                    .Select(c => new DraftCommentDataModel(c.Id)
+                    {
+                        Comment = c.Comment,
+                        IsComplete = c.IsComplete,
+                        UserId = c.UserId,
+                        AuthorName = c.AuthorName,
+                        CreatedAtUtc = c.CreatedAtUtc,
+                        StartIndex = c.StartIndex,
+                        EndIndex = c.EndIndex,
+                        SelectedText = c.SelectedText
+                    })
+                    .ToList()
             })
             .ToList();
     }
@@ -1694,7 +1647,6 @@ public sealed class SqlServerBidRepository : IManageBids
     private async Task UpsertQuestionUserAsync(
         SqlConnection connection,
         SqlTransaction tx,
-        string bidId,
         string questionId,
         string userId,
         QuestionUserRole role,
@@ -1707,16 +1659,16 @@ public sealed class SqlServerBidRepository : IManageBids
             )
             BEGIN
                 UPDATE dbo.QuestionAssignments
-                SET Role = @Role, BidId = @BidId
+                SET Role = @Role
                 WHERE QuestionId = @QuestionId AND UserId = @UserId;
             END
             ELSE
             BEGIN
-                INSERT INTO dbo.QuestionAssignments (QuestionId, UserId, Role, BidId)
-                VALUES (@QuestionId, @UserId, @Role, @BidId);
+                INSERT INTO dbo.QuestionAssignments (QuestionId, UserId, Role)
+                VALUES (@QuestionId, @UserId, @Role);
             END;
             """,
-            new { QuestionId = questionId, UserId = userId, Role = (int)role, BidId = bidId },
+            new { QuestionId = questionId, UserId = userId, Role = (int)role },
             transaction: tx,
             cancellationToken: ct));
     }
@@ -1781,21 +1733,8 @@ public sealed class SqlServerBidRepository : IManageBids
                         QuestionId NVARCHAR(100) NOT NULL,
                         UserId NVARCHAR(100) NOT NULL,
                         Role INT NOT NULL,
-                        BidId NVARCHAR(100) NOT NULL
-                            CONSTRAINT DF_QuestionAssignments_BidId DEFAULT '',
                         CONSTRAINT PK_QuestionAssignments PRIMARY KEY (QuestionId, UserId)
                     );
-                END;
-
-                IF NOT EXISTS (
-                    SELECT 1 FROM sys.columns
-                    WHERE object_id = OBJECT_ID(N'dbo.QuestionAssignments')
-                      AND name = N'BidId'
-                )
-                BEGIN
-                    ALTER TABLE dbo.QuestionAssignments
-                        ADD BidId NVARCHAR(100) NOT NULL
-                            CONSTRAINT DF_QuestionAssignments_BidId DEFAULT '';
                 END;
 
                 IF OBJECT_ID(N'dbo.QuestionDrafts', N'U') IS NULL
@@ -1918,25 +1857,6 @@ public sealed class SqlServerBidRepository : IManageBids
                 END;
                 """,
                 cancellationToken: ct));
-
-            // Backfill BidId on existing QuestionAssignments rows that predate the column addition.
-            // OPENJSON is used so SQL Server parses Bids.Payload at runtime rather than compile-time.
-            await connection.ExecuteAsync(new CommandDefinition(
-                """
-                UPDATE qa
-                SET    qa.BidId = b.Id
-                FROM   dbo.QuestionAssignments AS qa
-                CROSS JOIN dbo.Bids AS b
-                WHERE  qa.BidId = ''
-                  AND  EXISTS (
-                           SELECT 1
-                           FROM   OPENJSON(b.Payload, '$.Questions')
-                               WITH (Id NVARCHAR(100) '$.Id') AS q
-                           WHERE  q.Id = qa.QuestionId
-                       );
-                """,
-                cancellationToken: ct));
-
             _schemaInitialized = true;
         }
         finally

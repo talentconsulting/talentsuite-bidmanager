@@ -20,7 +20,7 @@ public class Chat_question
         var (bidId, questionId) = await CreateBidWithOneQuestionAsync(client);
 
         var firstResponse = await client.PostAsJsonAsync(
-            "/api/ai/questions/anything",
+            $"/api/ai/questions/{Uri.EscapeDataString(questionId)}",
             new ChatQuestionRequest
             {
                 BidId = bidId,
@@ -39,7 +39,7 @@ public class Chat_question
         Assert.That(firstPayload.UsedSourcesOutsideBidLibrary, Is.False);
 
         var secondResponse = await client.PostAsJsonAsync(
-            "/api/ai/questions/anything",
+            $"/api/ai/questions/{Uri.EscapeDataString(questionId)}",
             new ChatQuestionRequest
             {
                 BidId = bidId,
@@ -118,5 +118,27 @@ public class Chat_question
         Assert.That(string.IsNullOrWhiteSpace(questionId), Is.False);
 
         return (bidId!, questionId);
+    }
+
+    [Test]
+    public async Task AskQuestion_ReturnsBadRequest_WhenRouteAndBodyQuestionIdsDiffer()
+    {
+        using var factory = new AuthenticatedTestWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        SetIdentityHeaders(client, subject: "admin-seed", username: "admin-seed", roles: "admin,user");
+
+        var (bidId, questionId) = await CreateBidWithOneQuestionAsync(client);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/ai/questions/not-the-same-id",
+            new ChatQuestionRequest
+            {
+                BidId = bidId,
+                QuestionId = questionId,
+                FreeTextQuestion = "How should we answer this?"
+            });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 }

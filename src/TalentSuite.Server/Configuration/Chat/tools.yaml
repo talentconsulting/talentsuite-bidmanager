@@ -1,0 +1,5 @@
+tools: []
+
+tool_usage:
+  none:
+    purpose: "Bid question answering relies on configured bid-library retrieval and does not require extra external tools from this manifest."

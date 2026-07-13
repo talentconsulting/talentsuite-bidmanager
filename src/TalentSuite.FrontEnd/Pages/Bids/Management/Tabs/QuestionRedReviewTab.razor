@@ -7,16 +7,34 @@
     <div class="card-body">
         <div class="row g-3 align-items-start">
             <div class="col-12 col-lg-8">
-                <div class="text-muted small mb-1">
-                    @GetWordCount(Question.RedReviewAnswer) words • @GetCharCount(Question.RedReviewAnswer) characters
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
+                    <div class="text-muted small">
+                        @GetWordCount(Question.RedReviewAnswer) words • @GetCharCount(Question.RedReviewAnswer) characters
+                    </div>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Red review editor mode">
+                        <button type="button"
+                                class="btn @(_isPreviewing ? "btn-outline-secondary" : "btn-secondary")"
+                                @onclick="() => _isPreviewing = false">Write</button>
+                        <button type="button"
+                                class="btn @(_isPreviewing ? "btn-secondary" : "btn-outline-secondary")"
+                                @onclick="() => _isPreviewing = true">Preview</button>
+                    </div>
                 </div>
-                <textarea id="@GetTextareaId()"
-                          class="form-control"
-                          rows="12"
-                          value="@Question.RedReviewAnswer"
-                          @oninput="OnRedReviewInputAsync"
-                          @onmouseup="CaptureSelectionAsync"
-                          @onkeyup="CaptureSelectionAsync"></textarea>
+                @if (_isPreviewing)
+                {
+                    <MarkdownContent Content="@Question.RedReviewAnswer"
+                                     CssClass="border rounded p-3 bg-body-tertiary" />
+                }
+                else
+                {
+                    <textarea id="@GetTextareaId()"
+                              class="form-control"
+                              rows="12"
+                              value="@Question.RedReviewAnswer"
+                              @oninput="OnRedReviewInputAsync"
+                              @onmouseup="CaptureSelectionAsync"
+                              @onkeyup="CaptureSelectionAsync"></textarea>
+                }
 
                 <div class="mt-2">
                     <div class="text-muted small mb-1">Reviewers</div>
@@ -139,6 +157,7 @@
     private string _selectedText = string.Empty;
     private string _mentionQuery = string.Empty;
     private bool _showMentions;
+    private bool _isPreviewing;
     private readonly HashSet<string> _mentionedUserIds = new(StringComparer.OrdinalIgnoreCase);
 
     private static int GetWordCount(string? text)

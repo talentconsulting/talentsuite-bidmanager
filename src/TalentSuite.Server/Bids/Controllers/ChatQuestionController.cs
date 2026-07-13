@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using System.Text.Json;
 using TalentSuite.Server.Security;
+using TalentSuite.Server.Bids.Chat;
 using TalentSuite.Server.Bids.Services;
 using TalentSuite.Shared;
 using TalentSuite.Shared.Bids.Ai;
@@ -16,17 +17,20 @@ public class ChatQuestionController : ControllerBase
 {
     private readonly IBidService _bidService;
     private readonly IAzureOpenAiChatService _azureOpenAiChatService;
+    private readonly IBidChatPolicyService _bidChatPolicyService;
     private readonly ILogger<ChatQuestionController> _logger;
     private readonly ICurrentUserBidAuthorizationService _authorizationService;
 
     public ChatQuestionController(
         IBidService bidService,
         IAzureOpenAiChatService azureOpenAiChatService,
+        IBidChatPolicyService bidChatPolicyService,
         ILogger<ChatQuestionController> logger,
         ICurrentUserBidAuthorizationService authorizationService)
     {
         _bidService = bidService;
         _azureOpenAiChatService = azureOpenAiChatService;
+        _bidChatPolicyService = bidChatPolicyService;
         _logger = logger;
         _authorizationService = authorizationService;
     }
@@ -34,9 +38,11 @@ public class ChatQuestionController : ControllerBase
     [HttpPost("{questionId}")]
     public async Task<IActionResult> AskQuestions(string questionId, [FromBody] ChatQuestionRequest chatQuestionRequest)
     {
-        var resolvedQuestionId = string.IsNullOrWhiteSpace(chatQuestionRequest.QuestionId)
-            ? questionId
-            : chatQuestionRequest.QuestionId;
+        var resolvedQuestionIdResult = TryResolveQuestionId(questionId, chatQuestionRequest.QuestionId);
+        if (resolvedQuestionIdResult.ErrorResult is not null)
+            return BadRequest(resolvedQuestionIdResult.ErrorResult);
+
+        var resolvedQuestionId = resolvedQuestionIdResult.QuestionId!;
 
         if (!await _authorizationService.CanManageBidAsync(User, chatQuestionRequest.BidId, HttpContext.RequestAborted))
             return Forbid();
@@ -44,6 +50,13 @@ public class ChatQuestionController : ControllerBase
         try
         {
             var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, resolvedQuestionId);
+            var policy = await _bidChatPolicyService.GetBidQuestionAnsweringPolicyAsync(HttpContext.RequestAborted);
+            _bidChatPolicyService.ValidateRequest(
+                policy,
+                chatQuestionRequest.BidId,
+                resolvedQuestionId,
+                chatQuestionRequest.FreeTextQuestion,
+                question);
 
             var userId = ResolveCurrentUserKey();
             var persistedThreadId = string.IsNullOrWhiteSpace(userId)
@@ -53,11 +66,7 @@ public class ChatQuestionController : ControllerBase
                     resolvedQuestionId,
                     userId);
 
-            var lengthConstraint = string.IsNullOrWhiteSpace(question.Length)
-                ? ""
-                : $" Keep your response within the following length: {question.Length}.";
-            var systemPrompt =
-                $"Please use the bid library we have to return the answer to the question: ${question.Description}.{lengthConstraint}";
+            var systemPrompt = _bidChatPolicyService.BuildSystemPrompt(policy, question);
 
             var userPrompt = $"""{chatQuestionRequest.FreeTextQuestion}""";
 
@@ -65,6 +74,9 @@ public class ChatQuestionController : ControllerBase
                 userPrompt,
                 systemPrompt,
                 chatQuestionRequest.ThreadId ?? persistedThreadId);
+
+            var extractedResponse = _bidChatPolicyService.ExtractAnswerText(policy, result.Response);
+            _bidChatPolicyService.ValidateResponse(policy, extractedResponse, result.Sources);
 
             if (!string.IsNullOrWhiteSpace(userId))
             {
@@ -81,7 +93,7 @@ public class ChatQuestionController : ControllerBase
                     resolvedQuestionId,
                     userId,
                     "assistant",
-                    result.Response,
+                    extractedResponse,
                     now.AddMilliseconds(1),
                     result.Sources,
                     result.UsedSourcesOutsideBidLibrary);
@@ -94,7 +106,7 @@ public class ChatQuestionController : ControllerBase
 
             return Ok(new ChatQuestionResponse
             {
-                Response = result.Response,
+                Response = extractedResponse,
                 ThreadId = result.ThreadId,
                 Sources = result.Sources,
                 UsedSourcesOutsideBidLibrary = result.UsedSourcesOutsideBidLibrary
@@ -106,7 +118,7 @@ public class ChatQuestionController : ControllerBase
                 ex,
                 "Chat request for bid {BidId}, question {QuestionId} returned a user-facing error.",
                 chatQuestionRequest.BidId,
-                chatQuestionRequest.QuestionId);
+                resolvedQuestionId);
             return StatusCode(ex.StatusCode, ex.Message);
         }
         catch (Exception ex)
@@ -115,7 +127,7 @@ public class ChatQuestionController : ControllerBase
                 ex,
                 "Chat request for bid {BidId}, question {QuestionId} failed unexpectedly.",
                 chatQuestionRequest.BidId,
-                chatQuestionRequest.QuestionId);
+                resolvedQuestionId);
             throw;
         }
     }
@@ -140,9 +152,19 @@ public class ChatQuestionController : ControllerBase
     [HttpPost("{questionId}/stream")]
     public async Task StreamQuestion(string questionId, [FromBody] ChatQuestionRequest chatQuestionRequest, CancellationToken ct)
     {
-        var resolvedQuestionId = string.IsNullOrWhiteSpace(chatQuestionRequest.QuestionId)
-            ? questionId
-            : chatQuestionRequest.QuestionId;
+        var resolvedQuestionIdResult = TryResolveQuestionId(questionId, chatQuestionRequest.QuestionId);
+        if (resolvedQuestionIdResult.ErrorResult is not null)
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            await WriteStreamUpdateAsync(new ChatStreamUpdate
+            {
+                Type = "error",
+                Error = resolvedQuestionIdResult.ErrorResult
+            }, ct);
+            return;
+        }
+
+        var resolvedQuestionId = resolvedQuestionIdResult.QuestionId!;
 
         if (!await _authorizationService.CanManageBidAsync(User, chatQuestionRequest.BidId, ct))
         {
@@ -164,10 +186,19 @@ public class ChatQuestionController : ControllerBase
         try
         {
             var question = await _bidService.GetQuestion(chatQuestionRequest.BidId, resolvedQuestionId);
+            var policy = await _bidChatPolicyService.GetBidQuestionAnsweringPolicyAsync(ct);
+            _bidChatPolicyService.ValidateRequest(
+                policy,
+                chatQuestionRequest.BidId,
+                resolvedQuestionId,
+                chatQuestionRequest.FreeTextQuestion,
+                question);
+
             var persistedThreadId = await _bidService.GetChatThreadId(chatQuestionRequest.BidId, resolvedQuestionId, userId, ct);
-            var systemPrompt =
-                $"Use the bid library, dont merge different aspects between projects if asking for specific examples. Add citation information of document and location in document. Where we have scoring dont use that if its scores 2 or below. Answer this question: {question.Description}";
-            var assistantResponse = new System.Text.StringBuilder();
+            var systemPrompt = _bidChatPolicyService.BuildSystemPrompt(policy, question);
+            var rawAssistantResponse = new System.Text.StringBuilder();
+            var completedAssistantResponse = string.Empty;
+            var emittedAssistantResponse = string.Empty;
             List<ChatSourceReferenceResponse> assistantSources = [];
             var usedSourcesOutsideBidLibrary = false;
 
@@ -192,16 +223,44 @@ public class ChatQuestionController : ControllerBase
                     threadId = update.ThreadId;
 
                 if (string.Equals(update.Type, "delta", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(update.Content))
-                    assistantResponse.Append(update.Content);
+                {
+                    rawAssistantResponse.Append(update.Content);
+                    continue;
+                }
 
                 if (string.Equals(update.Type, "completed", StringComparison.OrdinalIgnoreCase))
                 {
+                    completedAssistantResponse = update.Content ?? string.Empty;
+                    var rawResponse = rawAssistantResponse.Length > 0
+                        ? rawAssistantResponse.ToString()
+                        : completedAssistantResponse;
+                    var extractedFinal = _bidChatPolicyService.ExtractAnswerText(policy, rawResponse);
+
+                    if (!string.IsNullOrWhiteSpace(extractedFinal))
+                    {
+                        emittedAssistantResponse = extractedFinal;
+                        await WriteStreamUpdateAsync(new ChatStreamUpdate
+                        {
+                            Type = "delta",
+                            ThreadId = update.ThreadId,
+                            Content = extractedFinal
+                        }, ct);
+                    }
+
                     assistantSources = update.Sources ?? [];
                     usedSourcesOutsideBidLibrary = update.UsedSourcesOutsideBidLibrary;
                 }
 
                 await WriteStreamUpdateAsync(update, ct);
             }
+
+            var finalRawResponse = rawAssistantResponse.Length > 0
+                ? rawAssistantResponse.ToString()
+                : completedAssistantResponse;
+            var finalAssistantResponse = !string.IsNullOrWhiteSpace(emittedAssistantResponse)
+                ? emittedAssistantResponse
+                : _bidChatPolicyService.ExtractAnswerText(policy, finalRawResponse);
+            _bidChatPolicyService.ValidateResponse(policy, finalAssistantResponse, assistantSources);
 
             if (!string.IsNullOrWhiteSpace(threadId))
             {
@@ -213,14 +272,14 @@ public class ChatQuestionController : ControllerBase
                     ct);
             }
 
-            if (assistantResponse.Length > 0)
+            if (!string.IsNullOrWhiteSpace(finalAssistantResponse))
             {
                 await _bidService.AddChatMessage(
                     chatQuestionRequest.BidId,
                     resolvedQuestionId,
                     userId,
                     "assistant",
-                    assistantResponse.ToString(),
+                    finalAssistantResponse,
                     DateTimeOffset.UtcNow,
                     assistantSources,
                     usedSourcesOutsideBidLibrary,
@@ -233,7 +292,7 @@ public class ChatQuestionController : ControllerBase
                 ex,
                 "Streaming chat request for bid {BidId}, question {QuestionId} returned a user-facing error.",
                 chatQuestionRequest.BidId,
-                chatQuestionRequest.QuestionId);
+                resolvedQuestionId);
             await WriteStreamUpdateAsync(new ChatStreamUpdate
             {
                 Type = "error",
@@ -246,7 +305,7 @@ public class ChatQuestionController : ControllerBase
                 ex,
                 "Streaming chat request for bid {BidId}, question {QuestionId} failed unexpectedly.",
                 chatQuestionRequest.BidId,
-                chatQuestionRequest.QuestionId);
+                resolvedQuestionId);
             await WriteStreamUpdateAsync(new ChatStreamUpdate
             {
                 Type = "error",
@@ -270,4 +329,19 @@ public class ChatQuestionController : ControllerBase
                ?? User.FindFirst("preferred_username")?.Value
                ?? string.Empty;
     }
+
+    private static (string? QuestionId, string? ErrorResult) TryResolveQuestionId(string routeQuestionId, string? bodyQuestionId)
+    {
+        if (string.IsNullOrWhiteSpace(routeQuestionId))
+            return (null, "questionId route parameter is required.");
+
+        if (string.IsNullOrWhiteSpace(bodyQuestionId))
+            return (routeQuestionId, null);
+
+        if (!string.Equals(routeQuestionId, bodyQuestionId, StringComparison.Ordinal))
+            return (null, "questionId in the route must match questionId in the request body.");
+
+        return (routeQuestionId, null);
+    }
+
 }

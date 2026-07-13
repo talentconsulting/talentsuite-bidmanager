@@ -1,0 +1,39 @@
+name: bid-question-answering
+display_name: "Bid Question Answering"
+description: "Builds grounded bid answers for a single selected question using bid-library evidence."
+version: "1.0.0"
+
+agent:
+  object: agent.version
+  kind: prompt
+  model: gpt-4.1
+  reasoning:
+    effort: medium
+
+policy:
+  question_context:
+    placement: append_to_system_prompt
+    heading: "Question Context"
+  output_contract:
+    response_format: json
+    root_property: answerText
+  validations:
+    require_user_prompt: true
+    require_bid_id: true
+    require_question_id: true
+    require_question_description: true
+    require_citations: true
+    minimum_citation_count: 1
+    enforce_bid_library_only: true
+    disallow_cross_project_merging: true
+    disallow_low_scoring_examples: true
+    max_response_characters: 12000
+    empty_response_message: "The assistant returned an empty answer. Please try again."
+    missing_citations_message: "The assistant response did not include supporting citations from the bid library."
+    missing_question_message: "The selected question is missing the context required to answer it."
+
+files:
+  instructions: instructions.md
+  tools: tools.yaml
+  guardrails: guardrails.md
+  evaluations: evaluations.md

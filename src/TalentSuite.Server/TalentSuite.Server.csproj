@@ -19,10 +19,35 @@
     <PackageReference Include="Riok.Mapperly" Version="4.3.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.9" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\TalentSuite.ServiceDefaults\TalentSuite.ServiceDefaults.csproj" />
     <ProjectReference Include="..\TalentSuite.Shared\TalentSuite.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="Configuration\Chat\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\..\ai-source-control-template\agents\openapi-spec-reviewer\evaluations.md">
+      <Link>examples\evaluations.md</Link>
+    </Content>
+    <Content Include="..\..\..\ai-source-control-template\agents\openapi-spec-reviewer\guardrails.md">
+      <Link>examples\guardrails.md</Link>
+    </Content>
+    <Content Include="..\..\..\ai-source-control-template\agents\openapi-spec-reviewer\instructions.md">
+      <Link>examples\instructions.md</Link>
+    </Content>
+    <Content Include="..\..\..\ai-source-control-template\agents\openapi-spec-reviewer\manifest.yaml">
+      <Link>examples\manifest.yaml</Link>
+    </Content>
+    <Content Include="..\..\..\ai-source-control-template\agents\openapi-spec-reviewer\release-notes.md">
+      <Link>examples\release-notes.md</Link>
+    </Content>
+    <Content Include="..\..\..\ai-source-control-template\agents\openapi-spec-reviewer\tools.yaml">
+      <Link>examples\tools.yaml</Link>
+    </Content>
   </ItemGroup>
 </Project>

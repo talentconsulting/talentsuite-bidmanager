@@ -1,4 +1,5 @@
 using TalentSuite.Server.Bids.Data;
+using TalentSuite.Server.Bids.Chat;
 using TalentSuite.Server.Bids.Mappers;
 using TalentSuite.Server.Bids.Services;
 
@@ -45,6 +46,7 @@ public static class Extensions
         }
 
         services.AddScoped<IAzureOpenAiChatService, AzureOpenAiChatService>();
+        services.AddSingleton<IBidChatPolicyService, BidChatPolicyService>();
     }
     
     public static IServiceCollection AddBidMappings(this IServiceCollection services)
