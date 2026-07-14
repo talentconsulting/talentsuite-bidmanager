@@ -998,7 +998,9 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
                     continue;
                 }
 
-                if (string.Equals(update.Type, "delta", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(update.Content))
+                // Preserve whitespace-only deltas: Markdown line breaks may be emitted
+                // separately from the surrounding text by the streaming API.
+                if (string.Equals(update.Type, "delta", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(update.Content))
                 {
                     if (TryExtractStreamAnswerText(update.Content, out var extractedContent))
                         assistantMessage.Content = extractedContent;

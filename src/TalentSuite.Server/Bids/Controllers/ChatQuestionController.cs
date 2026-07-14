@@ -222,7 +222,7 @@ public class ChatQuestionController : ControllerBase
                 if (!string.IsNullOrWhiteSpace(update.ThreadId))
                     threadId = update.ThreadId;
 
-                if (string.Equals(update.Type, "delta", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(update.Content))
+                if (string.Equals(update.Type, "delta", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(update.Content))
                 {
                     rawAssistantResponse.Append(update.Content);
                     continue;
@@ -231,9 +231,11 @@ public class ChatQuestionController : ControllerBase
                 if (string.Equals(update.Type, "completed", StringComparison.OrdinalIgnoreCase))
                 {
                     completedAssistantResponse = update.Content ?? string.Empty;
-                    var rawResponse = rawAssistantResponse.Length > 0
-                        ? rawAssistantResponse.ToString()
-                        : completedAssistantResponse;
+                    // The completed message is canonical and retains all whitespace even
+                    // when an SDK or intermediary has altered individual stream deltas.
+                    var rawResponse = !string.IsNullOrEmpty(completedAssistantResponse)
+                        ? completedAssistantResponse
+                        : rawAssistantResponse.ToString();
                     var extractedFinal = _bidChatPolicyService.ExtractAnswerText(policy, rawResponse);
 
                     if (!string.IsNullOrWhiteSpace(extractedFinal))
@@ -254,9 +256,9 @@ public class ChatQuestionController : ControllerBase
                 await WriteStreamUpdateAsync(update, ct);
             }
 
-            var finalRawResponse = rawAssistantResponse.Length > 0
-                ? rawAssistantResponse.ToString()
-                : completedAssistantResponse;
+            var finalRawResponse = !string.IsNullOrEmpty(completedAssistantResponse)
+                ? completedAssistantResponse
+                : rawAssistantResponse.ToString();
             var finalAssistantResponse = !string.IsNullOrWhiteSpace(emittedAssistantResponse)
                 ? emittedAssistantResponse
                 : _bidChatPolicyService.ExtractAnswerText(policy, finalRawResponse);

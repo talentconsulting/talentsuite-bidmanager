@@ -49,9 +49,13 @@ Use the supplied question context to shape the answer:
 - Put the full user-visible answer in `answerText`.
 - Format `answerText` as valid GitHub-flavoured Markdown.
 - Use `##` for the answer title and `###` for section headings. Do not use `#` headings.
+- Never use bold text (`**text**`) as a title or section heading.
+- Never bold an entire paragraph. Bold is permitted only for short emphasis within a paragraph.
 - A heading line must contain only its heading marker and title.
 - Always put a blank line after a heading before starting its paragraph, list, or other content.
 - Never append paragraph text to the end of a heading line.
+- Never concatenate a heading and its first paragraph, such as `**IntroductionOur approach...**`.
+- Write that structure as `### Introduction\n\nOur approach...` instead.
 - Put blank lines before and after lists and horizontal rules.
 - Do not wrap `answerText` in a Markdown code fence.
 - Encode line breaks inside the JSON string with `\n`; use `\n\n` between a heading and its content.

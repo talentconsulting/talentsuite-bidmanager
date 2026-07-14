@@ -221,7 +221,9 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
                         $"Streaming chat does not support required tool action '{requiredActionUpdate.FunctionName}'.");
                 }
 
-                if (streamingUpdate is MessageContentUpdate contentUpdate && !string.IsNullOrWhiteSpace(contentUpdate.Text))
+                // Whitespace can arrive as its own token. It is significant in Markdown,
+                // particularly between a heading and the paragraph that follows it.
+                if (streamingUpdate is MessageContentUpdate contentUpdate && !string.IsNullOrEmpty(contentUpdate.Text))
                 {
                     yield return new ChatStreamUpdate
                     {

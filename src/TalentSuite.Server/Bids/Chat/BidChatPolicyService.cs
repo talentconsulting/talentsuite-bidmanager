@@ -106,6 +106,14 @@ public sealed class BidChatPolicyService : IBidChatPolicyService
         prompt.AppendLine($"- Weighting: {question.Weighting}");
         prompt.AppendLine($"- Required: {question.Required}");
         prompt.AppendLine($"- Nice to have: {question.NiceToHave}");
+        prompt.AppendLine();
+        prompt.AppendLine("Final Markdown formatting requirements:");
+        prompt.AppendLine("- Use ## for the answer title and ### for section headings; never use bold text as a heading.");
+        prompt.AppendLine("- Put a blank line after every heading before its content.");
+        prompt.AppendLine("- A heading line must contain only the heading title; never concatenate paragraph text onto it.");
+        prompt.AppendLine("- Never bold an entire paragraph.");
+        prompt.AppendLine("- Correct: ### Introduction\\n\\nOur organisation has a proven track record...");
+        prompt.AppendLine("- Invalid: **IntroductionOur organisation has a proven track record...**");
 
         return prompt.ToString().Trim();
     }
