@@ -323,7 +323,10 @@
                                              IsDraftBusy="IsDraftBusy"
                                              ChatQuestionText="@ChatQuestionText"
                                              ChatScrollContainerId="@GetChatScrollContainerId(ActiveQuestion.Id)"
+                                             BidFiles="BidFiles"
+                                             SelectedFileIds="@GetSelectedChatFileIds(ActiveQuestion.Id)"
                                              OnChatQuestionTextChanged="OnChatQuestionTextChangedAsync"
+                                             OnFileSelectionToggled="ToggleChatFileSelectionForActiveQuestion"
                                              OnSubmitChat="SubmitChatForActiveQuestionAsync"
                                              OnAddChatToDrafts="AddActiveChatResponseToDraftsAsync" />
                         }

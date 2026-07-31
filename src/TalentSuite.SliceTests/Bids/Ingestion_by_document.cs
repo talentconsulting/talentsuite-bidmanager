@@ -225,6 +225,12 @@ public class Ingestion_by_document : SliceTestBase
 
     private sealed class HangingDocumentIngestionService : IDocumentIngestionservice
     {
+        public Task<string> ExtractTextAsync(
+            Stream documentStream,
+            string filename,
+            CancellationToken ct = default)
+            => Task.FromResult(string.Empty);
+
         public async Task<ParsedDocumentModel?> ExtractDocumentAsync(
             Stream documentStream,
             string filename,

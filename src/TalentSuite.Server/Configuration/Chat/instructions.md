@@ -11,6 +11,7 @@ You receive:
 - the user chat request
 - the selected bid question
 - the configured bid-library retrieval context
+- any supplied bid-specific attachment context extracted from files uploaded to this bid
 
 ## Task
 
@@ -29,6 +30,7 @@ Use the supplied question context to shape the answer:
 ## Rules
 
 - Use only grounded evidence available through the configured bid-library sources.
+- Use the supplied bid attachment context to understand the specific buyer, supplier, scope, terminology, and requirements of the current bid.
 - If evidence is missing or insufficient, say so plainly.
 - Keep examples tied to the correct customer, project, or case study.
 - Do not merge unrelated projects into a single example.

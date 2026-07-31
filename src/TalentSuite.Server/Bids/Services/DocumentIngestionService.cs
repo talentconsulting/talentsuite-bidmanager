@@ -26,6 +26,11 @@ public interface IDocumentIngestionservice
         BidStage stage,
         IProgress<DocumentIngestionProgressUpdate>? progress = null,
         CancellationToken ct = default);
+
+    Task<string> ExtractTextAsync(
+        Stream documentStream,
+        string filename,
+        CancellationToken ct = default);
 }
 
 public sealed class DocumentIngestionService : IDocumentIngestionservice
@@ -109,6 +114,24 @@ public sealed class DocumentIngestionService : IDocumentIngestionservice
             progress,
             progressMessagePrefix: "Structuring the extracted content into bid questions",
             ct));
+    }
+
+    public async Task<string> ExtractTextAsync(
+        Stream documentStream,
+        string fileName,
+        CancellationToken ct = default)
+    {
+        if (documentStream is null) throw new ArgumentNullException(nameof(documentStream));
+        if (!documentStream.CanRead) throw new ArgumentException("Document stream must be readable.", nameof(documentStream));
+        if (string.IsNullOrWhiteSpace(fileName)) fileName = "document";
+
+        if (IsSpreadsheetFile(fileName))
+        {
+            var chunks = await ExtractTextChunksFromSpreadsheetAsync(documentStream, ct);
+            return string.Join("\n\n", chunks.Where(chunk => !string.IsNullOrWhiteSpace(chunk))).Trim();
+        }
+
+        return await ExtractTextWithDocumentIntelligenceAsync(documentStream, ct);
     }
 
     private async Task<string> ExtractTextWithDocumentIntelligenceAsync(Stream document, CancellationToken ct)

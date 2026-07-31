@@ -1,5 +1,6 @@
 @namespace TalentSuite.FrontEnd.Pages.Bids.Management.Tabs
 @using TalentSuite.FrontEnd.Pages.Bids.Management.Models
+@using TalentSuite.Shared.Bids
 
 <div class="card shadow-sm chat-panel @(IsExpanded ? "chat-panel--expanded" : null)">
     <div class="card-body">
@@ -30,6 +31,42 @@
                   @oninput="e => OnChatQuestionTextChanged.InvokeAsync(e.Value?.ToString())"
                   disabled="@IsBusy"
                   @onkeydown="OnQuestionKeyDown"></textarea>
+
+        <div class="mt-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <label class="form-label fw-bold mb-0">Files to include</label>
+                @if (BidFiles.Count > 0)
+                {
+                    <span class="small text-muted">Select up to @MaxSelectedFiles</span>
+                }
+            </div>
+            @if (BidFiles.Count == 0)
+            {
+                <div class="small text-muted">No files have been uploaded for this bid.</div>
+            }
+            else
+            {
+                <div class="border rounded p-2 file-selection-list">
+                    @foreach (var file in BidFiles)
+                    {
+                        var isSelected = SelectedFileIds.Contains(file.Id, StringComparer.OrdinalIgnoreCase);
+                        var selectionLimitReached = !isSelected && SelectedFileIds.Count >= MaxSelectedFiles;
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   id="@GetFileCheckboxId(file.Id)"
+                                   checked="@isSelected"
+                                   disabled="@(IsBusy || selectionLimitReached)"
+                                   @onchange="() => OnFileSelectionToggled.InvokeAsync(file.Id)" />
+                            <label class="form-check-label text-break" for="@GetFileCheckboxId(file.Id)">
+                                @file.FileName
+                            </label>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
         <label class="form-label fw-bold mt-3">Response</label>
         <div class="border rounded p-3 bg-light chat-response"
              id="@ChatScrollContainerId">
@@ -128,13 +165,20 @@
     [Parameter] public bool IsDraftBusy { get; set; }
     [Parameter] public string? ChatQuestionText { get; set; }
     [Parameter] public string ChatScrollContainerId { get; set; } = string.Empty;
+    [Parameter] public IReadOnlyList<BidFileResponse> BidFiles { get; set; } = [];
+    [Parameter] public IReadOnlyCollection<string> SelectedFileIds { get; set; } = [];
     [Parameter] public EventCallback<string?> OnChatQuestionTextChanged { get; set; }
+    [Parameter] public EventCallback<string> OnFileSelectionToggled { get; set; }
     [Parameter] public EventCallback OnSubmitChat { get; set; }
     [Parameter] public EventCallback<string> OnAddChatToDrafts { get; set; }
+
+    private const int MaxSelectedFiles = 4;
 
     private bool IsExpanded { get; set; }
 
     private void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    private string GetFileCheckboxId(string fileId) => $"chat-file-{Question.Id}-{fileId}";
 
     private static int ResponseWordCount(string? content) =>
         string.IsNullOrWhiteSpace(content) ? 0 : content.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;

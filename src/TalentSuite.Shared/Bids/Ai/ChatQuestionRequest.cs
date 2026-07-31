@@ -6,4 +6,5 @@ public class ChatQuestionRequest
     public string QuestionId { get; set; } = string.Empty;
     public string FreeTextQuestion { get; set; } = string.Empty;
     public string? ThreadId { get; set; }
+    public List<string> BidFileIds { get; set; } = [];
 }

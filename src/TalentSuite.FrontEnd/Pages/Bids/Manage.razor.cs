@@ -110,6 +110,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
     protected List<UserOption> AssignedUsers { get; } = new();
     protected List<UserOption> AllUsers { get; } = new();
     protected List<BidFileResponse> BidFiles { get; } = new();
+    private readonly Dictionary<string, HashSet<string>> _selectedChatFileIdsByQuestion = new(StringComparer.OrdinalIgnoreCase);
     protected string? PreviewUrl { get; set; }
     protected string? PreviewFileName { get; set; }
     protected Dictionary<string, QuestionUserRole> PendingQuestionUserRoles { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -163,6 +164,7 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         Bid = null;
         ActiveCategory = null;
         ActiveQuestionId = null;
+        _selectedChatFileIdsByQuestion.Clear();
 
         try
         {
@@ -530,6 +532,8 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
         {
             await ApiClient.DeleteBidFileAsync(BidId, file.Id);
             BidFiles.RemoveAll(x => string.Equals(x.Id, file.Id, StringComparison.OrdinalIgnoreCase));
+            foreach (var selectedFileIds in _selectedChatFileIdsByQuestion.Values)
+                selectedFileIds.Remove(file.Id);
             if (string.Equals(file.FileName, PreviewFileName, StringComparison.OrdinalIgnoreCase))
             {
                 await RevokePreviewUrlAsync();
@@ -936,7 +940,8 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
                 BidId = BidId,
                 QuestionId = q.Id,
                 FreeTextQuestion = submittedQuestion,
-                ThreadId = q.ChatThreadId
+                ThreadId = q.ChatThreadId,
+                BidFileIds = GetSelectedChatFileIds(q.Id).ToList()
             };
             q.IsChatHistoryLoaded = true;
             q.IsChatStreaming = true;
@@ -2077,6 +2082,31 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
             MarkDirty("chat-question");
 
         return Task.CompletedTask;
+    }
+
+    protected IReadOnlyCollection<string> GetSelectedChatFileIds(string questionId)
+    {
+        if (string.IsNullOrWhiteSpace(questionId))
+            return Array.Empty<string>();
+
+        return _selectedChatFileIdsByQuestion.TryGetValue(questionId, out var selectedFileIds)
+            ? selectedFileIds
+            : Array.Empty<string>();
+    }
+
+    protected void ToggleChatFileSelectionForActiveQuestion(string fileId)
+    {
+        if (string.IsNullOrWhiteSpace(ActiveQuestion?.Id) || string.IsNullOrWhiteSpace(fileId))
+            return;
+
+        if (!_selectedChatFileIdsByQuestion.TryGetValue(ActiveQuestion.Id, out var selectedFileIds))
+        {
+            selectedFileIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _selectedChatFileIdsByQuestion[ActiveQuestion.Id] = selectedFileIds;
+        }
+
+        if (!selectedFileIds.Remove(fileId) && selectedFileIds.Count < 4)
+            selectedFileIds.Add(fileId);
     }
 
     protected Task OnDraftEditedAsync(string draftId)

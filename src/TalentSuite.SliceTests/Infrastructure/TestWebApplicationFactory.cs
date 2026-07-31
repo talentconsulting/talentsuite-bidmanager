@@ -135,6 +135,7 @@ public sealed class InMemoryKeycloakAdminService : IKeycloakAdminService
 public sealed class InMemoryAzureOpenAiChatService : IAzureOpenAiChatService
 {
     private int _threadCounter;
+    public string? LastSystemPrompt { get; private set; }
 
     public Task<ChatAnswerResult> AskAsync(
         string userPrompt,
@@ -142,6 +143,7 @@ public sealed class InMemoryAzureOpenAiChatService : IAzureOpenAiChatService
         string? threadId = null,
         CancellationToken ct = default)
     {
+        LastSystemPrompt = systemPrompt;
         var prompt = userPrompt ?? string.Empty;
         var resolvedThreadId = string.IsNullOrWhiteSpace(threadId)
             ? $"thread-{Interlocked.Increment(ref _threadCounter)}"
@@ -170,6 +172,7 @@ public sealed class InMemoryAzureOpenAiChatService : IAzureOpenAiChatService
         string? threadId = null,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
+        LastSystemPrompt = systemPrompt;
         var prompt = userPrompt ?? string.Empty;
         var resolvedThreadId = string.IsNullOrWhiteSpace(threadId)
             ? $"thread-{Interlocked.Increment(ref _threadCounter)}"

@@ -1,11 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using TalentSuite.Server.Security;
 using TalentSuite.Server.Bids.Chat;
 using TalentSuite.Server.Bids.Services;
+using TalentSuite.Server.Bids.Services.Models;
 using TalentSuite.Shared;
+using TalentSuite.Shared.Bids;
 using TalentSuite.Shared.Bids.Ai;
 
 namespace TalentSuite.Server.Bids.Controllers;
@@ -15,9 +18,14 @@ namespace TalentSuite.Server.Bids.Controllers;
 [Route("api/ai/questions")]
 public class ChatQuestionController : ControllerBase   
 {
+    private const int MaxAttachmentFilesInContext = 4;
+    private const int MaxAttachmentCharsPerFile = 8_000;
+    private const int MaxAttachmentCharsTotal = 24_000;
+
     private readonly IBidService _bidService;
     private readonly IAzureOpenAiChatService _azureOpenAiChatService;
     private readonly IBidChatPolicyService _bidChatPolicyService;
+    private readonly IDocumentIngestionservice _documentIngestionService;
     private readonly ILogger<ChatQuestionController> _logger;
     private readonly ICurrentUserBidAuthorizationService _authorizationService;
 
@@ -25,12 +33,14 @@ public class ChatQuestionController : ControllerBase
         IBidService bidService,
         IAzureOpenAiChatService azureOpenAiChatService,
         IBidChatPolicyService bidChatPolicyService,
+        IDocumentIngestionservice documentIngestionService,
         ILogger<ChatQuestionController> logger,
         ICurrentUserBidAuthorizationService authorizationService)
     {
         _bidService = bidService;
         _azureOpenAiChatService = azureOpenAiChatService;
         _bidChatPolicyService = bidChatPolicyService;
+        _documentIngestionService = documentIngestionService;
         _logger = logger;
         _authorizationService = authorizationService;
     }
@@ -66,7 +76,12 @@ public class ChatQuestionController : ControllerBase
                     resolvedQuestionId,
                     userId);
 
-            var systemPrompt = _bidChatPolicyService.BuildSystemPrompt(policy, question);
+            var systemPrompt = await BuildSystemPromptAsync(
+                policy,
+                chatQuestionRequest.BidId,
+                chatQuestionRequest.BidFileIds,
+                question,
+                HttpContext.RequestAborted);
 
             var userPrompt = $"""{chatQuestionRequest.FreeTextQuestion}""";
 
@@ -195,7 +210,12 @@ public class ChatQuestionController : ControllerBase
                 question);
 
             var persistedThreadId = await _bidService.GetChatThreadId(chatQuestionRequest.BidId, resolvedQuestionId, userId, ct);
-            var systemPrompt = _bidChatPolicyService.BuildSystemPrompt(policy, question);
+            var systemPrompt = await BuildSystemPromptAsync(
+                policy,
+                chatQuestionRequest.BidId,
+                chatQuestionRequest.BidFileIds,
+                question,
+                ct);
             var rawAssistantResponse = new System.Text.StringBuilder();
             var completedAssistantResponse = string.Empty;
             var emittedAssistantResponse = string.Empty;
@@ -330,6 +350,101 @@ public class ChatQuestionController : ControllerBase
                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                ?? User.FindFirst("preferred_username")?.Value
                ?? string.Empty;
+    }
+
+    private async Task<string> BuildSystemPromptAsync(
+        BidChatPolicyDefinition policy,
+        string bidId,
+        IReadOnlyCollection<string>? selectedFileIds,
+        TalentSuite.Server.Bids.Services.Models.CreateQuestionModel question,
+        CancellationToken ct)
+    {
+        var basePrompt = _bidChatPolicyService.BuildSystemPrompt(policy, question);
+        var attachmentContext = await BuildBidAttachmentContextAsync(bidId, selectedFileIds, ct);
+
+        return string.IsNullOrWhiteSpace(attachmentContext)
+            ? basePrompt
+            : $"{basePrompt}\n\n{attachmentContext}";
+    }
+
+    private async Task<string> BuildBidAttachmentContextAsync(
+        string bidId,
+        IReadOnlyCollection<string>? selectedFileIds,
+        CancellationToken ct)
+    {
+        if (selectedFileIds is null || selectedFileIds.Count == 0)
+            return string.Empty;
+
+        var files = await _bidService.GetBidFiles(bidId, ct);
+        if (files.Count == 0)
+            return string.Empty;
+
+        var filesById = files.ToDictionary(file => file.Id, StringComparer.OrdinalIgnoreCase);
+        var selectedFiles = selectedFileIds
+            .Where(fileId => !string.IsNullOrWhiteSpace(fileId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(MaxAttachmentFilesInContext)
+            .Select(fileId => filesById.GetValueOrDefault(fileId))
+            .Where(file => file is not null)
+            .Cast<BidFileResponse>();
+
+        var prompt = new StringBuilder();
+        var remainingBudget = MaxAttachmentCharsTotal;
+
+        foreach (var file in selectedFiles)
+        {
+            if (remainingBudget <= 0)
+                break;
+
+            var fileContent = await _bidService.GetBidFile(bidId, file.Id, ct);
+            if (fileContent is null || fileContent.Content.Length == 0)
+                continue;
+
+            var extractedText = await ExtractBidAttachmentTextAsync(fileContent, ct);
+            if (string.IsNullOrWhiteSpace(extractedText))
+                continue;
+
+            var boundedText = extractedText.Length > MaxAttachmentCharsPerFile
+                ? extractedText[..MaxAttachmentCharsPerFile]
+                : extractedText;
+
+            if (boundedText.Length > remainingBudget)
+                boundedText = boundedText[..remainingBudget];
+
+            if (string.IsNullOrWhiteSpace(boundedText))
+                continue;
+
+            if (prompt.Length == 0)
+            {
+                prompt.AppendLine("Additional bid attachment context:");
+                prompt.AppendLine("- Use this material to understand the specific buyer, supplier, scope, terminology, and requirements for this bid.");
+                prompt.AppendLine("- Treat it as bid-specific background context.");
+                prompt.AppendLine("- Prefer bid-library evidence for reusable capability claims and cited examples when available.");
+                prompt.AppendLine();
+            }
+
+            prompt.AppendLine($"Attachment: {fileContent.FileName}");
+            prompt.AppendLine(boundedText.Trim());
+            prompt.AppendLine();
+
+            remainingBudget -= boundedText.Length;
+        }
+
+        return prompt.ToString().Trim();
+    }
+
+    private async Task<string> ExtractBidAttachmentTextAsync(BidFileContentModel file, CancellationToken ct)
+    {
+        try
+        {
+            await using var stream = new MemoryStream(file.Content, writable: false);
+            return await _documentIngestionService.ExtractTextAsync(stream, file.FileName, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to extract chat context from bid attachment {FileName}.", file.FileName);
+            return string.Empty;
+        }
     }
 
     private static (string? QuestionId, string? ErrorResult) TryResolveQuestionId(string routeQuestionId, string? bodyQuestionId)

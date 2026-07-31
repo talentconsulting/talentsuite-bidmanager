@@ -1,6 +1,10 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using TalentSuite.Server.Bids.Services;
 using TalentSuite.Shared.Bids;
 using TalentSuite.Shared.Bids.Ai;
 using TalentSuite.SliceTests.Infrastructure;
@@ -9,6 +13,36 @@ namespace TalentSuite.SliceTests.Bids;
 
 public class Chat_question
 {
+    [Test]
+    public async Task AskQuestion_IncludesOnlySelectedBidFiles()
+    {
+        using var factory = new AuthenticatedTestWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        SetIdentityHeaders(client, subject: "admin-seed", username: "admin-seed", roles: "admin,user");
+
+        var (bidId, questionId) = await CreateBidWithOneQuestionAsync(client);
+        var selectedFile = await UploadBidFileAsync(client, bidId, "selected-notes.docx");
+        await UploadBidFileAsync(client, bidId, "unchecked-notes.docx");
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/ai/questions/{Uri.EscapeDataString(questionId)}",
+            new ChatQuestionRequest
+            {
+                BidId = bidId,
+                QuestionId = questionId,
+                FreeTextQuestion = "Use the selected attachment.",
+                BidFileIds = [selectedFile.Id]
+            });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var chatService = (InMemoryAzureOpenAiChatService)factory.Services
+            .GetRequiredService<IAzureOpenAiChatService>();
+        Assert.That(chatService.LastSystemPrompt, Does.Contain("Attachment: selected-notes.docx"));
+        Assert.That(chatService.LastSystemPrompt, Does.Not.Contain("unchecked-notes.docx"));
+    }
+
     [Test]
     public async Task AskQuestion_Admin_ReusesThreadForConversation()
     {
@@ -118,6 +152,24 @@ public class Chat_question
         Assert.That(string.IsNullOrWhiteSpace(questionId), Is.False);
 
         return (bidId!, questionId);
+    }
+
+    private static async Task<BidFileResponse> UploadBidFileAsync(HttpClient client, string bidId, string fileName)
+    {
+        using var multipart = new MultipartFormDataContent();
+        using var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes($"Contents of {fileName}"));
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        multipart.Add(fileContent, "file", fileName);
+
+        var response = await client.PostAsync(
+            $"/api/bids/{Uri.EscapeDataString(bidId)}/files",
+            multipart);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var uploaded = await response.Content.ReadFromJsonAsync<BidFileResponse>();
+        Assert.That(uploaded, Is.Not.Null);
+        return uploaded!;
     }
 
     [Test]

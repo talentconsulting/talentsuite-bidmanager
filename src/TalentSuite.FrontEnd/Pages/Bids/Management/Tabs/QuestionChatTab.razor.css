@@ -4,6 +4,11 @@
     overflow: auto;
 }
 
+.file-selection-list {
+    max-height: 180px;
+    overflow-y: auto;
+}
+
 .chat-panel--expanded {
     position: fixed;
     inset: 0;
