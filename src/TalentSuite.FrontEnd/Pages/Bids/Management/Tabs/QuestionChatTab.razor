@@ -1,16 +1,26 @@
 @namespace TalentSuite.FrontEnd.Pages.Bids.Management.Tabs
 @using TalentSuite.FrontEnd.Pages.Bids.Management.Models
 
-<div class="card shadow-sm">
+<div class="card shadow-sm chat-panel @(IsExpanded ? "chat-panel--expanded" : null)">
     <div class="card-body">
         <div class="d-flex align-items-center justify-content-between mb-3">
             <h5 class="mb-0">Chat</h5>
-            <button type="button"
-                    class="btn btn-outline-primary"
-                    @onclick="OnSubmitChat"
-                    disabled="@IsBusy">
-                @(IsBusy ? "Streaming…" : "Submit")
-            </button>
+            <div class="d-flex gap-2">
+                <button type="button"
+                        class="btn btn-outline-secondary"
+                        @onclick="ToggleExpanded"
+                        aria-expanded="@IsExpanded"
+                        title="@(IsExpanded ? "Reduce chat" : "Expand chat to full page")">
+                    <span aria-hidden="true">@(IsExpanded ? "↙" : "⛶")</span>
+                    @(IsExpanded ? "Reduce" : "Expand")
+                </button>
+                <button type="button"
+                        class="btn btn-outline-primary"
+                        @onclick="OnSubmitChat"
+                        disabled="@IsBusy">
+                    @(IsBusy ? "Streaming…" : "Submit")
+                </button>
+            </div>
         </div>
 
         <label class="form-label fw-bold">Question</label>
@@ -21,9 +31,8 @@
                   disabled="@IsBusy"
                   @onkeydown="OnQuestionKeyDown"></textarea>
         <label class="form-label fw-bold mt-3">Response</label>
-        <div class="border rounded p-3 bg-light"
-             id="@ChatScrollContainerId"
-             style="min-height: 360px; max-height: 540px; overflow: auto;">
+        <div class="border rounded p-3 bg-light chat-response"
+             id="@ChatScrollContainerId">
             @if (Question.ChatMessages.Count == 0)
             {
                 <div class="text-muted">No chat history yet.</div>
@@ -129,6 +138,10 @@
     [Parameter] public EventCallback<string?> OnChatQuestionTextChanged { get; set; }
     [Parameter] public EventCallback OnSubmitChat { get; set; }
     [Parameter] public EventCallback<string> OnAddChatToDrafts { get; set; }
+
+    private bool IsExpanded { get; set; }
+
+    private void ToggleExpanded() => IsExpanded = !IsExpanded;
 
     private static int ResponseWordCount(string? content) =>
         string.IsNullOrWhiteSpace(content) ? 0 : content.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
