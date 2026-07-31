@@ -482,15 +482,18 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
                         break;
                     }
                     case MessageTextUriCitationAnnotation uriCitation:
-                        usedSourcesOutsideBidLibrary = true;
+                    {
+                        var isFromBidLibrary = IsBidLibraryUriCitation(uriCitation.UriCitation.Uri, uriCitation.UriCitation.Title, fileNameMap);
+                        usedSourcesOutsideBidLibrary |= !isFromBidLibrary;
                         sources.Add(new ChatSourceReferenceResponse
                         {
                             Kind = "uri",
                             Uri = uriCitation.UriCitation.Uri,
                             Title = uriCitation.UriCitation.Title,
-                            IsFromBidLibrary = false
+                            IsFromBidLibrary = isFromBidLibrary
                         });
                         break;
+                    }
                 }
             }
         }
@@ -516,6 +519,31 @@ public sealed class AzureOpenAiChatService : IAzureOpenAiChatService
 
         _fileNameCache[fileId] = fileName;
         return fileName;
+    }
+
+    private static bool IsBidLibraryUriCitation(
+        string? uri,
+        string? title,
+        IReadOnlyDictionary<string, string> fileNameMap)
+    {
+        if (!string.IsNullOrWhiteSpace(title)
+            && fileNameMap.Values.Any(fileName => string.Equals(fileName, title, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(uri)
+            && uri.StartsWith("doc_", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(title))
+        {
+            return true;
+        }
+
+        if (Uri.TryCreate(uri, UriKind.Absolute, out var absoluteUri))
+            return !string.Equals(absoluteUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(absoluteUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+
+        return false;
     }
 
     private async Task<Dictionary<string, string>> BuildRunFileNameMapAsync(string threadId, string runId, CancellationToken ct)

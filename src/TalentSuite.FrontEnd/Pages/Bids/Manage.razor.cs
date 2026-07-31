@@ -1015,6 +1015,16 @@ public partial class BidManage : ComponentBase, IAsyncDisposable
 
                 if (string.Equals(update.Type, "completed", StringComparison.OrdinalIgnoreCase))
                 {
+                    if (!string.IsNullOrWhiteSpace(update.Content))
+                    {
+                        if (TryExtractStreamAnswerText(update.Content, out var extractedContent))
+                            assistantMessage.Content = extractedContent;
+                        else if (string.IsNullOrWhiteSpace(assistantMessage.Content))
+                            assistantMessage.Content = update.Content;
+
+                        q.ChatResponse = assistantMessage.Content;
+                    }
+
                     assistantMessage.Sources = update.Sources ?? [];
                     assistantMessage.UsedSourcesOutsideBidLibrary = update.UsedSourcesOutsideBidLibrary;
                     await InvokeAsync(StateHasChanged);

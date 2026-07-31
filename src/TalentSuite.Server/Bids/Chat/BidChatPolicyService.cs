@@ -127,32 +127,32 @@ public sealed class BidChatPolicyService : IBidChatPolicyService
 
         var rootProperty = policy.Manifest.Policy.OutputContract.RootProperty;
         if (string.IsNullOrWhiteSpace(rootProperty))
-            return rawResponse;
+            return CleanAssistantText(rawResponse);
 
         var candidateJson = ExtractJsonObject(rawResponse);
         if (string.IsNullOrWhiteSpace(candidateJson))
-            return rawResponse;
+            return CleanAssistantText(rawResponse);
 
         try
         {
             using var document = JsonDocument.Parse(candidateJson);
             if (document.RootElement.ValueKind != JsonValueKind.Object)
-                return rawResponse;
+                return CleanAssistantText(rawResponse);
 
             if (!TryGetPropertyIgnoreCase(document.RootElement, rootProperty, out var answerElement))
-                return rawResponse;
+                return CleanAssistantText(rawResponse);
 
             var extractedText = answerElement.ValueKind == JsonValueKind.String
                 ? answerElement.GetString() ?? string.Empty
                 : answerElement.ToString();
 
             return string.IsNullOrWhiteSpace(extractedText)
-                ? rawResponse
-                : extractedText;
+                ? CleanAssistantText(rawResponse)
+                : CleanAssistantText(extractedText);
         }
         catch (JsonException)
         {
-            return rawResponse;
+            return CleanAssistantText(rawResponse);
         }
     }
 
@@ -239,17 +239,7 @@ public sealed class BidChatPolicyService : IBidChatPolicyService
 
     private static string ExtractJsonObject(string rawResponse)
     {
-        var normalized = rawResponse.Trim();
-
-        if (normalized.StartsWith("```", StringComparison.Ordinal))
-        {
-            var firstNewLine = normalized.IndexOf('\n');
-            if (firstNewLine >= 0)
-                normalized = normalized[(firstNewLine + 1)..].Trim();
-
-            if (normalized.EndsWith("```", StringComparison.Ordinal))
-                normalized = normalized[..^3].Trim();
-        }
+        var normalized = StripWrappingCodeFence(rawResponse);
 
         var firstBrace = normalized.IndexOf('{');
         var lastBrace = normalized.LastIndexOf('}');
@@ -280,5 +270,36 @@ public sealed class BidChatPolicyService : IBidChatPolicyService
             return 0;
 
         return InlineCitationPattern.Matches(response).Count;
+    }
+
+    private static string StripWrappingCodeFence(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var normalized = value.Trim();
+        if (!normalized.StartsWith("```", StringComparison.Ordinal))
+            return normalized;
+
+        var firstNewLine = normalized.IndexOf('\n');
+        if (firstNewLine < 0)
+            return normalized;
+
+        var trailingFenceIndex = normalized.LastIndexOf("```", StringComparison.Ordinal);
+        if (trailingFenceIndex <= firstNewLine)
+            return normalized;
+
+        var innerContent = normalized[(firstNewLine + 1)..trailingFenceIndex].Trim();
+        return string.IsNullOrWhiteSpace(innerContent) ? normalized : innerContent;
+    }
+
+    private static string CleanAssistantText(string value)
+    {
+        var withoutFence = StripWrappingCodeFence(value);
+        if (string.IsNullOrWhiteSpace(withoutFence))
+            return string.Empty;
+
+        var withoutInlineCitations = InlineCitationPattern.Replace(withoutFence, string.Empty);
+        return Regex.Replace(withoutInlineCitations, @"[ \t]+\n", "\n").Trim();
     }
 }

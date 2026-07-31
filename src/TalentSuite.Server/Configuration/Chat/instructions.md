@@ -42,23 +42,19 @@ Use the supplied question context to shape the answer:
 
 ```json
 {
-  "answerText": "## Project Management and Delivery Approach\n\nA concise opening paragraph.\n\n### Relevant Experience\n\nThe supporting evidence and outcomes."
+  "answerText": "A concise opening paragraph.\n\nThe supporting evidence and outcomes."
 }
 ```
 
 - Put the full user-visible answer in `answerText`.
-- Format `answerText` as valid GitHub-flavoured Markdown.
-- Use `##` for the answer title and `###` for section headings. Do not use `#` headings.
-- Never use bold text (`**text**`) as a title or section heading.
-- Never bold an entire paragraph. Bold is permitted only for short emphasis within a paragraph.
-- A heading line must contain only its heading marker and title.
-- Always put a blank line after a heading before starting its paragraph, list, or other content.
-- Never append paragraph text to the end of a heading line.
-- Never concatenate a heading and its first paragraph, such as `**IntroductionOur approach...**`.
-- Write that structure as `### Introduction\n\nOur approach...` instead.
-- Put blank lines before and after lists and horizontal rules.
+- Return plain text only in `answerText`; do not use Markdown formatting.
+- Do not use headings, bullet lists, numbered lists, bold, italics, block quotes, tables, or code formatting.
+- Separate paragraphs with `\n\n` when needed.
 - Do not wrap `answerText` in a Markdown code fence.
-- Encode line breaks inside the JSON string with `\n`; use `\n\n` between a heading and its content.
+- Encode line breaks inside the JSON string with `\n`; use `\n\n` between paragraphs.
+- Do not include inline citation markers in `answerText`.
+- Do not output tokens such as `【19:0†source】`, `[1]`, `[^1]`, or similar citation placeholders.
+- Return clean user-facing text only; source attribution is handled separately by the application.
 - Answer the question directly.
 - Keep the structure readable and practical for bid writing.
 - Include only claims that can be supported by evidence, or clearly mark assumptions and gaps.
